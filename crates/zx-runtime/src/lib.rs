@@ -5,6 +5,7 @@
 //! functions by program counter and falls back to the [`interp`]reter for
 //! anything that was not compiled (or whose bytes have since changed).
 
+pub mod ay;
 pub mod bus;
 pub mod interp;
 pub mod keys;

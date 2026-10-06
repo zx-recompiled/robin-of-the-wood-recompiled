@@ -181,3 +181,30 @@ fn the_machine_has_the_128ks_timing() {
     assert_eq!(z.timing, zx_core::timing::SPECTRUM_128);
     assert_eq!(Zx::new(&blank(), None).timing, zx_core::timing::SPECTRUM_48);
 }
+
+#[test]
+fn the_ay_is_selected_written_and_read_through_its_ports() {
+    let mut z = machine(0);
+    z.ay.log = Some(Vec::new());
+    z.port_out(0xFFFD, 8);
+    z.t = 1234;
+    z.port_out(0xBFFD, 0x3F);
+    assert_eq!(z.port_in(0xFFFD), 0x1F, "volume keeps five bits");
+    assert_eq!(z.ay.reg(8), 0x1F);
+    let log = z.ay.log.as_deref().unwrap_or_default();
+    assert_eq!(log.len(), 1);
+    assert_eq!((log[0].t, log[0].reg, log[0].value), (1234, 8, 0x3F));
+    // Neither port pages memory, and the paging port reaches no register.
+    assert_eq!(z.read(0xC000), 0);
+    z.port_out(0x7FFD, 0x08);
+    assert_eq!(z.ay.reg(8), 0x1F);
+}
+
+#[test]
+fn a_48k_has_no_ay() {
+    let mut z = Zx::new(&blank(), None);
+    z.port_out(0xFFFD, 8);
+    z.port_out(0xBFFD, 0x0F);
+    assert_eq!(z.ay.reg(8), 0);
+    assert_eq!(z.port_in(0xFFFD), 0xFF);
+}

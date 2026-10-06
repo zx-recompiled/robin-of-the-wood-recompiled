@@ -104,6 +104,9 @@ pub struct Zx {
     /// at `0xC000` (bits 0–2), the screen shown (bit 3: bank 5 or 7), the ROM
     /// (bit 4), and whether paging is locked until reset (bit 5).
     pub port_7ffd: u8,
+    /// The 128K's sound chip, as registers. A 48K has none, and its ports
+    /// answer nothing there.
+    pub ay: crate::ay::Ay,
 
     pub border: u8,
     /// Current level of the beeper (EAR output, bit 4 of port 0xFE).
@@ -172,6 +175,7 @@ impl Zx {
                 }
             },
             port_7ffd: state.port_7ffd,
+            ay: crate::ay::Ay::default(),
             border: state.border,
             ear: false,
 
@@ -461,6 +465,9 @@ impl Zx {
             // Issue 3 behaviour: bit 6 follows the EAR output.
             let ear = if self.ear { 0x40 } else { 0 };
             0xA0 | ear | keys
+        } else if self.model == Model::Spectrum128 && port & 0xC002 == 0xC000 {
+            // The AY's register, decoded from A15, A14 and A1.
+            self.ay.read()
         } else if port & 0x20 == 0 {
             self.kempston
         } else {
@@ -479,6 +486,15 @@ impl Zx {
         if self.model == Model::Spectrum128 && port & 0x8002 == 0 && self.port_7ffd & 0x20 == 0 {
             self.port_7ffd = v;
             self.memory.page_128k(v);
+        }
+        // The AY: `0xFFFD` selects a register and `0xBFFD` writes it, decoded
+        // from A15, A14 and A1.
+        if self.model == Model::Spectrum128 {
+            match port & 0xC002 {
+                0xC000 => self.ay.select(v),
+                0x8000 => self.ay.write(v, self.frame, self.t),
+                _ => {}
+            }
         }
     }
 
