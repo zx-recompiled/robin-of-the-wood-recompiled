@@ -18,15 +18,21 @@ machine, through the real ROM and its own loader, to the state every check
 will start from (#3; `games/robin/tests/boot.rs`). The facts it needs are in
 `games/robin/src/layout.rs` and `docs/re/robin.md`. The game reads its tape
 (`robin::assets::read_game`, #5): the SHA-1 checked, then the eight banks
-built from the tape alone, with no ROM. Otherwise the game crate is a stub,
-and there are no differential suites yet. The plan, in
+built from the tape alone, with no ROM. The first subsystem, the screen and
+printing, is rewritten (`robin::Game`, `screen`, `print`) and checked by the
+first differential suites (`tools/robin-verify`, #24). The plan, in
 order, is the board's Backlog.
 
 ## Commands
 
 - `.claude/scripts/check.sh` is the pre-PR gate: build, tests, clippy, docs,
   the no-frontend build, dependency policy, and then the differential suites
-  (none yet; it says so). **Gate on the exit code, never on grepped output.**
+  (`robin-verify`), which **fail the gate without the tape and `128.rom` in
+  `assets/`**. **Gate on the exit code, never on grepped output.**
+- `cargo run --release -p robin-verify -- assets` runs the differential
+  suites alone, about a minute: every rewritten routine against the
+  original's real calls over 20,000 frames of play. It prints each routine's
+  cases and the instructions no call reached.
 - `cargo test -p zx-runtime --test z80test --test fuse -- --nocapture` checks
   the interpreter against z80test (measured on a real Spectrum) and the Fuse
   Z80 corpus (1335 cases, for timing). Their files go in `assets/`.

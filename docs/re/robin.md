@@ -146,7 +146,19 @@ trace never reached it.
 
 Found by recording which code read and wrote which memory over 3,000 frames
 of play (#24), then reading those routines. Every routine here is in bank 0,
-at `0xC000`–`0xFFFF`. **read**, unless marked.
+at `0xC000`–`0xFFFF`.
+
+**Every routine in this section is rewritten (`games/robin/src/screen.rs`,
+`print.rs`) and confirmed** against the original by `tools/robin-verify`.
+Over 20,000 frames of play, each distinct call the original made was run
+three ways and compared with the rewrite on all of memory:
+- as it was;
+- with the bytes it only writes changed first;
+- with the screen and play-area data it read changed.
+
+None of these routines' callers reads the registers they leave: scrambling
+those registers after each return changes nothing. The exceptions, paths
+play never took, are marked **read** below.
 
 ### The play area and its buffers
 
@@ -215,7 +227,9 @@ colours them with a second string of attributes that follows the first.
 - **`0:D4F6`**: the string is in memory just after two bytes giving its
   position. Its attributes go straight to the screen.
 - **`0:D4FC`**: the same, with the position in a register pair, not in
-  memory.
+  memory. Play only ever reaches it by running on from `0:D4F6`: its
+  direct callers (`0:D868`, `0:DAB0`, `0:DE8D`) never ran in the 20,000
+  frames.
 - **`0:D50E`**: one of 17 stock messages, chosen by the low five bits of A
   from a table of addresses at `0xD6AB`. Its attributes go to the attribute
   buffer, two columns further right (the play area's offset), and get bit
@@ -242,8 +256,10 @@ How it prints:
   - `0x20` and up are printed.
 - **Each glyph row is either combined with what's there (XOR) or replaces
   it.** XOR is normal. A flag at `0xD6CF` asks for replacing, and the printer
-  clears that flag when it's done: one entry point, `0:CEBB`, sets it for a
-  single string.
+  clears that flag when it's done. One entry point, `0:CEBB`, sets it for a
+  single string. It also overwrites A before passing it on, so it always
+  prints in mode `0x60` (to the screen, not recorded), whatever A its caller
+  set.
 - **The attribute string**: one byte a character, written to the screen or
   the attribute buffer. A byte with bit 7 set starts a new line. 0 ends it.
 - **Afterwards**, depending on the mode, it can:
@@ -251,9 +267,14 @@ How it prints:
   - record the message, its mode and position in a list of nine at `0xD457`,
     which `0:D6D0` checks every frame against what I take to be Robin's
     position;
-  - continue into `0:DD49`.
+  - with bit 7, write zeros for the attributes, mark the cell the last
+    string ended at, and continue into `0:DD49`. That saves row 12 of the
+    attribute buffer, across the play area, at `0xDDB7`.
 
-  Neither of the first two happened in the run.
+  **None of these ran in 20,000 frames of play**, nor did message 14's
+  unflagged attributes. The rewrite does them from this reading alone, and
+  the check's report lists the 36 instructions of the printer no call
+  reached. **read**
 - **Its settings live in its own code.** Three of its instructions have
   their operands rewritten on each entry: the column offset, the bit-7 flag
   for attributes, and which page the attributes go to (`0x58` for the
