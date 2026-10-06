@@ -6,7 +6,31 @@
 //! read: the one this project used to be checked against held a damaged
 //! byte in code, which the rewrite then copied (starquake-recompiled#117).
 
-/// The processor's registers and the 48K of RAM a machine starts from.
+/// Which Spectrum a machine is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Model {
+    /// The 48K: one ROM and 48K of RAM, never paged.
+    Spectrum48,
+    /// The 128K and the grey +2: two ROMs and eight 16K RAM banks, paged
+    /// through port `0x7FFD`.
+    Spectrum128,
+}
+
+impl Model {
+    /// The shape of the machine's frame.
+    #[must_use]
+    pub const fn timing(self) -> crate::timing::Timing {
+        match self {
+            Model::Spectrum48 => crate::timing::SPECTRUM_48,
+            Model::Spectrum128 => crate::timing::SPECTRUM_128,
+        }
+    }
+}
+
+/// Bytes in a 128K machine's RAM: eight banks of 16K.
+pub const RAM_128: usize = 8 * 0x4000;
+
+/// The processor's registers and the RAM a machine starts from.
 #[derive(Clone, Debug)]
 pub struct MachineState {
     pub a: u8,
@@ -35,15 +59,31 @@ pub struct MachineState {
     pub iff2: bool,
     pub im: u8,
     pub border: u8,
-    /// Contents of 0x4000..=0xFFFF.
+    /// Which machine this is.
+    pub model: Model,
+    /// The last value written to port `0x7FFD`, which says what is paged
+    /// where on a 128K machine. Unused on a 48K.
+    pub port_7ffd: u8,
+    /// The RAM. On a 48K machine, the contents of `0x4000..=0xFFFF`; on a
+    /// 128K, the eight banks in order, bank 0 first ([`RAM_128`] bytes).
     pub ram: Vec<u8>,
 }
 
 impl MachineState {
     /// Full 64K address space with the RAM in place and zeros for the ROM.
+    /// On a 128K machine, as paged: bank 5, bank 2, and the bank `port_7ffd`
+    /// selects.
+    #[must_use]
     pub fn memory(&self) -> Vec<u8> {
         let mut mem = vec![0u8; 0x4000];
-        mem.extend_from_slice(&self.ram);
+        match self.model {
+            Model::Spectrum48 => mem.extend_from_slice(&self.ram),
+            Model::Spectrum128 => {
+                for bank in [5, 2, usize::from(self.port_7ffd & 7)] {
+                    mem.extend_from_slice(&self.ram[bank * 0x4000..(bank + 1) * 0x4000]);
+                }
+            }
+        }
         mem
     }
 }
@@ -88,7 +128,35 @@ impl MachineState {
             iff2: false,
             im: 1,
             border: 0,
+            model: Model::Spectrum48,
+            port_7ffd: 0,
             ram: tape.ram.clone(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_128k_states_memory_is_seen_as_paged() {
+        let mut ram = vec![0u8; RAM_128];
+        for (bank, chunk) in ram.chunks_mut(0x4000).enumerate() {
+            chunk.fill(bank as u8);
+        }
+        let tape = crate::tape::Tape {
+            ram: vec![0; 0xC000],
+            loading_screen: None,
+        };
+        let state = MachineState {
+            model: Model::Spectrum128,
+            port_7ffd: 0x16,
+            ram,
+            ..MachineState::from_tape(&tape, 0, 0)
+        };
+        let mem = state.memory();
+        assert_eq!(mem.len(), 0x10000);
+        assert_eq!((mem[0x4000], mem[0x8000], mem[0xC000]), (5, 2, 6));
     }
 }

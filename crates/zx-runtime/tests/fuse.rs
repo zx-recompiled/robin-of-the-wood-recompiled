@@ -243,6 +243,8 @@ fn blank_machine() -> Zx {
         iff2: false,
         im: 0,
         border: 0,
+        model: zx_core::Model::Spectrum48,
+        port_7ffd: 0,
         ram: vec![0; 0xC000],
     };
     let mut z = Zx::new(&state, None);

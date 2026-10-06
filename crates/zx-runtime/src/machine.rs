@@ -4,7 +4,7 @@
 //! Recompiled code manipulates this struct directly (`z.a = z.read(z.hl());`),
 //! so everything the generated code touches is public and kept flat.
 
-use zx_core::{BlockOp, Cond, MachineState, Reg8, Reg16};
+use zx_core::{BlockOp, Cond, MachineState, Model, Reg8, Reg16};
 
 pub const CF: u8 = 0x01;
 pub const NF: u8 = 0x02;
@@ -95,9 +95,15 @@ pub struct Zx {
     pub timing: zx_core::timing::Timing,
     /// T-states since the start of the current frame.
     pub t: u32,
+    /// Which Spectrum this is.
+    pub model: Model,
     /// The ROM and RAM, and which page each quarter of the address space
     /// shows.
     pub memory: crate::memory::Memory,
+    /// The last value written to port `0x7FFD` on a 128K machine: the bank
+    /// at `0xC000` (bits 0–2), the screen shown (bit 3: bank 5 or 7), the ROM
+    /// (bit 4), and whether paging is locked until reset (bit 5).
+    pub port_7ffd: u8,
 
     pub border: u8,
     /// Current level of the beeper (EAR output, bit 4 of port 0xFE).
@@ -156,9 +162,16 @@ impl Zx {
             ei_delay: false,
             q: 0,
             wz: 0,
-            timing: zx_core::timing::SPECTRUM_48,
+            timing: state.model.timing(),
             t: 0,
-            memory: crate::memory::Memory::new_48k(&state.ram, rom),
+            model: state.model,
+            memory: match state.model {
+                Model::Spectrum48 => crate::memory::Memory::new_48k(&state.ram, rom),
+                Model::Spectrum128 => {
+                    crate::memory::Memory::new_128k(&state.ram, rom, state.port_7ffd)
+                }
+            },
+            port_7ffd: state.port_7ffd,
             border: state.border,
             ear: false,
 
@@ -350,11 +363,20 @@ impl Zx {
         self.t = t;
     }
 
-    /// Whether `addr` is in memory the ULA shares: on a 48K machine, the
-    /// 16K at `0x4000`.
+    /// Whether `addr` is in memory the ULA shares. On a 48K machine, the 16K
+    /// at `0x4000`. On a 128K, the odd banks (1, 3, 5, 7) wherever they are
+    /// paged: always bank 5 at `0x4000`, and `0xC000` when an odd bank is
+    /// there.
     #[must_use]
     pub fn contended(&self, addr: u16) -> bool {
-        zx_core::bus::contended(addr)
+        match self.model {
+            Model::Spectrum48 => zx_core::bus::contended(addr),
+            Model::Spectrum128 => {
+                let page = self.memory.slot(usize::from(addr >> 14));
+                page >= crate::memory::Memory::bank(0)
+                    && (page - crate::memory::Memory::bank(0)) % 2 == 1
+            }
+        }
     }
 
     // --- memory -------------------------------------------------------------
@@ -375,10 +397,16 @@ impl Zx {
         }
     }
 
-    /// The page the ULA displays: on a 48K machine, the one at `0x4000`.
+    /// The page the ULA displays: on a 48K machine, the one at `0x4000`; on
+    /// a 128K, bank 5 or bank 7, as bit 3 of port `0x7FFD` says.
     #[must_use]
     pub fn screen_page(&self) -> usize {
-        self.memory.slot(1)
+        match self.model {
+            Model::Spectrum48 => self.memory.slot(1),
+            Model::Spectrum128 => {
+                crate::memory::Memory::bank(if self.port_7ffd & 0x08 == 0 { 5 } else { 7 })
+            }
+        }
     }
 
     #[inline(always)]
@@ -444,6 +472,13 @@ impl Zx {
         if port & 1 == 0 {
             self.border = v & 7;
             self.ear = v & 0x10 != 0;
+        }
+        // The 128K decodes its paging port from A15 and A1 alone, so any port
+        // with both low pages memory, `0x7FFD` being the usual one. Once bit 5
+        // has been written, nothing pages until reset.
+        if self.model == Model::Spectrum128 && port & 0x8002 == 0 && self.port_7ffd & 0x20 == 0 {
+            self.port_7ffd = v;
+            self.memory.page_128k(v);
         }
     }
 

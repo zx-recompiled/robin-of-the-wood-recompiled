@@ -44,6 +44,44 @@ impl Memory {
         }
     }
 
+    /// A 128K machine's memory: ROM 0 and ROM 1 (the 32K `rom`, if any), then
+    /// RAM banks 0 to 7 (`ram`, bank 0 first), paged as `port_7ffd` says.
+    #[must_use]
+    pub fn new_128k(ram: &[u8], rom: Option<&[u8]>, port_7ffd: u8) -> Memory {
+        let mut pages = vec![[0u8; PAGE]; 2 + 8].into_boxed_slice();
+        if let Some(rom) = rom {
+            for (page, chunk) in pages[..2].iter_mut().zip(rom.chunks(PAGE)) {
+                page[..chunk.len()].copy_from_slice(chunk);
+            }
+        }
+        for (page, chunk) in pages[2..].iter_mut().zip(ram.chunks(PAGE)) {
+            page[..chunk.len()].copy_from_slice(chunk);
+        }
+        let mut rom_pages = vec![false; 10];
+        rom_pages[..2].fill(rom.is_some());
+        let mut m = Memory {
+            pages,
+            slots: [0, Memory::bank(5), Memory::bank(2), Memory::bank(0)],
+            rom: rom_pages.into_boxed_slice(),
+        };
+        m.page_128k(port_7ffd);
+        m
+    }
+
+    /// The page holding RAM bank `n` of a 128K machine.
+    #[must_use]
+    pub const fn bank(n: usize) -> usize {
+        2 + n
+    }
+
+    /// Repoints the slots as a write of `v` to port `0x7FFD` says: bits 0–2
+    /// choose the bank at `0xC000`, and bit 4 the ROM. Bank 5 at `0x4000`
+    /// and bank 2 at `0x8000` never move.
+    pub fn page_128k(&mut self, v: u8) {
+        self.slots[0] = usize::from(v >> 4 & 1);
+        self.slots[3] = Memory::bank(usize::from(v & 7));
+    }
+
     /// The byte at `addr`, through whichever page its slot shows.
     #[inline(always)]
     #[must_use]
