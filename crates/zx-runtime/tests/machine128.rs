@@ -4,7 +4,7 @@
 //! These are written from the 128K's specification (the World of Spectrum
 //! 128K reference, and Sinclair's own technical manual), so they check that
 //! the machine does what was meant, not that it matches a real one. That is
-//! `#12`'s hardware-measured timing tests' job.
+//! the job of the hardware-measured timing tests (#12).
 
 use zx_core::{MachineState, Model, bus::Cycle, state::RAM_128};
 use zx_runtime::Zx;
