@@ -15,10 +15,12 @@ pub const YF: u8 = 0x20;
 pub const ZF: u8 = 0x40;
 pub const SF: u8 = 0x80;
 
-/// T-states per frame on a 48K Spectrum (224 per line * 312 lines).
+/// T-states per frame on a 48K Spectrum (224 per line * 312 lines). A
+/// machine's own is [`Zx::timing`].
 pub use zx_core::timing::FRAME_T;
-/// How long the ULA holds /INT low at the start of each frame.
-pub const INT_LEN: u32 = 32;
+/// How long the ULA holds /INT low at the start of each frame, on a 48K
+/// Spectrum. A machine's own is [`Zx::timing`].
+pub const INT_LEN: u32 = zx_core::timing::SPECTRUM_48.int_len;
 
 #[inline]
 fn sz53(v: u8) -> u8 {
@@ -88,6 +90,9 @@ pub struct Zx {
     /// rests on*). Set by [`crate::interp::step`].
     pub wz: u16,
 
+    /// The shape of the machine's frame: its length, the interrupt's, and
+    /// where the ULA's contention falls.
+    pub timing: zx_core::timing::Timing,
     /// T-states since the start of the current frame.
     pub t: u32,
     /// The ROM and RAM, and which page each quarter of the address space
@@ -151,6 +156,7 @@ impl Zx {
             ei_delay: false,
             q: 0,
             wz: 0,
+            timing: zx_core::timing::SPECTRUM_48,
             t: 0,
             memory: crate::memory::Memory::new_48k(&state.ram, rom),
             border: state.border,
@@ -339,7 +345,16 @@ impl Zx {
 
     /// Charges one machine cycle, ULA delay included.
     pub fn charge(&mut self, c: crate::bus::Cycle) {
-        zx_core::bus::charge(&mut self.t, c);
+        let mut t = self.t;
+        zx_core::bus::charge_on(&mut t, c, &self.timing, |a| self.contended(a));
+        self.t = t;
+    }
+
+    /// Whether `addr` is in memory the ULA shares: on a 48K machine, the
+    /// 16K at `0x4000`.
+    #[must_use]
+    pub fn contended(&self, addr: u16) -> bool {
+        zx_core::bus::contended(addr)
     }
 
     // --- memory -------------------------------------------------------------
