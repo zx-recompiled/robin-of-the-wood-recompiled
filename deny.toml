@@ -1,0 +1,51 @@
+# cargo-deny: what this project will and will not take on as a dependency.
+#
+# The licence list is the part that earns its keep. The whole legal position
+# of this repository is that it contains nothing encumbered: no original code,
+# no original data, and nothing carrying a licence that would spread. A
+# copyleft dependency arriving three levels down would undermine that quietly,
+# and this is what notices.
+#
+# Run it locally with `cargo deny check`.
+
+[graph]
+all-features = true
+
+[advisories]
+# An unmaintained crate is worth knowing about, but it is not a reason to
+# fail a build on a day nobody touched the dependencies.
+yanked = "deny"
+unmaintained = "workspace"
+
+[licenses]
+# Every crate in the tree today is one of these. The list is what is actually
+# present, not a wishlist: anything new has to be considered on purpose.
+allow = [
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "CC0-1.0",
+    "ISC",
+    "MIT",
+    "Unicode-3.0",
+    "Zlib",
+]
+# A crate offering a choice takes the first of ours it matches.
+confidence-threshold = 0.9
+
+[bans]
+# Two versions of the same crate is usually a dependency that needs updating
+# rather than a problem in itself, so it is worth seeing and not worth
+# failing on.
+multiple-versions = "warn"
+# A dependency with no version at all is a supply chain nobody is pinning.
+# The workspace's own crates are the exception: they are path dependencies on
+# code in this repository, which is as pinned as anything gets.
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+# Nothing but crates.io. A git dependency would be a supply chain nobody is
+# watching.
+unknown-registry = "deny"
+unknown-git = "deny"

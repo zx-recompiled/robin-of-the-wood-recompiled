@@ -1,0 +1,25 @@
+# Third-party licences
+
+The `robin` program links the crates below into its binary, and their
+licences ask that their notices travel with it. This file is what carries
+them.
+
+It says nothing about the game itself. Robin of the Wood belongs to its rights
+holders, this project contains no part of it, and the program reads
+everything it needs from the player's own copy when it starts. The README
+says where to get one.
+
+{{#each overview}}
+- {{{name}}}: {{count}} {{#if (eq count 1)}}crate{{else}}crates{{/if}}
+{{/each}}
+
+{{#each licenses}}
+## {{{name}}}
+
+Used by {{#each used_by}}`{{{crate.name}}} {{{crate.version}}}`{{#unless @last}}, {{/unless}}{{/each}}.
+
+```
+{{{text}}}
+```
+
+{{/each}}

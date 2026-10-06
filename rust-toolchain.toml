@@ -1,0 +1,7 @@
+# Pinned deliberately. CI runs `clippy -D warnings`, and clippy's lint set
+# grows with every Rust release, so tracking `stable` would let a new release
+# turn CI red on code nobody touched. Bump this on purpose, and run
+# `.claude/scripts/check.sh` when you do.
+[toolchain]
+channel = "1.98.1"
+components = ["clippy", "rustfmt"]

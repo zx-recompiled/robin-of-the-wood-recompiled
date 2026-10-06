@@ -1,0 +1,9 @@
+/target
+
+# User-supplied game and ROM files are never committed.
+/assets/*
+!/assets/README.md
+
+# Editor and OS clutter.
+.DS_Store
+/.idea/

@@ -1,0 +1,13 @@
+[package]
+name = "zx-runtime"
+description = "Reference ZX Spectrum 48K machine (Z80 interpreter, ULA, tracing) used to study and verify against the original game"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+zx-core.workspace = true
+
+[lints]
+workspace = true

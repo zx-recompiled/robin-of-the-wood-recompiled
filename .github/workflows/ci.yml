@@ -1,0 +1,221 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # The repository must never carry any part of the original game. This is
+  # the one check that protects the project's whole footing, so it runs
+  # first and on its own.
+  no-game-data:
+    name: no game or ROM data committed
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Nothing under assets/ but its README
+        run: |
+          stray=$(git ls-files assets | grep -v '^assets/README\.md$' || true)
+          if [ -n "$stray" ]; then
+            echo "::error::These must never be committed:"
+            echo "$stray"
+            exit 1
+          fi
+
+      - name: No game dumps anywhere in the tree
+        run: |
+          stray=$(git ls-files | grep -iE '\.(tap|tzx|z80|sna|rom|szx)$' || true)
+          if [ -n "$stray" ]; then
+            echo "::error::Game or ROM dumps must never be committed:"
+            echo "$stray"
+            exit 1
+          fi
+
+  build:
+    name: build, test and lint (${{ matrix.os }})
+    # Every `run:` below is a bash script. Windows runners default to
+    # PowerShell, so say it once here rather than on each step.
+    defaults:
+      run:
+        shell: bash
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v7
+
+      # Keep in step with rust-toolchain.toml, which pins the same version
+      # for local builds. Tracking `stable` here would mean a future Rust
+      # release could fail CI on untouched code, because `clippy -D warnings`
+      # gains lints with every release.
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.98.1"
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --workspace --all-targets --locked
+
+      # The Z80 conformance corpus is the Fuse project's, under the GPL, so it
+      # is fetched rather than committed — the same reason the game and the
+      # ROM are not here. Pinned by hash, so a changed file is caught rather
+      # than quietly changing what we test against.
+      #
+      # The cache key IS the pin, so a hit can only be the bytes we asked for
+      # and a change to either hash misses and re-fetches. That keeps a
+      # SourceForge outage from turning `main` red on an unrelated change.
+      - name: Cache the Z80 test corpus
+        id: corpus
+        uses: actions/cache@v4
+        with:
+          path: |
+            assets/tests.in
+            assets/tests.expected
+          key: fuse-z80-corpus-fec4e44d-207dc604
+
+      - name: Fetch the Z80 test corpus
+        if: steps.corpus.outputs.cache-hit != 'true'
+        run: |
+          base='https://sourceforge.net/p/fuse-emulator/code/HEAD/tree/trunk/fuse/z80/tests'
+          curl -fsSL --retry 3 -o assets/tests.in "$base/tests.in?format=raw"
+          curl -fsSL --retry 3 -o assets/tests.expected "$base/tests.expected?format=raw"
+
+      # Verified whether it was downloaded or restored: a cache can be
+      # poisoned, and the pin is worth nothing if it is only checked on the
+      # path that was already trustworthy.
+      - name: Verify the Z80 test corpus
+        run: |
+          # macOS ships `shasum`, Linux and git-bash ship `sha256sum`, and
+          # neither ships both. Ask for whichever is there.
+          if command -v sha256sum > /dev/null; then
+            check="sha256sum -c -"
+          else
+            check="shasum -a 256 -c -"
+          fi
+          printf '%s  %s\n' \
+            fec4e44dfa4fa889f976aa546a774d48c2a7366ab12312d449f79e85e68d77d7 assets/tests.in \
+            207dc604db5d2a0a49ebd40e1bcb985a919e7a6e3dea1a52884ee05f9a1bf005 assets/tests.expected \
+            | $check
+
+      # z80test (raxoft, MIT) is measured on a real Spectrum, so it is the
+      # authority on flags and registers; the Fuse corpus above is kept for
+      # timing. Its tapes would trip the no-game-data guard, so they are
+      # fetched from the v1.2a release like the corpus, and cached by pin.
+      - name: Cache z80test
+        id: z80test
+        uses: actions/cache@v4
+        with:
+          path: |
+            assets/z80full.tap
+            assets/z80ccf.tap
+            assets/z80memptr.tap
+          key: z80test-1.2a-cdfebeff-a35b3b26-444582dd
+
+      - name: Fetch z80test
+        if: steps.z80test.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/z80test.zip" \
+            https://github.com/raxoft/z80test/releases/download/v1.2a/z80test-1.2a.zip
+          unzip -j -o "$RUNNER_TEMP/z80test.zip" \
+            z80test-1.2a/z80full.tap z80test-1.2a/z80ccf.tap z80test-1.2a/z80memptr.tap \
+            -d assets
+
+      # Verified on both paths, as the corpus is.
+      - name: Verify z80test
+        run: |
+          if command -v sha256sum > /dev/null; then
+            check="sha256sum -c -"
+          else
+            check="shasum -a 256 -c -"
+          fi
+          printf '%s  %s\n' \
+            cdfebeff306e5c0756ecb3295a1aebb8e71c336b2de35ecc3c0397146d73813c assets/z80full.tap \
+            a35b3b269b58371015cf033f28a08ad1ac92cce6dd27b428caf67b7f9ce8f5b7 assets/z80ccf.tap \
+            444582ddfa4d05711b6235e743ddf68295231e97ba92cc838c5d09a106c9a10f assets/z80memptr.tap \
+            | $check
+
+      - name: Test
+        run: cargo test --workspace --locked
+
+      # The conformance tests pass when their files are absent, so prove they
+      # actually ran rather than trusting that the steps above worked. That
+      # the right cases match, and exactly the corpus's known-wrong ones
+      # differ, is the tests' own job.
+      - name: Z80 conformance ran
+        run: |
+          cargo test -p zx-runtime --test fuse --test z80test --locked -- --nocapture \
+            | tee /tmp/z80.log
+          grep -q '/1335 cases match' /tmp/z80.log
+          for v in z80full z80ccf z80memptr; do
+            grep -q "z80test $v: [0-9]*/160 tests pass" /tmp/z80.log
+          done
+
+      - name: Formatting
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      # The game library is meant to have no platform dependencies at all:
+      # everything to do with windows, sound and input lives behind the
+      # `frontend` feature. This is what keeps that true.
+      - name: Library builds with no platform dependencies
+        run: cargo build -p robin --no-default-features --locked
+
+      # The source leans on intra-doc links; this catches the broken ones.
+      - name: Documentation
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --workspace --no-deps --locked
+
+  # What the dependency tree is allowed to contain. Its own job, because it
+  # depends on nothing this repository builds and there is no reason to make
+  # it wait for a compile.
+  dependencies:
+    name: dependency policy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+
+      # THIRD-PARTY.md is committed so it can be reviewed in a diff and read
+      # by anyone browsing the repository. That only works if it cannot go
+      # quietly stale, which is what this is for: the failure mode of an
+      # attribution file is forgetting it, not getting it wrong.
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.98.1"
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-about
+        run: cargo install cargo-about --locked --features cli
+
+      - name: Third-party attributions are current
+        run: |
+          cargo about generate --all-features about.hbs -o /tmp/THIRD-PARTY.md
+          if ! diff -u THIRD-PARTY.md /tmp/THIRD-PARTY.md; then
+            echo "::error::THIRD-PARTY.md is stale. Regenerate it:"
+            echo "::error::  cargo about generate --all-features about.hbs -o THIRD-PARTY.md"
+            exit 1
+          fi
+
+  # The differential suites are deliberately absent: they need the player's
+  # own copy of the game and the 128K ROM, which are never committed and should
+  # not be uploaded to GitHub. (The Z80 conformance tests do run here: they
+  # are nobody's copyrighted game, only descriptions of a processor.) Run
+  # `.claude/scripts/check.sh` locally before opening a pull request.
+  #
+  # Starquake's Intel Mac job and the frontend's system libraries come back
+  # with Robin's frontend, when there is a binary to build and start.

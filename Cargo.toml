@@ -1,0 +1,65 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/zx-core",
+    "crates/zx-runtime",
+    "crates/zx-recomp",
+    "games/robin",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+# Nothing here belongs on crates.io. The game needs the player's own tape to
+# do anything, and the rest are tools for working on it.
+publish = false
+
+[workspace.dependencies]
+zx-core = { path = "crates/zx-core" }
+zx-runtime = { path = "crates/zx-runtime" }
+zx-recomp = { path = "crates/zx-recomp" }
+
+# The reference interpreter runs the original for the differential checks;
+# unoptimised it is far slower than the machine it models, so even dev builds
+# get some optimisation.
+[profile.dev]
+opt-level = 1
+
+[profile.dev.build-override]
+opt-level = 3
+
+[profile.release.build-override]
+opt-level = 3
+
+# Clippy's default set, plus the pedantic lints that earn their keep here.
+#
+# Deliberately left off, because they fight what this codebase is:
+#
+#   cast_lossless, cast_possible_truncation  The u8/u16/usize casts are the
+#       Z80's own semantics written down. There are over 500 of them and
+#       rewriting them as `u16::from(..)` would hide the two or three that
+#       might be real.
+#   many_single_char_names  a, b, c, d, e, h, l are the register file. The
+#       names have to match the disassembly we check against.
+#   unreadable_literal  Spectrum addresses are written 0x5800, not 0x5_800.
+#   verbose_bit_mask  Prefers trailing_zeros() to the mask the original uses.
+#   inline_always  On the interpreter's hot path, where it was measured.
+#   must_use_candidate  128 hits, all noise.
+#   too_many_lines  Some routines are long because the routine they mirror
+#       is long, and splitting them hides the correspondence.
+#   cast_sign_loss, cast_possible_wrap  Same reason as the casts above, which
+#       was not obvious until they were measured: every one of the ten hits is
+#       a JR displacement, an IX+d offset or a signed room delta, where
+#       reinterpreting the sign is the instruction's meaning.
+[workspace.lints.clippy]
+missing_panics_doc = "warn"
+missing_errors_doc = "warn"
+items_after_statements = "warn"
+match_same_arms = "warn"
+if_not_else = "warn"
+default_trait_access = "warn"
+needless_pass_by_value = "warn"
+semicolon_if_nothing_returned = "warn"
+redundant_closure_for_method_calls = "warn"
+wildcard_imports = "warn"

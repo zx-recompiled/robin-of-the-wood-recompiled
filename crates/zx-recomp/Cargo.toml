@@ -1,0 +1,16 @@
+[package]
+name = "zx-recomp"
+description = "Tracing and disassembly tool for reverse-engineering ZX Spectrum 48K games"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+zx-core.workspace = true
+zx-runtime.workspace = true
+serde = { version = "1", features = ["derive"] }
+toml = "1"
+
+[lints]
+workspace = true

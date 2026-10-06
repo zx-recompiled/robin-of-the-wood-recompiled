@@ -1,0 +1,37 @@
+# cargo-about: what goes into THIRD-PARTY.md.
+#
+# THIRD-PARTY.md is generated from about.hbs. Do not edit it by hand: CI
+# regenerates it and fails if the result differs. The note used to be at the
+# top of the file itself, but a release ships that file as THIRD-PARTY.txt,
+# where a comment would show as text.
+#
+# The licences here mirror `deny.toml`'s allow list on purpose. deny.toml
+# decides what the project will take on as a dependency; this decides what
+# gets attributed when a binary is shipped. If they ever disagree, one of them
+# is wrong.
+#
+# Regenerate with:
+#
+#     cargo about generate --all-features about.hbs -o THIRD-PARTY.md
+
+accepted = [
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "CC0-1.0",
+    "ISC",
+    "MIT",
+    "Unicode-3.0",
+    "Zlib",
+]
+
+# Only what actually ships. A binary is built for the host it runs on, so
+# attributing every platform's dependencies at once would list crates that
+# are not in the artifact — but leaving a platform out would under-attribute
+# the binary built for it, which is the worse mistake. All three are listed.
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+]
+

@@ -1,0 +1,12 @@
+[package]
+name = "robin"
+description = "Robin of the Wood (ZX Spectrum 128K), rewritten in Rust"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true
