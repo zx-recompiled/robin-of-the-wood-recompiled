@@ -114,7 +114,9 @@ fn the_game_uses_no_rom_routine() {
                     *executed.entry((pc, z.memory.slot(0))).or_default() += 1;
                 }
                 // The opcode fetches are the first `m1` cycles; the rest that
-                // read are operands and data.
+                // read are operands and data. An interrupt's own vector read
+                // is not an instruction's, so it is not seen here; it is at
+                // I * 0x100 + 0xFF, in RAM while I is 0xE2 (*Interrupts*).
                 for c in bus::cycles(z, &d, pc).iter().skip(usize::from(d.m1)) {
                     if c.kind == bus::Kind::Read && c.at < 0x4000 {
                         *reads.entry((c.at, pc)).or_default() += 1;
