@@ -106,6 +106,18 @@ impl Memory {
         self.pages[page][addr as usize & (PAGE - 1)] = v;
     }
 
+    /// The page each slot shows.
+    #[must_use]
+    pub fn slots(&self) -> [usize; 4] {
+        self.slots
+    }
+
+    /// How many pages this memory has: 4 on a 48K, 10 on a 128K.
+    #[must_use]
+    pub fn pages(&self) -> usize {
+        self.pages.len()
+    }
+
     /// The page slot `slot` shows.
     #[must_use]
     pub fn slot(&self, slot: usize) -> usize {

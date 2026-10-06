@@ -397,7 +397,7 @@ impl Zx {
         if self.memory.write(addr, v)
             && let Some(trace) = &mut self.trace
         {
-            trace.on_write(addr);
+            trace.on_write(&self.memory.slots(), addr);
         }
     }
 

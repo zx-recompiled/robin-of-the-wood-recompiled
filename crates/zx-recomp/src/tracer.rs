@@ -62,7 +62,7 @@ pub fn run(
     let mut held_random: Vec<Key> = Vec::new();
 
     let mut z = Zx::new(&inputs.start, inputs.rom.as_deref());
-    z.trace = Some(Box::default());
+    z.trace = Some(Box::new(Trace::new(z.memory.pages())));
     let mut misses = Misses::default();
 
     for frame in 0..cfg.frames {
