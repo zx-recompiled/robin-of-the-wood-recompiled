@@ -12,7 +12,7 @@ Set up, and nothing more yet. There is nothing to play.
 
 What exists is the groundwork copied from [starquake-recompiled](https://github.com/zx-recompiled/starquake-recompiled), where the same approach produced a complete rewrite of Starquake (`REUSED.md` lists what came from there):
 
-- `crates/zx-runtime`: a reference Z80 interpreter for a 48K Spectrum, which runs the original for comparison. The 128K machine (memory banks, paging, its timing, the AY sound chip's registers) is still to come.
+- `crates/zx-runtime`: a reference Z80 interpreter, which runs the original for comparison, as a 48K Spectrum or a 128K one: two ROMs and eight memory banks paged through port `0x7FFD`, the shadow screen, contention by bank, and the AY sound chip's registers. The 128K's timing is the grey +2's; its frame and interrupt lengths were measured on real machines, and the rest is from the written references until hardware-checked timing tests confirm it (#12).
 - `crates/zx-recomp`: traces the original as it runs and disassembles it into listings to read.
 - `crates/zx-core`: the Z80 decoder, `.tap` loading, screen layout, PNG and SHA-1.
 - `games/robin`: the game, a stub so far.

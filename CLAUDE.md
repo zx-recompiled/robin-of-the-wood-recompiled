@@ -13,8 +13,9 @@ differential suites that run the original's routines in a reference Z80
 interpreter (`crates/zx-runtime`) beside the rewritten code and compare the
 result byte for byte.
 
-**Where it stands:** set up only. The game crate is a stub, the reference
-machine is still the 48K one, and there are no differential suites yet. The
+**Where it stands:** the facts about the tape are in `docs/re/robin.md` and
+the reference machine can be a 128K (#2), but the original doesn't run in it
+yet (#3), the game crate is a stub, and there are no differential suites. The
 plan, in order, is the board's Backlog.
 
 ## Commands
@@ -25,6 +26,8 @@ plan, in order, is the board's Backlog.
 - `cargo test -p zx-runtime --test z80test --test fuse -- --nocapture` checks
   the interpreter against z80test (measured on a real Spectrum) and the Fuse
   Z80 corpus (1335 cases, for timing). Their files go in `assets/`.
+- `cargo test -p zx-runtime --test machine128` checks the 128K machine's own
+  behaviour: paging, the lock, the shadow screen, contention by bank, the AY.
 - The tool shell is zsh: never name a variable `status`, and run anything
   loop-shaped as a `bash` script.
 
@@ -58,8 +61,11 @@ plan, in order, is the board's Backlog.
   z80test, measured on hardware, for flags and registers, and the Fuse corpus
   for timing. All three z80test programs must pass, and the corpus must match
   in every case but the six `KNOWN_WRONG` ones in `tests/fuse.rs`. Most of
-  MEMPTR is unconfirmed (starquake-recompiled#145), and the 128K's timing will
-  be checked against hardware-checked test programs, never another emulator.
+  MEMPTR is unconfirmed (starquake-recompiled#145). They pass on both the 48K
+  and the 128K machine. The 128K's timing is checked against test programs
+  whose results were measured on real machines, never against another emulator
+  (#12); until then its values say which are measured and which are only
+  written (`zx_core::timing::SPECTRUM_128`).
 - **Fidelity first, and say so when it is not.** Where the rewrite cannot match
   the original exactly, the reason is written down (`README.md`, *Status*)
   rather than left to be discovered.
