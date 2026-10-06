@@ -62,6 +62,7 @@ name = "robin"
 version = "0.1.0"
 dependencies = [
  "zx-core",
+ "zx-runtime",
 ]
 
 [[package]]

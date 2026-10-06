@@ -191,9 +191,11 @@ pub fn boot_128k(
     let mut feeder = TapeFeeder::from_blocks(blocks);
     let enter = crate::keys::Key::Matrix(6, 0);
     let mut misses = crate::Misses::default();
+    // The tape is in from the start: Tape Loader reaches LD-BYTES within the
+    // frames Enter is held.
     for f in 0..MENU_FRAMES + ENTER_FRAMES {
         z.set_key(enter, f >= MENU_FRAMES);
-        z.run_frame(crate::no_code, &mut misses);
+        z.run_frame(|z: &mut Zx| feeder.on_step(z), &mut misses);
     }
     z.set_key(enter, false);
     let start = z.frame;

@@ -9,5 +9,9 @@ publish.workspace = true
 [dependencies]
 zx-core.workspace = true
 
+# Only to run the original for comparison; the game itself never does.
+[dev-dependencies]
+zx-runtime.workspace = true
+
 [lints]
 workspace = true
