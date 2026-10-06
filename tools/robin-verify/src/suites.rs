@@ -97,6 +97,42 @@ pub fn all() -> Vec<Routine> {
                 r
             },
         },
+        Routine {
+            name: "flush the changed cells (0:C754)",
+            bank: Some(0),
+            entry: 0xC754,
+            code: (0xC754, 0xC7AE),
+            outputs: &[],
+            preserves: &[],
+            rewrite: |g, _, r| {
+                screen::flush(g);
+                r
+            },
+        },
+        Routine {
+            name: "copy the play area's pixels (0:C6FE)",
+            bank: Some(0),
+            entry: 0xC6FE,
+            code: (0xC6FE, 0xC753),
+            outputs: &[],
+            preserves: &[],
+            rewrite: |g, _, r| {
+                screen::copy_pixels(g);
+                r
+            },
+        },
+        Routine {
+            name: "copy the play area's attributes (0:C086)",
+            bank: Some(0),
+            entry: 0xC086,
+            code: (0xC086, 0xC0A3),
+            outputs: &[],
+            preserves: &[],
+            rewrite: |g, _, r| {
+                screen::copy_attrs(g);
+                r
+            },
+        },
     ]
 }
 

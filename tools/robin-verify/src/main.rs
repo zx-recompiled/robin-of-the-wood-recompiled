@@ -94,12 +94,14 @@ fn run() -> Result<bool, String> {
     for (r, t) in routines.iter().zip(&tallies) {
         let unreached = r.unreached(&z, t);
         println!(
-            "  {}: {} calls, {} compared, {} repeats skipped, {} scrambling checks; {} instruction(s) never reached{}",
+            "  {}: {} calls, {} compared, {} repeats skipped, {} scrambling checks, {} varied runs ({} did not return); {} instruction(s) never reached{}",
             r.name,
             t.calls,
             t.compared,
             t.repeats,
             t.scrambled,
+            t.varied,
+            t.varied_hung,
             unreached.len(),
             if unreached.is_empty() {
                 String::new()

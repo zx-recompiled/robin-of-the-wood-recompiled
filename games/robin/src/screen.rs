@@ -60,9 +60,78 @@ pub fn clear_lower_panel(g: &mut Game) {
     }
 }
 
+/// The play area's size, in character cells, and where it starts on the
+/// screen.
+pub const PLAY_ROWS: usize = 18;
+pub const PLAY_COLUMNS: std::ops::Range<usize> = 2..30;
+
+/// The screen offset of pixel row `p` of the character cell at `row` and
+/// `column`.
+const fn cell_pixel(row: usize, p: usize, column: usize) -> usize {
+    (row & 0x18) << 8 | p << 8 | (row & 7) << 5 | column
+}
+
+/// Copies every changed cell of the play area to the screen, and marks it
+/// unchanged: its attribute (the attribute buffer's, or the mark itself where
+/// that is zero, with bit 7 masked off), then its eight pixel rows from the
+/// back buffer.
+pub fn flush(g: &mut Game) {
+    for row in 0..PLAY_ROWS {
+        for column in PLAY_COLUMNS {
+            let cell = row * 32 + column;
+            let mark = g.play.changed[cell];
+            if mark == 0 {
+                continue;
+            }
+            g.play.changed[cell] = 0;
+            let attr = match g.play.attrs[cell] {
+                0 => mark,
+                a => a,
+            };
+            g.screen[6144 + cell] = attr & 0x7F;
+            for p in 0..8 {
+                g.screen[cell_pixel(row, p, column)] = g.play.pixels[row * 256 + p * 32 + column];
+            }
+        }
+    }
+}
+
+/// Copies the whole play area's pixels from the back buffer to the screen,
+/// row by row through the row table.
+pub fn copy_pixels(g: &mut Game) {
+    for y in 0..PLAY_ROWS * 8 {
+        let to = usize::from(g.rows[y].wrapping_sub(0x4000)) + PLAY_COLUMNS.start;
+        let from = y * 32 + PLAY_COLUMNS.start;
+        let n = PLAY_COLUMNS.len();
+        g.screen[to..to + n].copy_from_slice(&g.play.pixels[from..from + n]);
+    }
+}
+
+/// Copies the whole play area's attributes from the attribute buffer to the
+/// screen, bit 7 masked off.
+pub fn copy_attrs(g: &mut Game) {
+    for row in 0..PLAY_ROWS {
+        for column in PLAY_COLUMNS {
+            let cell = row * 32 + column;
+            g.screen[6144 + cell] = g.play.attrs[cell] & 0x7F;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_cells_pixel_rows_are_where_the_screen_keeps_them() {
+        for (row, p, column) in [(0, 0, 2), (7, 7, 29), (8, 0, 2), (17, 3, 15)] {
+            let y = (row * 8 + p) as u8;
+            assert_eq!(
+                0x4000 + cell_pixel(row, p, column),
+                usize::from(row_address(y)) + column
+            );
+        }
+    }
 
     #[test]
     fn rows_are_the_spectrums_layout() {

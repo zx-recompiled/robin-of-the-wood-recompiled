@@ -125,11 +125,24 @@ pub struct Tally {
     pub compared: u64,
     pub repeats: u64,
     pub scrambled: u64,
+    /// Runs with the data it read changed (a supplement: not states the
+    /// original had), and those that did not return.
+    pub varied: u64,
+    pub varied_hung: u64,
     seen: HashSet<u64>,
     scrambled_by_caller: BTreeMap<u16, u32>,
     pub executed: BTreeSet<u16>,
     pub failures: Vec<String>,
 }
+
+/// The parts of the state whose bytes a varied run changes: data, never
+/// code, tables or where to write.
+const VARIED: [&str; 4] = [
+    "the screen",
+    "the back buffer",
+    "the attribute buffer",
+    "the changed-cell map",
+];
 
 /// How many distinct calls from each caller get the scrambling check.
 const SCRAMBLE_PER_CALLER: u32 = 20;
@@ -233,6 +246,48 @@ impl Routine {
             }
         }
 
+        // A supplement to the real calls (#6, Decision 8): the same call with
+        // every byte of the screen and the play area's buffers that it read
+        // changed. Play never shows some values (no attribute with bit 7 set
+        // ever reached the flush, for one), so this compares the two on
+        // inputs play doesn't give. Only data is changed, never code, the
+        // tables or anything that says where to write.
+        let vary: Vec<(usize, usize)> = run
+            .read
+            .iter()
+            .copied()
+            .filter(|&(n, i)| VARIED.contains(&Game::part_at(n, i)))
+            .collect();
+        if !vary.is_empty() {
+            let mut varied = entry.clone();
+            for &(n, i) in &vary {
+                let mut h = DefaultHasher::new();
+                (run.key, n, i).hash(&mut h);
+                let flip = (h.finish() as u8) | 1;
+                let v = run.entry_byte(&entry, n, i);
+                poke(&mut varied, n, i, v ^ flip);
+            }
+            match self.run_original(&varied) {
+                Ok(run3) => {
+                    t.varied += 1;
+                    let differ = self.compare(&varied, &run3, assets);
+                    if !differ.is_empty() {
+                        fail(
+                            t,
+                            format!(
+                                "{}: {at}, with the {} byte(s) of data it read changed: {}",
+                                self.name,
+                                vary.len(),
+                                differ.join("; ")
+                            ),
+                        );
+                        return;
+                    }
+                }
+                Err(_) => t.varied_hung += 1,
+            }
+        }
+
         let n = t.scrambled_by_caller.entry(run.ret).or_default();
         if *n < SCRAMBLE_PER_CALLER {
             *n += 1;
@@ -255,7 +310,7 @@ impl Routine {
         entry_sp.hash(&mut key);
         let mut ports = Vec::new();
         let mut executed = Vec::new();
-        let mut read: HashSet<(usize, usize)> = HashSet::new();
+        let mut read: BTreeSet<(usize, usize)> = BTreeSet::new();
         let mut blind: BTreeSet<(usize, usize)> = BTreeSet::new();
         let mut steps = 0u64;
         while !(c.pc == ret && c.sp == entry_sp.wrapping_add(2)) {
@@ -309,6 +364,7 @@ impl Routine {
             ports,
             executed,
             blind,
+            read,
             banks: banks(&c),
             after: c,
         })
@@ -411,10 +467,35 @@ impl Routine {
             interp::step(&mut odd);
             low = low.min(same.sp).min(odd.sp);
         }
-        // What either pushed below where the stack now is, nobody reads.
+        // A later routine may have saved a scrambled register on the stack,
+        // to restore it before returning: that is not reading it. So carry
+        // on until the stack is back at the caller's level, every such value
+        // popped, before comparing memory.
+        // A caller waiting for an interrupt never gets there, as these runs
+        // have none; then the stack from the deepest point up to the
+        // caller's level is left out of the comparison, and only where they
+        // went and what they wrote elsewhere counts.
+        let level = entry_sp.wrapping_add(2);
+        for _ in 0..FOLLOW {
+            if same.sp >= level || same.pc != odd.pc {
+                break;
+            }
+            interp::step(&mut same);
+            interp::step(&mut odd);
+            low = low.min(same.sp).min(odd.sp);
+        }
+        if same.pc != odd.pc {
+            return Some(format!(
+                "with {scrambled:?} scrambled, the caller went to {:04x} instead of {:04x}: it reads one of them",
+                odd.pc, same.pc
+            ));
+        }
+        // What either pushed below where the stack now is, nobody reads; and
+        // if the stack is not back, what is between is left out too.
         let mut dead: HashSet<(usize, usize)> = HashSet::new();
         let mut a = low;
-        while a != same.sp {
+        let top = if same.sp < level { level } else { same.sp };
+        while a != top {
             if let Some(p) = ram_place(&same, a) {
                 dead.insert(p);
             }
@@ -467,6 +548,8 @@ struct Run {
     executed: Vec<u16>,
     /// The places it wrote before reading, other than the dead stack.
     blind: BTreeSet<(usize, usize)>,
+    /// Every place it read.
+    read: BTreeSet<(usize, usize)>,
     banks: Box<[[u8; BANK]; 8]>,
     after: Zx,
 }
@@ -474,6 +557,10 @@ struct Run {
 impl Run {
     fn after_bank_byte(&self, n: usize, i: usize) -> u8 {
         self.banks[n][i]
+    }
+
+    fn entry_byte(&self, entry: &Zx, n: usize, i: usize) -> u8 {
+        entry.memory.page(Memory::bank(n))[i]
     }
 }
 
