@@ -11,6 +11,9 @@ ignored by git):
 | `48.rom` | ZX Spectrum 48K ROM, SHA-1 `5ea7c2b824672e914525d1d5c419d71b84a426a2` | development tools only (the 48K reference machine) |
 | `tests.in`, `tests.expected` | The Fuse project's Z80 test corpus | development tools only (the processor conformance test) |
 | `z80full.tap`, `z80ccf.tap`, `z80memptr.tap` | Patrik Rak's z80test, v1.2a | development tools only (the processor conformance test) |
+| `minfo.tap`, `timingtest.tap` | Patrik Rak's zxtests `minfo` and Timing Test v0.3 | development tools only (the machines' timing) |
+| `fusetest.tap` | Philip Kendall's Fuse Test (2008-03-28) | development tools only (the machines' timing) |
+| `butler-128k.szx` | Richard and Tim Butler's ZX Spectrum Timing Tests 128K v1.0 | development tools only (reported, not judged) |
 
 The tape is the 128K release as a TZX file, every block at the ROM's standard
 speed (`docs/re/robin.md`, *The tape*). Its name does not matter; its SHA-1
@@ -66,5 +69,23 @@ curl -L -o z80test.zip https://github.com/raxoft/z80test/releases/download/v1.2a
 unzip -j z80test.zip z80test-1.2a/z80full.tap z80test-1.2a/z80ccf.tap z80test-1.2a/z80memptr.tap -d assets
 ```
 
-Without the corpus or z80test, `cargo test` says those checks were skipped,
-and every other check still runs.
+**The timing tests** (`crates/zx-runtime/tests/hardware.rs`) run the
+machines against programs whose results were measured on real ones. They
+need the ROMs, so they run only locally. Rak's and Kendall's are GPL, from
+their authors' or a mirror's archives:
+
+```sh
+curl -LO http://zxds.raxoft.cz/taps/misc/zxtests-3p.zip
+curl -LO http://zxds.raxoft.cz/taps/misc/timingtest-0.3.zip
+curl -L -o fusetest.zip 'https://zxe.io/depot/software/ZX%20Spectrum/Fuse%20Test%20(2008-03-28)(Kendall,%20Philip)%5B!%5D.zip'
+unzip -j zxtests-3p.zip minfo.tap -d assets
+unzip -p timingtest-0.3.zip timingtest-0.3/timing.tap > assets/timingtest.tap
+unzip -p fusetest.zip fusetest/fusetest.tap > assets/fusetest.tap
+```
+
+Butler's tests carry no licence or terms, so they are never fetched
+automatically; keep your own copy as `assets/butler-128k.szx` (the
+`ZX Spectrum Timing Tests - 128K v1.0` snapshot on zxe.io).
+
+Without the corpus, z80test or the timing tests, `cargo test` says those
+checks were skipped, and every other check still runs.

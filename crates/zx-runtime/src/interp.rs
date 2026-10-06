@@ -86,7 +86,16 @@ pub fn step(z: &mut Zx) {
     for &c in cycles.iter() {
         z.charge(c);
     }
+    // A `DD` or `FD` prefix followed by another prefix runs as a 4 T-state
+    // NOP, but the processor does not take an interrupt after a prefix, so a
+    // chain of them holds interrupts off for its whole length, as `EI` does
+    // for one instruction. Patrik Rak's `minfo` times the interrupt with such
+    // a chain.
+    let lone_prefix = d.len == 1 && matches!(z.read(pc), 0xDD | 0xFD);
     execute(z, &d, pc, next);
+    if lone_prefix {
+        z.ei_delay = true;
+    }
     z.q = if writes_flags(&d.instr) { z.f } else { 0 };
 }
 

@@ -9,6 +9,7 @@ pub mod ay;
 pub mod bus;
 pub mod interp;
 pub mod keys;
+pub mod loader;
 pub use zx_core::png;
 pub mod machine;
 pub mod memory;
@@ -31,21 +32,30 @@ pub struct Misses {
 
 impl Zx {
     /// Runs one 50 Hz frame.
-    pub fn run_frame(&mut self, code: BlockFn, misses: &mut Misses) {
+    ///
+    /// `code` is called before each instruction: if it returns true it has
+    /// dealt with that point itself (run compiled code, or stood in for a
+    /// ROM routine, as [`crate::loader::TapeFeeder`] does), and the loop
+    /// looks again at wherever it left the processor.
+    pub fn run_frame(&mut self, mut code: impl FnMut(&mut Zx) -> bool, misses: &mut Misses) {
         self.int_pending = true;
 
         let mut in_fallback = false;
         while self.t < self.timing.frame {
-            if self.int_pending {
-                if self.iff1 && !self.ei_delay {
-                    self.int_pending = false;
-                    if let Some(trace) = &mut self.trace {
-                        trace.on_interrupt();
-                    }
-                    self.accept_interrupt();
-                } else if self.t >= self.timing.int_len {
-                    self.int_pending = false;
+            // /INT is held for the first `int_len` T-states of the frame, and
+            // only then: once that has passed it is gone, whether or not
+            // interrupts were enabled to see it. Checking that first matters:
+            // a pulse that lasted until the next enabled instruction instead
+            // made Patrik Rak's `minfo` measure it 8 T-states too long.
+            if self.int_pending && self.t >= self.timing.int_len {
+                self.int_pending = false;
+            }
+            if self.int_pending && self.iff1 && !self.ei_delay {
+                self.int_pending = false;
+                if let Some(trace) = &mut self.trace {
+                    trace.on_interrupt();
                 }
+                self.accept_interrupt();
             }
             self.ei_delay = false;
 
@@ -110,13 +120,13 @@ impl Zx {
                 }
                 self.int_pending = true;
             }
-            if self.int_pending {
-                if self.iff1 && !self.ei_delay {
-                    self.int_pending = false;
-                    self.accept_interrupt();
-                } else if self.t >= self.timing.int_len {
-                    self.int_pending = false;
-                }
+            // As in `run_frame`: the pulse ends at `int_len`, enabled or not.
+            if self.int_pending && self.t >= self.timing.int_len {
+                self.int_pending = false;
+            }
+            if self.int_pending && self.iff1 && !self.ei_delay {
+                self.int_pending = false;
+                self.accept_interrupt();
             }
             self.ei_delay = false;
             if self.halted {

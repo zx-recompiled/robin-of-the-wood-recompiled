@@ -9,6 +9,7 @@ pub mod png;
 pub mod screen;
 pub mod sha1;
 pub mod state;
+pub mod szx;
 pub mod tape;
 pub mod timing;
 
