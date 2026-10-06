@@ -8,9 +8,13 @@
 //! it from tape. Everything around the load (BASIC's `LOAD`, the 128's Tape
 //! Loader, the program's own loader stub) runs for real.
 //!
-//! This covers programs loaded through `LD-BYTES`' front door. A loader that
-//! jumps into the middle of the routine, as Robin of the Wood's does at
-//! `0x0563` (`docs/re/robin.md`), needs its own trap.
+//! Two ways in are handled: `LD-BYTES`' front door, which BASIC's `LOAD` uses,
+//! and the side door at [`LD_BYTES_PAST_PREAMBLE`], which Robin of the Wood's
+//! loader uses (`docs/re/robin.md`, *The loader*).
+//!
+//! What this cannot reproduce is the working state a real load leaves in the
+//! registers it does not define: B, C, H, L, A and the rest of F, which depend
+//! on the tape's exact timing. Those keep what they held before.
 
 use crate::machine::Zx;
 use crate::memory::PAGE;
@@ -20,6 +24,13 @@ pub const LD_BYTES: u16 = 0x0556;
 /// The ROM's `SA/LD-RET`, where `LD-BYTES` finishes: it restores the border,
 /// checks for BREAK and enables interrupts, then returns to the caller.
 pub const SA_LD_RET: u16 = 0x053F;
+/// Inside `LD-BYTES`, past its preamble: the operand byte of its first
+/// `IN A,(0xFE)`. A loader that has done the routine's first instructions
+/// itself (`INC D; EX AF,AF'; DEC D; DI`) jumps here. That skips the border,
+/// the EAR read and the push of [`SA_LD_RET`], so the routine returns
+/// straight to its caller with interrupts still disabled, and the flag and
+/// load/verify are in AF' rather than AF.
+pub const LD_BYTES_PAST_PREAMBLE: u16 = 0x0563;
 
 /// A tape's blocks, waiting to be loaded in order.
 pub struct TapeFeeder {
@@ -47,7 +58,14 @@ impl TapeFeeder {
             blocks.push(bytes[i..i + len].to_vec());
             i += len;
         }
-        Ok(TapeFeeder { blocks, next: 0 })
+        Ok(TapeFeeder::from_blocks(blocks))
+    }
+
+    /// Blocks as they are on tape (flag, data, checksum), such as
+    /// [`zx_core::tape::load_tzx`] returns.
+    #[must_use]
+    pub fn from_blocks(blocks: Vec<Vec<u8>>) -> TapeFeeder {
+        TapeFeeder { blocks, next: 0 }
     }
 
     /// Blocks not yet loaded.
@@ -56,25 +74,32 @@ impl TapeFeeder {
         self.blocks.len() - self.next
     }
 
-    /// If the processor is at `LD-BYTES` with the BASIC ROM paged in, loads
-    /// the next block as the routine was asked and sends the processor on to
-    /// `SA/LD-RET`, returning true. Otherwise does nothing.
+    /// If the processor is at either way into `LD-BYTES` with the BASIC ROM
+    /// paged in, loads the next block as the routine was asked, and returns
+    /// true. At the front door it then sends the processor on to `SA/LD-RET`;
+    /// at the side door, back to the caller. Otherwise it does nothing.
     ///
     /// The routine is entered with the flag byte it wants in A, carry set to
-    /// load or clear to verify, the length in DE and the address in IX. It
-    /// finishes with carry set if the block matched: the right flag, the
-    /// right length and a good checksum. A block with the wrong flag is
-    /// consumed and fails, as the ROM skips it, so BASIC's search for a
-    /// header goes on to the next block.
+    /// load or clear to verify, the length in DE and the address in IX (the
+    /// flag and carry in A' and F' at the side door). It finishes with carry
+    /// set if the block matched: the right flag, the right length and a good
+    /// checksum. A block with the wrong flag is consumed and fails, as the
+    /// ROM skips it, so BASIC's search for a header goes on to the next block.
     pub fn on_step(&mut self, z: &mut Zx) -> bool {
-        if z.pc != LD_BYTES || !basic_rom_paged(z) || self.next >= self.blocks.len() {
+        let front = match z.pc {
+            LD_BYTES => true,
+            LD_BYTES_PAST_PREAMBLE => false,
+            _ => return false,
+        };
+        if !basic_rom_paged(z) || self.next >= self.blocks.len() {
             return false;
         }
+        let (flag, f) = if front { (z.a, z.f) } else { (z.a_, z.f_) };
         let block = &self.blocks[self.next];
         self.next += 1;
-        let load = z.f & crate::machine::CF != 0;
+        let load = f & crate::machine::CF != 0;
         let want = usize::from(z.d) << 8 | usize::from(z.e);
-        let mut ok = block[0] == z.a;
+        let mut ok = block[0] == flag;
         if ok {
             let data = &block[1..block.len() - 1];
             let sum = block[..block.len() - 1].iter().fold(0u8, |a, b| a ^ b);
@@ -96,7 +121,7 @@ impl TapeFeeder {
         } else {
             z.f & !crate::machine::CF
         };
-        z.pc = SA_LD_RET;
+        z.pc = if front { SA_LD_RET } else { z.pop() };
         true
     }
 }
@@ -118,4 +143,75 @@ pub fn basic_rom(z: &Zx) -> &[u8; PAGE] {
         zx_core::Model::Spectrum48 => 0,
         zx_core::Model::Spectrum128 => 1,
     })
+}
+
+/// Frames from power-on until the 128K's menu takes a key: its ROM tests and
+/// clears memory first.
+const MENU_FRAMES: u32 = 150;
+/// Frames Enter is held at the menu, as a hand would hold it.
+const ENTER_FRAMES: u32 = 5;
+
+/// A 128K machine as it is switched on: `rom` (the 32K `128.rom`), empty RAM,
+/// the processor at 0.
+#[must_use]
+pub fn power_on_128k(rom: &[u8]) -> Zx {
+    let tape = zx_core::tape::Tape {
+        ram: vec![0; 0xC000],
+        loading_screen: None,
+    };
+    let state = zx_core::MachineState {
+        model: zx_core::Model::Spectrum128,
+        port_7ffd: 0,
+        ram: vec![0; zx_core::state::RAM_128],
+        pc: 0,
+        iff1: false,
+        iff2: false,
+        im: 0,
+        ..zx_core::MachineState::from_tape(&tape, 0, 0)
+    };
+    Zx::new(&state, Some(rom))
+}
+
+/// Loads a tape on a 128K the way a person would: switches on, picks Tape
+/// Loader from the menu, and plays the tape (`blocks`, through a
+/// [`TapeFeeder`]). Stops the first time the processor reaches `until` once
+/// every block has loaded: the program's hand-over to itself.
+///
+/// # Errors
+///
+/// If that hasn't happened within `max_frames`, or the tape was not all
+/// loaded by then.
+pub fn boot_128k(
+    rom: &[u8],
+    blocks: Vec<Vec<u8>>,
+    until: u16,
+    max_frames: u32,
+) -> Result<Zx, String> {
+    let mut z = power_on_128k(rom);
+    let mut feeder = TapeFeeder::from_blocks(blocks);
+    let enter = crate::keys::Key::Matrix(6, 0);
+    let mut misses = crate::Misses::default();
+    // The tape is in from the start: Tape Loader reaches LD-BYTES within the
+    // frames Enter is held.
+    for f in 0..MENU_FRAMES + ENTER_FRAMES {
+        z.set_key(enter, f >= MENU_FRAMES);
+        z.run_frame(|z: &mut Zx| feeder.on_step(z), &mut misses);
+    }
+    z.set_key(enter, false);
+    let start = z.frame;
+    loop {
+        let left = max_frames.saturating_sub((z.frame - start) as u32);
+        if !z.run_until_any_with(&[until], left, |z| feeder.on_step(z)) {
+            return Err(format!(
+                "not at {until:#06x} after {max_frames} frames; {} tape block(s) not loaded",
+                feeder.remaining()
+            ));
+        }
+        // The ROM passes through the same address on its own business while
+        // the tape is still loading; only the arrival after the last block
+        // is the hand-over.
+        if feeder.remaining() == 0 {
+            return Ok(z);
+        }
+    }
 }

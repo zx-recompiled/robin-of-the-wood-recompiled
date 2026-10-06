@@ -8,7 +8,7 @@ The original is by Steve Wetheril, Paul Salmon and Fred Gray, as credited in the
 
 ## Status
 
-Set up, and nothing more yet. There is nothing to play.
+Nothing to play yet. The original now boots from its tape in the 128K reference machine, through the real ROM and its own loader, to the state the checks will start from. A census of 20,000 frames of play found it running no ROM code, and reading the ROM in three places, one of which feeds its random numbers (#21).
 
 What exists is the groundwork copied from [starquake-recompiled](https://github.com/zx-recompiled/starquake-recompiled), where the same approach produced a complete rewrite of Starquake (`REUSED.md` lists what came from there):
 

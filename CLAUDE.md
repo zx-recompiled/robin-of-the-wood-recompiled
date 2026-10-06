@@ -13,10 +13,12 @@ differential suites that run the original's routines in a reference Z80
 interpreter (`crates/zx-runtime`) beside the rewritten code and compare the
 result byte for byte.
 
-**Where it stands:** the facts about the tape are in `docs/re/robin.md` and
-the reference machine can be a 128K (#2), but the original doesn't run in it
-yet (#3), the game crate is a stub, and there are no differential suites. The
-plan, in order, is the board's Backlog.
+**Where it stands:** the original boots from its tape in the 128K reference
+machine, through the real ROM and its own loader, to the state every check
+will start from (#3; `games/robin/tests/boot.rs`). The facts it needs are in
+`games/robin/src/layout.rs` and `docs/re/robin.md`. The game crate is
+otherwise a stub, and there are no differential suites yet. The plan, in
+order, is the board's Backlog.
 
 ## Commands
 
