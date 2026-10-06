@@ -27,6 +27,39 @@ pub const fn row_address(y: u8) -> u16 {
     0x4000 | (y & 0xC0) << 5 | (y & 0x07) << 8 | (y & 0x38) << 2
 }
 
+/// Clears the screen's pixels.
+pub fn clear_screen(g: &mut Game) {
+    g.screen[..6144].fill(0);
+}
+
+/// Sets every attribute on the screen to `attr`.
+pub fn fill_attrs(g: &mut Game, attr: u8) {
+    g.screen[6144..].fill(attr);
+}
+
+/// Clears the play area: every cell of the attribute buffer to `attr`, and
+/// the back buffer to 0.
+pub fn clear_play_area(g: &mut Game, attr: u8) {
+    g.play.attrs.fill(attr);
+    g.play.pixels.fill(0);
+}
+
+/// Marks no cell as changed.
+pub fn clear_changed(g: &mut Game) {
+    g.play.changed.fill(0);
+}
+
+/// Clears the bottom 32 pixel rows of the screen, found through the row
+/// table.
+pub fn clear_lower_panel(g: &mut Game) {
+    for y in 160..192 {
+        let at = usize::from(g.rows[y].wrapping_sub(0x4000));
+        for b in &mut g.screen[at..at + 32] {
+            *b = 0;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

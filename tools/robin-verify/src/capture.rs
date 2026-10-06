@@ -176,24 +176,95 @@ impl Routine {
     pub fn capture(&self, z: &Zx, assets: &Assets, t: &mut Tally) {
         t.calls += 1;
         let entry = z.clone();
-        let mut c = z.clone();
+        let run = match self.run_original(&entry) {
+            Ok(run) => run,
+            Err(e) => {
+                fail(t, e);
+                return;
+            }
+        };
+        if !t.seen.insert(run.key) {
+            t.repeats += 1;
+            return;
+        }
+        t.compared += 1;
+        t.executed.extend(run.executed.iter().copied());
+        let at = format!(
+            "call from {:04x} (case {})",
+            run.ret.wrapping_sub(3),
+            t.compared
+        );
+        let differ = self.compare(&entry, &run, assets);
+        if !differ.is_empty() {
+            fail(t, format!("{}: {at}: {}", self.name, differ.join("; ")));
+            return;
+        }
+
+        // The same call with every byte it writes before reading set to
+        // something else first. The original never sees their old values, so
+        // it does just the same; a rewrite that leaves one unwritten, where
+        // the old value happened to be right, now shows.
+        if !run.blind.is_empty() {
+            let mut poisoned = entry.clone();
+            for &(n, i) in &run.blind {
+                let v = run.after_bank_byte(n, i);
+                poke(&mut poisoned, n, i, !v);
+            }
+            match self.run_original(&poisoned) {
+                Ok(run2) => {
+                    let differ = self.compare(&poisoned, &run2, assets);
+                    if !differ.is_empty() {
+                        fail(
+                            t,
+                            format!(
+                                "{}: {at}, with the {} byte(s) it only writes set to other values first: {}",
+                                self.name,
+                                run.blind.len(),
+                                differ.join("; ")
+                            ),
+                        );
+                        return;
+                    }
+                }
+                Err(e) => {
+                    fail(t, e);
+                    return;
+                }
+            }
+        }
+
+        let n = t.scrambled_by_caller.entry(run.ret).or_default();
+        if *n < SCRAMBLE_PER_CALLER {
+            *n += 1;
+            t.scrambled += 1;
+            if let Some(e) = self.scramble(&run.after, run.entry_sp) {
+                fail(t, format!("{}: {at}: {e}", self.name));
+            }
+        }
+    }
+
+    /// Runs the original routine alone from `entry` to its return, with no
+    /// interrupts, recording what the call reads and writes.
+    fn run_original(&self, entry: &Zx) -> Result<Run, String> {
+        let mut c = entry.clone();
         let entry_sp = c.sp;
         let ret = c.read16(entry_sp);
         let mut min_sp = entry_sp;
         let mut key = DefaultHasher::new();
-        Regs::of(&entry).hash(&mut key);
+        Regs::of(entry).hash(&mut key);
         entry_sp.hash(&mut key);
         let mut ports = Vec::new();
         let mut executed = Vec::new();
+        let mut read: HashSet<(usize, usize)> = HashSet::new();
+        let mut blind: BTreeSet<(usize, usize)> = BTreeSet::new();
         let mut steps = 0u64;
         while !(c.pc == ret && c.sp == entry_sp.wrapping_add(2)) {
             steps += 1;
             if steps > STEP_LIMIT {
-                fail(
-                    t,
-                    format!("{}: did not return within {STEP_LIMIT} steps", self.name),
-                );
-                return;
+                return Err(format!(
+                    "{}: did not return within {STEP_LIMIT} steps",
+                    self.name
+                ));
             }
             let pc = c.pc;
             if self.in_code(&c, pc) {
@@ -202,7 +273,19 @@ impl Routine {
             let d = interp::decode_at(&c, pc);
             for cy in bus::cycles(&c, &d, pc).iter() {
                 match cy.kind {
-                    bus::Kind::Read => (cy.at, c.read(cy.at)).hash(&mut key),
+                    bus::Kind::Read => {
+                        (cy.at, c.read(cy.at)).hash(&mut key);
+                        if let Some(p) = ram_place(&c, cy.at) {
+                            read.insert(p);
+                        }
+                    }
+                    bus::Kind::Write => {
+                        if let Some(p) = ram_place(&c, cy.at)
+                            && !read.contains(&p)
+                        {
+                            blind.insert(p);
+                        }
+                    }
                     bus::Kind::PortWrite => ports.push((pc, cy.at)),
                     _ => {}
                 }
@@ -210,35 +293,47 @@ impl Routine {
             interp::step(&mut c);
             min_sp = min_sp.min(c.sp);
         }
-        if !t.seen.insert(key.finish()) {
-            t.repeats += 1;
-            return;
+        // The stack below the caller's is not the routine's output.
+        let mut a = min_sp;
+        while a != entry_sp {
+            if let Some(p) = ram_place(entry, a) {
+                blind.remove(&p);
+            }
+            a = a.wrapping_add(1);
         }
-        t.compared += 1;
-        t.executed.extend(executed);
+        Ok(Run {
+            key: key.finish(),
+            ret,
+            entry_sp,
+            min_sp,
+            ports,
+            executed,
+            blind,
+            banks: banks(&c),
+            after: c,
+        })
+    }
 
-        let before = Regs::of(&entry);
-        let mut g = Game::from_memory(&banks(&entry));
+    /// What differs between the original's `run` from `entry` and the
+    /// rewrite from the same state.
+    fn compare(&self, entry: &Zx, run: &Run, assets: &Assets) -> Vec<String> {
+        let before = Regs::of(entry);
+        let mut g = Game::from_memory(&banks(entry));
         let out = (self.rewrite)(&mut g, assets, before);
-        let after = Regs::of(&c);
-        let at = format!(
-            "call from {:04x} (case {})",
-            ret.wrapping_sub(3),
-            t.compared
-        );
+        let after = Regs::of(&run.after);
         let mut differ = Vec::new();
 
         // All of memory, but for the stack below the caller's: the
         // original's pushes and calls leave bytes there that nobody reads.
         let mut dead: HashSet<(usize, usize)> = HashSet::new();
-        let mut a = min_sp;
-        while a != entry_sp {
-            if let Some(p) = ram_place(&entry, a) {
+        let mut a = run.min_sp;
+        while a != run.entry_sp {
+            if let Some(p) = ram_place(entry, a) {
                 dead.insert(p);
             }
             a = a.wrapping_add(1);
         }
-        let (orig, new) = (banks(&c), g.to_memory());
+        let (orig, new) = (&run.banks, g.to_memory());
         let mut bytes = Vec::new();
         for n in 0..8 {
             for i in 0..BANK {
@@ -276,24 +371,12 @@ impl Routine {
                 ));
             }
         }
-        for (pc, port) in &ports {
+        for (pc, port) in &run.ports {
             differ.push(format!(
                 "writes port {port:04x} at {pc:04x}, which the rewrite does not model"
             ));
         }
-        if !differ.is_empty() {
-            fail(t, format!("{}: {at}: {}", self.name, differ.join("; ")));
-            return;
-        }
-
-        let n = t.scrambled_by_caller.entry(ret).or_default();
-        if *n < SCRAMBLE_PER_CALLER {
-            *n += 1;
-            t.scrambled += 1;
-            if let Some(e) = self.scramble(&c, entry_sp) {
-                fail(t, format!("{}: {at}: {e}", self.name));
-            }
-        }
+        differ
     }
 
     /// Follows the original from its return twice, once with every register
@@ -371,6 +454,41 @@ impl Routine {
             pc = pc.wrapping_add(len);
         }
         out
+    }
+}
+
+/// One run of the original routine.
+struct Run {
+    key: u64,
+    ret: u16,
+    entry_sp: u16,
+    min_sp: u16,
+    ports: Vec<(u16, u16)>,
+    executed: Vec<u16>,
+    /// The places it wrote before reading, other than the dead stack.
+    blind: BTreeSet<(usize, usize)>,
+    banks: Box<[[u8; BANK]; 8]>,
+    after: Zx,
+}
+
+impl Run {
+    fn after_bank_byte(&self, n: usize, i: usize) -> u8 {
+        self.banks[n][i]
+    }
+}
+
+/// Sets byte `i` of bank `n` in `z`, paging it in and back.
+fn poke(z: &mut Zx, n: usize, i: usize, v: u8) {
+    let i = i as u16;
+    match n {
+        5 => z.memory.poke(0x4000 + i, v),
+        2 => z.memory.poke(0x8000 + i, v),
+        _ => {
+            let was = z.port_7ffd;
+            z.memory.page_128k((was & !7) | n as u8);
+            z.memory.poke(0xC000 + i, v);
+            z.memory.page_128k(was);
+        }
     }
 }
 
