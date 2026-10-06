@@ -264,7 +264,7 @@ impl Routine {
                 let mut h = DefaultHasher::new();
                 (run.key, n, i).hash(&mut h);
                 let flip = (h.finish() as u8) | 1;
-                let v = run.entry_byte(&entry, n, i);
+                let v = entry.memory.page(Memory::bank(n))[i];
                 poke(&mut varied, n, i, v ^ flip);
             }
             match self.run_original(&varied) {
@@ -557,10 +557,6 @@ struct Run {
 impl Run {
     fn after_bank_byte(&self, n: usize, i: usize) -> u8 {
         self.banks[n][i]
-    }
-
-    fn entry_byte(&self, entry: &Zx, n: usize, i: usize) -> u8 {
-        entry.memory.page(Memory::bank(n))[i]
     }
 }
 

@@ -156,8 +156,10 @@ three ways and compared with the rewrite on all of memory:
 - with the bytes it only writes changed first;
 - with the screen and play-area data it read changed.
 
-None of these routines' callers reads the registers they leave: scrambling
-those registers after each return changes nothing. The exceptions, paths
+For the first 20 distinct calls from each caller, scrambling the
+registers these routines leave, after the return, changes nothing that
+caller does from then on, for up to a million instructions. So no caller
+was seen reading them. The exceptions, paths
 play never took, are marked **read** below.
 
 ### The play area and its buffers

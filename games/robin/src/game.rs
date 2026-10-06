@@ -42,7 +42,11 @@ fn locate(addr: u16) -> Loc {
         2 => 2,
         _ => 0,
     };
-    let offset = usize::from(addr) % BANK;
+    locate_place(bank, usize::from(addr) % BANK)
+}
+
+/// Where the byte at `offset` in `bank` is kept.
+fn locate_place(bank: usize, offset: usize) -> Loc {
     let at = |part: At, len: usize| {
         (part.bank == bank && (part.offset..part.offset + len).contains(&offset))
             .then(|| offset - part.offset)
@@ -187,34 +191,29 @@ fn put(banks: &mut [[u8; BANK]; 8], at: At, v: &[u8]) {
     banks[at.bank][at.offset..][..v.len()].copy_from_slice(v);
 }
 
-/// Each typed part: its name, where it starts, and how many bytes it holds.
-const PARTS: [(&str, At, usize); 15] = [
-    ("the screen", SCREEN, 6912),
-    ("the back buffer", PIXELS, 0x1200),
-    ("the attribute buffer", ATTRS, 0x240),
-    ("the changed-cell map", CHANGED, 0x240),
-    ("the mirror table", MIRROR, 256),
-    ("the row table", ROWS, 384),
-    ("printer.mode", PRINT_MODE, 1),
-    ("printer.mirrored", PRINT_MIRRORED, 1),
-    ("printer.replace", PRINT_REPLACE, 1),
-    ("printer.cell", PRINT_CELL, 2),
-    ("printer.recorded", PRINT_RECORDED, 27),
-    ("printer.column_offset", PRINT_COLUMN_OFFSET, 1),
-    ("printer.attr_page", PRINT_ATTR_PAGE, 1),
-    ("printer.attr_flag", PRINT_ATTR_FLAG, 1),
-    ("printer.mirror_lookup", PRINT_MIRROR_LOOKUP, 1),
-];
-
 impl Game {
     /// The name of the part of the state at `offset` in `bank`, for saying
     /// where two states differ: a typed part, or the rest of RAM.
     #[must_use]
     pub fn part_at(bank: usize, offset: usize) -> &'static str {
-        PARTS
-            .iter()
-            .find(|(_, at, len)| at.bank == bank && (at.offset..at.offset + len).contains(&offset))
-            .map_or("the rest of RAM", |&(name, _, _)| name)
+        match locate_place(bank, offset) {
+            Loc::Screen(_) => "the screen",
+            Loc::Pixels(_) => "the back buffer",
+            Loc::Attrs(_) => "the attribute buffer",
+            Loc::Changed(_) => "the changed-cell map",
+            Loc::Mirror(_) => "the mirror table",
+            Loc::Row(..) => "the row table",
+            Loc::Cell(_) => "printer.cell",
+            Loc::Recorded(_) => "printer.recorded",
+            Loc::Mode => "printer.mode",
+            Loc::Mirrored => "printer.mirrored",
+            Loc::Replace => "printer.replace",
+            Loc::ColumnOffset => "printer.column_offset",
+            Loc::AttrPage => "printer.attr_page",
+            Loc::AttrFlag => "printer.attr_flag",
+            Loc::MirrorLookup => "printer.mirror_lookup",
+            Loc::Rest(..) => "the rest of RAM",
+        }
     }
 
     /// The byte the processor sees at `addr` with bank 0 paged at `0xC000`,
