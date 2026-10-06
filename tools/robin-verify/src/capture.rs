@@ -17,7 +17,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::hash::{Hash, Hasher};
 
 use robin::Game;
-use robin::assets::{Assets, BANK};
+use robin::assets::BANK;
 use zx_runtime::memory::Memory;
 use zx_runtime::{Zx, bus, interp};
 
@@ -113,9 +113,9 @@ pub struct Routine {
     pub outputs: &'static [Reg],
     /// Registers the original leaves as they were, which callers rely on.
     pub preserves: &'static [Reg],
-    /// The rewrite: the state, the tape's data, and the registers at entry;
-    /// returns the registers with its outputs set.
-    pub rewrite: fn(&mut Game, &Assets, Regs) -> Regs,
+    /// The rewrite: the state and the registers at entry; returns the
+    /// registers with its outputs set.
+    pub rewrite: fn(&mut Game, Regs) -> Regs,
 }
 
 /// What one routine's suite saw.
@@ -186,7 +186,7 @@ impl Routine {
     }
 
     /// Takes the call `z` is about to make.
-    pub fn capture(&self, z: &Zx, assets: &Assets, t: &mut Tally) {
+    pub fn capture(&self, z: &Zx, t: &mut Tally) {
         t.calls += 1;
         let entry = z.clone();
         let run = match self.run_original(&entry) {
@@ -207,7 +207,7 @@ impl Routine {
             run.ret.wrapping_sub(3),
             t.compared
         );
-        let differ = self.compare(&entry, &run, assets);
+        let differ = self.compare(&entry, &run);
         if !differ.is_empty() {
             fail(t, format!("{}: {at}: {}", self.name, differ.join("; ")));
             return;
@@ -225,7 +225,7 @@ impl Routine {
             }
             match self.run_original(&poisoned) {
                 Ok(run2) => {
-                    let differ = self.compare(&poisoned, &run2, assets);
+                    let differ = self.compare(&poisoned, &run2);
                     if !differ.is_empty() {
                         fail(
                             t,
@@ -270,7 +270,7 @@ impl Routine {
             match self.run_original(&varied) {
                 Ok(run3) => {
                     t.varied += 1;
-                    let differ = self.compare(&varied, &run3, assets);
+                    let differ = self.compare(&varied, &run3);
                     if !differ.is_empty() {
                         fail(
                             t,
@@ -372,10 +372,10 @@ impl Routine {
 
     /// What differs between the original's `run` from `entry` and the
     /// rewrite from the same state.
-    fn compare(&self, entry: &Zx, run: &Run, assets: &Assets) -> Vec<String> {
+    fn compare(&self, entry: &Zx, run: &Run) -> Vec<String> {
         let before = Regs::of(entry);
         let mut g = Game::from_memory(&banks(entry));
-        let out = (self.rewrite)(&mut g, assets, before);
+        let out = (self.rewrite)(&mut g, before);
         let after = Regs::of(&run.after);
         let mut differ = Vec::new();
 
@@ -584,5 +584,125 @@ fn fail(t: &mut Tally, e: String) {
         t.failures.push(e);
     } else if t.failures.len() == KEEP {
         t.failures.push("... and more".into());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! The checks checked, on a made-up program, with no tape (#6,
+    //! Decision 3): each must fail when what it watches for is wrong.
+    use super::*;
+
+    /// A 128K with no ROM, about to call a routine at `0x8100` from
+    /// `0x8000`. The routine is `routine`; after it returns, the caller runs
+    /// `after`, then halts.
+    fn machine(routine: &[u8], after: &[u8]) -> Zx {
+        let mut z = zx_runtime::loader::power_on_128k(&[0u8; 0x8000]);
+        z.memory.page_128k(0x10);
+        let caller = [0xCD, 0x00, 0x81].iter().chain(after).chain(&[0x76]);
+        for (at, &b) in (0x8000u16..).zip(caller) {
+            z.memory.poke(at, b);
+        }
+        for (i, &b) in routine.iter().enumerate() {
+            z.memory.poke(0x8100 + i as u16, b);
+        }
+        (z.pc, z.sp, z.iff1) = (0x8000, 0x9F00, false);
+        interp::step(&mut z);
+        assert_eq!(z.pc, 0x8100, "at the routine");
+        z
+    }
+
+    fn routine(outputs: &'static [Reg], rewrite: fn(&mut Game, Regs) -> Regs) -> Routine {
+        Routine {
+            name: "made up",
+            bank: None,
+            entry: 0x8100,
+            code: (0x8100, 0x810F),
+            outputs,
+            preserves: &[],
+            rewrite,
+        }
+    }
+
+    fn failures(r: &Routine, z: &Zx) -> Vec<String> {
+        let mut t = Tally::default();
+        r.capture(z, &mut t);
+        assert_eq!(t.compared, 1);
+        t.failures
+    }
+
+    /// `LD A,0x42 : RET`, and the caller stores A.
+    const RETURNS_A: &[u8] = &[0x3E, 0x42, 0xC9];
+    const STORES_A: &[u8] = &[0x32, 0x00, 0x90];
+
+    #[test]
+    fn a_caller_reading_an_undeclared_register_is_caught() {
+        let z = machine(RETURNS_A, STORES_A);
+        let f = failures(&routine(&[], |_, r| r), &z);
+        assert!(f.iter().any(|e| e.contains("scrambled")), "{f:?}");
+        let f = failures(
+            &routine(&[Reg::A], |_, mut r| {
+                r.set(Reg::A, 0x42);
+                r
+            }),
+            &z,
+        );
+        assert!(f.is_empty(), "{f:?}");
+    }
+
+    #[test]
+    fn a_wrong_output_is_caught() {
+        let z = machine(RETURNS_A, STORES_A);
+        let f = failures(
+            &routine(&[Reg::A], |_, mut r| {
+                r.set(Reg::A, 0x43);
+                r
+            }),
+            &z,
+        );
+        assert!(f.iter().any(|e| e.contains("output A")), "{f:?}");
+    }
+
+    /// `XOR A : LD (0x9100),A : RET`: writes a byte that is already 0.
+    const CLEARS_9100: &[u8] = &[0xAF, 0x32, 0x00, 0x91, 0xC9];
+
+    #[test]
+    fn a_write_left_out_is_caught_even_where_the_value_was_already_right() {
+        let z = machine(CLEARS_9100, &[]);
+        let f = failures(&routine(&[], |_, r| r), &z);
+        assert!(
+            f.iter()
+                .any(|e| e.contains("only writes set to other values")),
+            "{f:?}"
+        );
+        let f = failures(
+            &routine(&[], |g, r| {
+                g.write(0x9100, 0);
+                r
+            }),
+            &z,
+        );
+        assert!(f.is_empty(), "{f:?}");
+    }
+
+    #[test]
+    fn a_port_write_is_caught() {
+        // `OUT (0xFE),A : RET`.
+        let z = machine(&[0xD3, 0xFE, 0xC9], &[]);
+        let f = failures(&routine(&[], |_, r| r), &z);
+        assert!(f.iter().any(|e| e.contains("writes port")), "{f:?}");
+    }
+
+    #[test]
+    fn a_repeat_is_skipped_and_counted() {
+        let z = machine(RETURNS_A, STORES_A);
+        let r = routine(&[Reg::A], |_, mut r| {
+            r.set(Reg::A, 0x42);
+            r
+        });
+        let mut t = Tally::default();
+        r.capture(&z, &mut t);
+        r.capture(&z, &mut t);
+        assert_eq!((t.calls, t.compared, t.repeats), (2, 1, 1));
     }
 }

@@ -60,7 +60,7 @@ fn run() -> Result<bool, String> {
             |z: &mut Zx| {
                 for (r, t) in routines.iter().zip(tallies.iter_mut()) {
                     if r.is_entered(z) {
-                        r.capture(z, &assets, t);
+                        r.capture(z, t);
                     }
                 }
                 let pc = z.pc;

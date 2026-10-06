@@ -10,6 +10,7 @@
 pub mod assets;
 pub mod game;
 pub mod layout;
+pub mod print;
 pub mod screen;
 
 pub use assets::{TAPE_SHA1, is_the_tape};

@@ -8,6 +8,80 @@
 
 use crate::assets::BANK;
 
+/// Where an address's byte is kept.
+enum Loc {
+    Screen(usize),
+    Pixels(usize),
+    Attrs(usize),
+    Changed(usize),
+    Mirror(usize),
+    /// A row table entry, and whether it is the high byte.
+    Row(usize, bool),
+    /// The printer's cell, and whether it is the high byte.
+    Cell(bool),
+    Recorded(usize),
+    Mode,
+    Mirrored,
+    Replace,
+    ColumnOffset,
+    AttrPage,
+    AttrFlag,
+    MirrorLookup,
+    Rest(usize, usize),
+}
+
+/// Where the byte at `addr` is kept, with bank 0 paged at `0xC000`.
+///
+/// # Panics
+///
+/// Below `0x4000`, the ROM.
+fn locate(addr: u16) -> Loc {
+    let bank = match addr >> 14 {
+        0 => panic!("{addr:#06x} is in the ROM, and the game has no ROM"),
+        1 => 5,
+        2 => 2,
+        _ => 0,
+    };
+    let offset = usize::from(addr) % BANK;
+    let at = |part: At, len: usize| {
+        (part.bank == bank && (part.offset..part.offset + len).contains(&offset))
+            .then(|| offset - part.offset)
+    };
+    if let Some(i) = at(SCREEN, 6912) {
+        Loc::Screen(i)
+    } else if let Some(i) = at(PIXELS, 0x1200) {
+        Loc::Pixels(i)
+    } else if let Some(i) = at(ATTRS, 0x240) {
+        Loc::Attrs(i)
+    } else if let Some(i) = at(CHANGED, 0x240) {
+        Loc::Changed(i)
+    } else if let Some(i) = at(MIRROR, 256) {
+        Loc::Mirror(i)
+    } else if let Some(i) = at(ROWS, 384) {
+        Loc::Row(i / 2, i % 2 == 1)
+    } else if let Some(i) = at(PRINT_CELL, 2) {
+        Loc::Cell(i == 1)
+    } else if let Some(i) = at(PRINT_RECORDED, 27) {
+        Loc::Recorded(i)
+    } else if at(PRINT_MODE, 1).is_some() {
+        Loc::Mode
+    } else if at(PRINT_MIRRORED, 1).is_some() {
+        Loc::Mirrored
+    } else if at(PRINT_REPLACE, 1).is_some() {
+        Loc::Replace
+    } else if at(PRINT_COLUMN_OFFSET, 1).is_some() {
+        Loc::ColumnOffset
+    } else if at(PRINT_ATTR_PAGE, 1).is_some() {
+        Loc::AttrPage
+    } else if at(PRINT_ATTR_FLAG, 1).is_some() {
+        Loc::AttrFlag
+    } else if at(PRINT_MIRROR_LOOKUP, 1).is_some() {
+        Loc::MirrorLookup
+    } else {
+        Loc::Rest(bank, offset)
+    }
+}
+
 /// A place in RAM: a bank and an offset in it.
 #[derive(Clone, Copy)]
 struct At {
@@ -143,6 +217,67 @@ impl Game {
             .map_or("the rest of RAM", |&(name, _, _)| name)
     }
 
+    /// The byte the processor sees at `addr` with bank 0 paged at `0xC000`,
+    /// as it is whenever the screen code runs.
+    ///
+    /// # Panics
+    ///
+    /// Below `0x4000`, where the original has its ROM: the game has none.
+    #[must_use]
+    pub fn read(&self, addr: u16) -> u8 {
+        let p = &self.printer;
+        match locate(addr) {
+            Loc::Screen(i) => self.screen[i],
+            Loc::Pixels(i) => self.play.pixels[i],
+            Loc::Attrs(i) => self.play.attrs[i],
+            Loc::Changed(i) => self.play.changed[i],
+            Loc::Mirror(i) => self.mirror[i],
+            Loc::Row(r, hi) => self.rows[r].to_le_bytes()[usize::from(hi)],
+            Loc::Cell(hi) => p.cell.to_le_bytes()[usize::from(hi)],
+            Loc::Recorded(i) => p.recorded[i],
+            Loc::Mode => p.mode,
+            Loc::Mirrored => p.mirrored,
+            Loc::Replace => p.replace,
+            Loc::ColumnOffset => p.column_offset,
+            Loc::AttrPage => p.attr_page,
+            Loc::AttrFlag => p.attr_flag,
+            Loc::MirrorLookup => p.mirror_lookup,
+            Loc::Rest(bank, i) => self.rest[bank][i],
+        }
+    }
+
+    /// Writes the byte at `addr`, with bank 0 paged at `0xC000`. Writes below
+    /// `0x4000`, to the ROM, go nowhere, as on the machine.
+    pub fn write(&mut self, addr: u16, v: u8) {
+        if addr < 0x4000 {
+            return;
+        }
+        let set_half = |w: &mut u16, hi: bool| {
+            let mut b = w.to_le_bytes();
+            b[usize::from(hi)] = v;
+            *w = u16::from_le_bytes(b);
+        };
+        let p = &mut self.printer;
+        match locate(addr) {
+            Loc::Screen(i) => self.screen[i] = v,
+            Loc::Pixels(i) => self.play.pixels[i] = v,
+            Loc::Attrs(i) => self.play.attrs[i] = v,
+            Loc::Changed(i) => self.play.changed[i] = v,
+            Loc::Mirror(i) => self.mirror[i] = v,
+            Loc::Row(r, hi) => set_half(&mut self.rows[r], hi),
+            Loc::Cell(hi) => set_half(&mut p.cell, hi),
+            Loc::Recorded(i) => p.recorded[i] = v,
+            Loc::Mode => p.mode = v,
+            Loc::Mirrored => p.mirrored = v,
+            Loc::Replace => p.replace = v,
+            Loc::ColumnOffset => p.column_offset = v,
+            Loc::AttrPage => p.attr_page = v,
+            Loc::AttrFlag => p.attr_flag = v,
+            Loc::MirrorLookup => p.mirror_lookup = v,
+            Loc::Rest(bank, i) => self.rest[bank][i] = v,
+        }
+    }
+
     /// Reads the state from the 128K's eight banks, bank 0 first.
     #[must_use]
     pub fn from_memory(banks: &[[u8; BANK]; 8]) -> Game {
@@ -231,6 +366,32 @@ mod tests {
         assert_eq!(Game::part_at(5, 0x1B00), "the rest of RAM");
         assert_eq!(Game::part_at(0, 0x3F7F), "the row table");
         assert_eq!(Game::part_at(0, 0x14F5), "printer.cell");
+    }
+
+    #[test]
+    fn reading_and_writing_by_address_reach_the_parts() {
+        let b = banks();
+        let mut g = Game::from_memory(&b);
+        assert_eq!(g.read(0x4000), b[5][0]);
+        assert_eq!(g.read(0xAAEF), b[2][0x2AEF]);
+        assert_eq!(g.read(0xFE01), b[0][0x3E01]);
+        g.write(0x5800, 0x47);
+        g.write(0xEB02, 0x81);
+        g.write(0xFE03, 0x12);
+        g.write(0xD4F5, 0x34);
+        g.write(0xDDB7, 0x56);
+        g.write(0x3000, 0x99);
+        assert_eq!(g.screen[6144], 0x47);
+        assert_eq!(g.play.pixels[2], 0x81);
+        assert_eq!(g.rows[1] >> 8, 0x12);
+        assert_eq!(g.printer.cell >> 8, 0x34);
+        let m = g.to_memory();
+        assert_eq!(
+            (m[5][0x1800], m[0][0x2B02], m[0][0x3E03]),
+            (0x47, 0x81, 0x12)
+        );
+        assert_eq!((m[0][0x14F5], m[0][0x1DB7]), (0x34, 0x56));
+        assert_eq!(g.read(0xD4F5), 0x34);
     }
 
     #[test]
