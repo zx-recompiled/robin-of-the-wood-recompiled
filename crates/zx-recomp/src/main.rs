@@ -3,7 +3,7 @@
 //!
 //! ```text
 //! zx-recomp <config.toml> [--assets DIR] [--out FILE] [--misses FILE]
-//!           [--shot FRAME:FILE.png]... [--trace-only]
+//!           [--shot FRAME:FILE.png]... [--trace-only] [--listing FILE]
 //! ```
 
 use std::path::PathBuf;
@@ -110,6 +110,9 @@ fn run() -> Result<(), String> {
     print!("{}", report(&analysis));
     if let Some(path) = listing {
         let text = zx_recomp::listing::listing(&analysis, &traced.trace);
+        if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
+            std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        }
         std::fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))?;
         println!("wrote {}", path.display());
     }

@@ -4,6 +4,9 @@
 /assets/*
 !/assets/README.md
 
+# Listings are the original's code, disassembled (docs/re/robin.md).
+*.lst
+
 # Editor and OS clutter.
 .DS_Store
 /.idea/

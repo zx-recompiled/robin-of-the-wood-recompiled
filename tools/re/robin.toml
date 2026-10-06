@@ -1,0 +1,40 @@
+# zx-recomp's configuration for Robin of the Wood, the 128K release.
+#
+#     cargo run --release -p zx-recomp -- tools/re/robin.toml --listing target/re/robin.lst
+#
+# The listing is the original's code, disassembled: it stays under target/
+# and is never committed. What goes into the repository is docs/re/robin.md,
+# written from it in our own words.
+
+[game]
+name = "Robin of the Wood"
+machine = "128k"
+# Any name; the SHA-1 is what is checked (games/robin, TAPE_SHA1).
+tape = "Robin Of The Wood - 128k.tzx"
+tape_sha1 = "2aad3402cdc08907000900c5da8c29eeb2f48c9e"
+rom = "128.rom"
+rom_sha1 = "16375d42ea109b47edded7a16028de7fdb3013a1"
+# Where the loader hands over once the last block is in (games/robin/src/layout.rs).
+boot_until = 0x5B00
+
+[analysis]
+# Calls code in another bank: the address and the paging byte follow the CALL
+# (docs/re/robin.md, *Memory and paging*).
+banked_calls = [0x5B8A]
+
+[trace]
+frames = 20000
+
+# The menu is up within about 400 frames of the hand-over; 0 starts a game.
+[[trace.input]]
+at = 400
+hold = 5
+keys = ["0"]
+
+# Then random held keys from the rows the game reads in play
+# (docs/re/robin.md, *Input*), and 0 again now and then for a new game.
+[trace.random]
+start = 450
+every = 20
+keys = ["1", "2", "3", "4", "5", "q", "w", "e", "r", "t", "a", "s", "d", "f", "g", "caps", "z", "x", "c", "v", "enter", "l", "k", "j", "h", "space", "symbol", "m", "n", "b", "0"]
+seed = 11

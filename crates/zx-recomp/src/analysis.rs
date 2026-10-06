@@ -17,7 +17,7 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
-use crate::config::Config;
+use crate::config::{Config, Machine};
 use zx_core::{Decoded, Flow, decode};
 use zx_runtime::Zx;
 use zx_runtime::memory::PAGE;
@@ -285,7 +285,11 @@ pub fn analyze(cfg: &Config, start: &Zx, trace: &Trace, extra_entries: &[u16]) -
             .unwrap_or_else(|| layout.place_of(Trace::at(&start.memory.slots(), addr)))
     };
     entries.insert(here(start.pc));
-    if analysis.rom_loaded {
+    // A 48K game in IM 1 is interrupted into the ROM's handler. On a 128K the
+    // ROM paged at 0x0000 can change, so only the trace says whether a
+    // handler there runs (Robin's never does: `docs/re/robin.md`, *What it
+    // uses from the ROM*).
+    if analysis.rom_loaded && cfg.game.machine == Machine::Spectrum48 {
         entries.insert(here(0x0038));
     }
     entries.extend(cfg.analysis.entry_points.iter().map(|&a| here(a)));
