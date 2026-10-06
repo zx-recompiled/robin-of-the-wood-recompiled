@@ -27,7 +27,7 @@ use std::collections::BTreeMap;
 use robin::layout::{GAME_BLOCKS, LOADER_BLOCKS};
 use zx_runtime::memory::{Memory, PAGE};
 use zx_runtime::trace::Trace;
-use zx_runtime::{Zx, bus, interp};
+use zx_runtime::{Misses, Zx, bus, interp, loader::power_on_128k};
 
 const FRAMES: u32 = 20_000;
 
@@ -69,6 +69,59 @@ fn known(at: Place, by: u16) -> Option<&'static str> {
         (PAST_THE_BUFFER, 0xCE30) => Some("a copy loop reading one byte past its buffer"),
         _ => None,
     }
+}
+
+/// A real 128K's RAM does not power on as zeros, as the reference machine's
+/// does. But nothing of what it held survives the ROM's start-up: a machine
+/// with every bank filled with `0xAA` at power-on reaches the menu in exactly
+/// the state of one that powered on as zeros. So the bytes the tape does not
+/// load hold what the reference machine has there, whatever the RAM held.
+#[test]
+fn nothing_from_power_on_survives_the_roms_start_up() {
+    let Some((_, rom)) = common::tape_and_rom() else {
+        return;
+    };
+    let mut zeros = power_on_128k(&rom);
+    let mut filled = power_on_128k(&rom);
+    for bank in 0..8u8 {
+        filled.memory.page_128k(bank);
+        for off in 0..PAGE as u16 {
+            filled.memory.poke(0xC000 + off, 0xAA);
+        }
+    }
+    filled.memory.page_128k(0);
+    let mut misses = Misses::default();
+    for _ in 0..150 {
+        zeros.run_frame(|_: &mut Zx| false, &mut misses);
+        filled.run_frame(|_: &mut Zx| false, &mut misses);
+    }
+    for page in 2..PAGES {
+        let (a, b) = (zeros.memory.page(page), filled.memory.page(page));
+        let differ = a.iter().zip(b).filter(|(x, y)| x != y).count();
+        assert_eq!(
+            differ,
+            0,
+            "bank {}: {differ} byte(s) differ at the menu",
+            page - 2
+        );
+    }
+    assert_eq!(
+        (
+            zeros.pc,
+            zeros.sp,
+            zeros.af(),
+            zeros.hl(),
+            zeros.memory.slots()
+        ),
+        (
+            filled.pc,
+            filled.sp,
+            filled.af(),
+            filled.hl(),
+            filled.memory.slots()
+        ),
+        "the registers differ at the menu"
+    );
 }
 
 /// Every byte a game block loads, as the facts place it.

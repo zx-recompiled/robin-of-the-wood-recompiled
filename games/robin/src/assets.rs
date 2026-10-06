@@ -318,18 +318,17 @@ mod tests {
         );
     }
 
-    /// The real tape, read by the reader, gives the banks the facts build.
+    /// The real tape reads, and its loading picture is its first game block.
+    /// (Every byte of the banks is checked against the booted original by
+    /// `tests/boot.rs`.)
     #[test]
-    fn the_local_tape_reads() {
+    fn the_local_tape_reads_with_its_loading_picture() {
         let Some(tape) = local_tape() else {
             println!("skipped: no supported tape in assets/");
             return;
         };
         let a = read_tape(&tape).expect("the supported tape reads");
         let blocks = zx_core::tape::load_tzx(&tape).expect("the tape reads");
-        let banks = layout::banks_from_tape(&blocks).expect("the facts fit");
-        for n in 0..8 {
-            assert_eq!(&a.bank(n)[..], &banks[n * BANK..][..BANK], "bank {n}");
-        }
+        assert_eq!(&a.loading_screen()[..], &blocks[LOADER_BLOCKS][1..=6912]);
     }
 }

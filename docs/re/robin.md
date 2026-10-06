@@ -208,9 +208,12 @@ rewrite could start differently.
     reads in the run. **read**, the read itself **confirmed**
   - The census checks that the original and the reader agree on the byte,
     not just that the read is allowed.
-- **On a real machine that byte might not be zero.** The reference machine's
-  RAM powers on as zeros. A real Spectrum's may not, unless the ROM clears it
-  first. **guess**
+- **On a real machine that byte is zero too.** A real 128K's RAM doesn't power
+  on as zeros, but nothing of what it held survives the ROM's start-up. A
+  machine with every bank filled with `0xAA` at power-on reaches the menu in
+  exactly the state of one that powered on as zeros, every byte and register.
+  So whatever the RAM held at power-on, the original reads zero there.
+  **confirmed** (`nothing_from_power_on_survives_the_roms_start_up`)
 
 ## Credits and date
 
