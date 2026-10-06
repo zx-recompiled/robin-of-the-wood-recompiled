@@ -113,7 +113,36 @@ fn put(banks: &mut [[u8; BANK]; 8], at: At, v: &[u8]) {
     banks[at.bank][at.offset..][..v.len()].copy_from_slice(v);
 }
 
+/// Each typed part: its name, where it starts, and how many bytes it holds.
+const PARTS: [(&str, At, usize); 15] = [
+    ("the screen", SCREEN, 6912),
+    ("the back buffer", PIXELS, 0x1200),
+    ("the attribute buffer", ATTRS, 0x240),
+    ("the changed-cell map", CHANGED, 0x240),
+    ("the mirror table", MIRROR, 256),
+    ("the row table", ROWS, 384),
+    ("printer.mode", PRINT_MODE, 1),
+    ("printer.mirrored", PRINT_MIRRORED, 1),
+    ("printer.replace", PRINT_REPLACE, 1),
+    ("printer.cell", PRINT_CELL, 2),
+    ("printer.recorded", PRINT_RECORDED, 27),
+    ("printer.column_offset", PRINT_COLUMN_OFFSET, 1),
+    ("printer.attr_page", PRINT_ATTR_PAGE, 1),
+    ("printer.attr_flag", PRINT_ATTR_FLAG, 1),
+    ("printer.mirror_lookup", PRINT_MIRROR_LOOKUP, 1),
+];
+
 impl Game {
+    /// The name of the part of the state at `offset` in `bank`, for saying
+    /// where two states differ: a typed part, or the rest of RAM.
+    #[must_use]
+    pub fn part_at(bank: usize, offset: usize) -> &'static str {
+        PARTS
+            .iter()
+            .find(|(_, at, len)| at.bank == bank && (at.offset..at.offset + len).contains(&offset))
+            .map_or("the rest of RAM", |&(name, _, _)| name)
+    }
+
     /// Reads the state from the 128K's eight banks, bank 0 first.
     #[must_use]
     pub fn from_memory(banks: &[[u8; BANK]; 8]) -> Game {
@@ -194,6 +223,14 @@ mod tests {
             }
         }
         b
+    }
+
+    #[test]
+    fn each_place_is_named_by_its_part() {
+        assert_eq!(Game::part_at(5, 0x1AFF), "the screen");
+        assert_eq!(Game::part_at(5, 0x1B00), "the rest of RAM");
+        assert_eq!(Game::part_at(0, 0x3F7F), "the row table");
+        assert_eq!(Game::part_at(0, 0x14F5), "printer.cell");
     }
 
     #[test]

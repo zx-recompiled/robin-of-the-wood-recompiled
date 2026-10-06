@@ -18,6 +18,7 @@
 pub mod analysis;
 pub mod config;
 pub mod listing;
+pub mod script;
 pub mod tracer;
 
 use std::fmt::Write as _;

@@ -9,7 +9,7 @@ holders, this project contains no part of it, and the program reads
 everything it needs from the player's own copy when it starts. The README
 says where to get one.
 
-- Apache License 2.0: 18 crates
+- Apache License 2.0: 19 crates
 - MIT License: 1 crate
 - Unicode License v3: 1 crate
 
@@ -434,7 +434,7 @@ limitations under the License.
 
 ## Apache License 2.0
 
-Used by `zx-core 0.1.0`, `zx-recomp 0.1.0`, `zx-runtime 0.1.0`, `robin 0.1.0`, `miniz_oxide 0.8.9`, `proc-macro2 1.0.107`, `quote 1.0.47`, `serde 1.0.229`, `serde_core 1.0.229`, `serde_derive 1.0.229`, `syn 3.0.5`, `unicode-ident 1.0.24`.
+Used by `zx-core 0.1.0`, `zx-recomp 0.1.0`, `zx-runtime 0.1.0`, `robin 0.1.0`, `robin-verify 0.1.0`, `miniz_oxide 0.8.9`, `proc-macro2 1.0.107`, `quote 1.0.47`, `serde 1.0.229`, `serde_core 1.0.229`, `serde_derive 1.0.229`, `syn 3.0.5`, `unicode-ident 1.0.24`.
 
 ```
 Apache License
