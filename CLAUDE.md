@@ -16,8 +16,10 @@ result byte for byte.
 **Where it stands:** the original boots from its tape in the 128K reference
 machine, through the real ROM and its own loader, to the state every check
 will start from (#3; `games/robin/tests/boot.rs`). The facts it needs are in
-`games/robin/src/layout.rs` and `docs/re/robin.md`. The game crate is
-otherwise a stub, and there are no differential suites yet. The plan, in
+`games/robin/src/layout.rs` and `docs/re/robin.md`. The game reads its tape
+(`robin::assets::read_game`, #5): the SHA-1 checked, then the eight banks
+built from the tape alone, with no ROM. Otherwise the game crate is a stub,
+and there are no differential suites yet. The plan, in
 order, is the board's Backlog.
 
 ## Commands

@@ -135,7 +135,10 @@ trace never reached it.
   displacement is the next byte, which wraps round to the ROM's first byte
   (`0xF3`), landing at `0xFFF4`. That jumps to the handler at `0xDED3`.
   **read**; the jump at `0xFFFF` reading the ROM's first byte **confirmed** by
-  the census (every frame of play), the handler's address **provisional**
+  the census (every frame of play), the handler's address **provisional**.
+  That the game writes the table before the first interrupt is **confirmed**:
+  every vector read in 20,000 frames found bytes it had written
+  (`games/robin/tests/uninitialised.rs`).
 - So **the game depends on the ROM's first byte as data**, though it never
   runs the ROM's interrupt routine. **read**
 
@@ -181,6 +184,33 @@ trace never reached it.
 - IY is not BASIC's `0x5C3A` in play (`0xFF20` was seen), which fits a game
   that calls nothing in the ROM that needs the system variables.
   **provisional**
+
+## What it reads that the tape did not load
+
+The game reads its tape through `robin::assets::read_tape`. That checks the
+SHA-1, then builds the eight banks from the four game blocks and the facts in
+`games/robin/src/layout.rs`, with no ROM; everything the blocks don't cover is
+zero. The original starts from more than that: whatever the ROM, BASIC and
+`r1` left in memory, and banks 1 and 3 as they powered on. So any read of a
+byte the tape didn't load, before the game writes it, is a place where the
+rewrite could start differently.
+
+- **There is one such read, and it does no harm.** Over 20,000 frames from the
+  hand-over, every read of RAM was checked against a map of the bytes loaded
+  or written so far, opcode fetches and the interrupt's vector reads included.
+  **confirmed** (`games/robin/tests/uninitialised.rs`)
+  - The routine at `0:CE27` copies the non-zero bytes of a `0x240`-byte
+    buffer at `0xE800` to `0xE500`. Its loop ends only when the count goes
+    below zero, so it handles one byte more than it was asked to and reads
+    `0:EA40`, just past the buffer. Nothing loads that byte and nothing
+    writes it. It is zero in the booted original and in the reader's banks,
+    so nothing is copied; a non-zero byte would land at `0xE740`. Three
+    reads in the run. **read**, the read itself **confirmed**
+  - The census checks that the original and the reader agree on the byte,
+    not just that the read is allowed.
+- **On a real machine that byte might not be zero.** The reference machine's
+  RAM powers on as zeros. A real Spectrum's may not, unless the ROM clears it
+  first. **guess**
 
 ## Credits and date
 
