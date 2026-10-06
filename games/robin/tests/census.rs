@@ -12,11 +12,11 @@
 //!
 //! Needs the supported tape and `128.rom` in `assets/`.
 
-use std::collections::BTreeMap;
-use std::path::PathBuf;
+mod common;
 
-use robin::layout::ENTRY_PC;
-use zx_runtime::{Misses, Zx, bus, interp, keys::Key, loader::boot_128k};
+use std::collections::BTreeMap;
+
+use zx_runtime::{Zx, bus, interp};
 
 const FRAMES: u32 = 20_000;
 
@@ -46,87 +46,34 @@ fn known(at: u16, by: u16) -> Option<&'static str> {
     }
 }
 
-/// Keys the game reads in play (`docs/re/robin.md`, *Input*), and 0 to start.
-const KEYS: &[&str] = &[
-    "1", "2", "3", "4", "5", "q", "w", "e", "r", "t", "a", "s", "d", "f", "g", "caps", "z", "x",
-    "c", "v", "enter", "l", "k", "j", "h", "space", "symbol", "m", "n", "b", "0",
-];
-
-fn assets() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets")
-}
-
-/// A small fixed-seed generator, so the run is the same every time.
-struct XorShift(u32);
-impl XorShift {
-    fn next(&mut self, n: u32) -> u32 {
-        self.0 ^= self.0 << 13;
-        self.0 ^= self.0 >> 17;
-        self.0 ^= self.0 << 5;
-        self.0 % n
-    }
-}
-
 #[test]
 fn the_game_uses_no_rom_routine() {
-    let tape = std::fs::read_dir(assets())
-        .into_iter()
-        .flatten()
-        .flatten()
-        .filter_map(|e| std::fs::read(e.path()).ok())
-        .find(|b| robin::is_the_tape(b));
-    let rom = std::fs::read(assets().join("128.rom")).ok();
-    let (Some(tape), Some(rom)) = (tape, rom) else {
-        println!("skipped: needs the supported tape and 128.rom in assets/");
+    let Some((tape, rom)) = common::tape_and_rom() else {
         return;
     };
-    let blocks = zx_core::tape::load_tzx(&tape).expect("the tape reads");
-    let mut z: Zx = boot_128k(&rom, blocks, ENTRY_PC, 2000).expect("the original boots");
+    let mut z = common::boot(&tape, &rom);
 
     // (address, instruction address or ROM page) -> how many times.
     let mut executed: BTreeMap<(u16, usize), u64> = BTreeMap::new();
     let mut reads: BTreeMap<(u16, u16), u64> = BTreeMap::new();
     let mut instructions = 0u64;
-    let mut rng = XorShift(0x2468_ACE1);
-    let mut misses = Misses::default();
-    let mut held: Option<(Key, u32)> = None;
-
-    for frame in 0..FRAMES {
-        // A key held for a while, then let go, then another: as hands play.
-        match held {
-            Some((key, until)) if frame >= until => {
-                z.set_key(key, false);
-                held = None;
-            }
-            None if rng.next(4) == 0 => {
-                let key = Key::by_name(KEYS[rng.next(KEYS.len() as u32) as usize]).expect("a key");
-                z.set_key(key, true);
-                held = Some((key, frame + 5 + rng.next(60)));
-            }
-            _ => {}
+    common::play(&mut z, FRAMES, |z: &mut Zx| {
+        instructions += 1;
+        let pc = z.pc;
+        let d = interp::decode_at(z, pc);
+        if pc < 0x4000 {
+            *executed.entry((pc, z.memory.slot(0))).or_default() += 1;
         }
-        z.run_frame(
-            |z: &mut Zx| {
-                instructions += 1;
-                let pc = z.pc;
-                let d = interp::decode_at(z, pc);
-                if pc < 0x4000 {
-                    *executed.entry((pc, z.memory.slot(0))).or_default() += 1;
-                }
-                // The opcode fetches are the first `m1` cycles; the rest that
-                // read are operands and data. An interrupt's own vector read
-                // is not an instruction's, so it is not seen here; it is at
-                // I * 0x100 + 0xFF, in RAM while I is 0xE2 (*Interrupts*).
-                for c in bus::cycles(z, &d, pc).iter().skip(usize::from(d.m1)) {
-                    if c.kind == bus::Kind::Read && c.at < 0x4000 {
-                        *reads.entry((c.at, pc)).or_default() += 1;
-                    }
-                }
-                false
-            },
-            &mut misses,
-        );
-    }
+        // The opcode fetches are the first `m1` cycles; the rest that
+        // read are operands and data. An interrupt's own vector read
+        // is not an instruction's, so it is not seen here; it is at
+        // I * 0x100 + 0xFF, in RAM while I is 0xE2 (*Interrupts*).
+        for c in bus::cycles(z, &d, pc).iter().skip(usize::from(d.m1)) {
+            if c.kind == bus::Kind::Read && c.at < 0x4000 {
+                *reads.entry((c.at, pc)).or_default() += 1;
+            }
+        }
+    });
 
     println!(
         "census: {FRAMES} frames, {instructions} instructions; {} ROM addresses executed, {} \
