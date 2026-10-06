@@ -142,6 +142,135 @@ trace never reached it.
 - So **the game depends on the ROM's first byte as data**, though it never
   runs the ROM's interrupt routine. **read**
 
+## The screen
+
+Found by recording which code read and wrote which memory over 3,000 frames
+of play (#24), then reading those routines. Every routine here is in bank 0,
+at `0xC000`–`0xFFFF`. **read**, unless marked.
+
+### The play area and its buffers
+
+The play area is 18 character rows by 28 columns: screen rows 0 to 17,
+columns 2 to 29. The game doesn't draw it on the screen directly. It keeps
+three buffers in bank 0, past what the tape loads, and copies from them:
+
+| Buffer | Where | Layout |
+|---|---|---|
+| **Back buffer**: the play area's pixels | `0xEB00`–`0xFCFF` | One 256-byte block per character row. Within it, one 32-byte line per pixel row, and column *c* at byte *c*. Columns 0, 1, 30 and 31 are unused. |
+| **Attribute buffer** | `0xE800`–`0xEA3F` | 32 bytes per character row, laid out as the screen's attributes. Bit 7 is the game's own flag: it is set on cells the text printer coloured, and masked off on the way to the screen. |
+| **Changed-cell map** | `0xE500`–`0xE73F` | 32 bytes per character row. Non-zero means the cell needs redrawing, and the value itself is the attribute to use if the attribute buffer holds zero there. |
+
+Drawing into the play area means writing the back buffer and the attribute
+buffer, then marking cells in the changed-cell map. Once a frame, the main
+loop flushes the changed cells to the screen. **confirmed** (the flush ran in
+2,481 of 3,000 frames)
+
+### Tables built at start-up
+
+Both are built by the start-up code that runs before the menu (`0:CC66`),
+from nothing but their own arithmetic.
+
+- **`0xFD00`, the mirror table** (`0:CEC8`): 256 bytes. Entry *n* is *n*
+  with its eight bits in reverse order, so looking a byte up flips it left
+  to right. The text printer uses it to print mirrored, and the sprite code
+  reads it too.
+- **`0xFE00`, the row table** (`0:CEDE`): the screen address of each of the
+  192 pixel rows, top to bottom, as 192 little-endian words. That is the
+  Spectrum's usual interleaving: the next pixel row is `0x100` on, the next
+  character row `0x20` on, and the next third of the screen `0x800` on.
+
+### Clearing
+
+| Routine | Clears |
+|---|---|
+| `0:CEFE` | The screen's pixels, all 6,144 bytes, to 0. |
+| `0:CF0C` | The screen's attributes, all 768, to the value in A. |
+| `0:CF19` | The attribute buffer, all `0x240` bytes, to the value in A, then the back buffer, all `0x1200` bytes, to 0. |
+| `0:CF33` | The changed-cell map, all `0x240` bytes, to 0. |
+| `0:CF41` | The bottom 32 pixel rows of the screen (rows 160 to 191), 32 bytes each, to 0, found through the row table. |
+
+### Copying the play area to the screen
+
+- **The flush**, `0:C754`, once a frame from the main loop. It scans the
+  changed cells of the play area row by row, left to right. For each
+  changed cell:
+  1. it clears the mark;
+  2. it writes the cell's attribute to the screen, with bit 7 masked off. The
+     attribute comes from the attribute buffer, or from the mark itself if
+     the buffer holds zero;
+  3. it copies the cell's 8 pixel rows from the back buffer.
+
+  The test for zero goes through the alternate AF, so the routine leaves the
+  alternate AF changed.
+- **The whole play area's pixels**, `0:C6FE`: all 144 pixel rows of the back
+  buffer, 28 bytes each, to the screen through the row table.
+- **The whole play area's attributes**, `0:C086`: the attribute buffer's 18
+  rows of 28 to the screen, bit 7 masked off.
+
+### The text printer
+
+One routine with three ways in. It prints a string of characters, then
+colours them with a second string of attributes that follows the first.
+
+- **`0:D4F6`**: the string is in memory just after two bytes giving its
+  position. Its attributes go straight to the screen.
+- **`0:D4FC`**: the same, with the position in a register pair, not in
+  memory.
+- **`0:D50E`**: one of 17 stock messages, chosen by the low five bits of A
+  from a table of addresses at `0xD6AB`. Its attributes go to the attribute
+  buffer, two columns further right (the play area's offset), and get bit
+  7 set, except for message 14.
+
+How it prints:
+
+- **A mode byte**, passed in A and kept at `0xD6CE`, chooses where. Bit 5
+  set means straight to the screen, through the row table. Clear means into
+  the back buffer. Bits 6 and 7 choose what happens after the characters.
+  Some combinations never occurred in 20,000 frames of play. They are noted
+  as such and checked only from reading.
+- **The position** is a pixel row and a horizontal position in units of two
+  pixels. Characters are placed on whole columns, and attributes on whole
+  character rows.
+- **The font** is the tape's, 8 bytes a character, at `0xAAEF` plus 8 times
+  the character code. So the space, `0x20`, is at `0xABEF`, in what the main
+  block loads.
+- **Codes in the string**:
+  - 0 ends the characters;
+  - 1 starts a new line, going back to where the line began;
+  - 2 turns mirroring on, and 3 turns it off (each glyph row flipped through the mirror table);
+  - codes 4 to `0x1F` are skipped;
+  - `0x20` and up are printed.
+- **Each glyph row is either combined with what's there (XOR) or replaces
+  it.** XOR is normal. A flag at `0xD6CF` asks for replacing, and the printer
+  clears that flag when it's done: one entry point, `0:CEBB`, sets it for a
+  single string.
+- **The attribute string**: one byte a character, written to the screen or
+  the attribute buffer. A byte with bit 7 set starts a new line. 0 ends it.
+- **Afterwards**, depending on the mode, it can:
+  - mark the coloured cells changed, with the attribute as the mark;
+  - record the message, its mode and position in a list of nine at `0xD457`,
+    which `0:D6D0` checks every frame against what I take to be Robin's
+    position;
+  - continue into `0:DD49`.
+
+  Neither of the first two happened in the run.
+- **Its settings live in its own code.** Three of its instructions have
+  their operands rewritten on each entry: the column offset, the bit-7 flag
+  for attributes, and which page the attributes go to (`0x58` for the
+  screen, `0xE8` for the buffer). The mirror table lookup is rewritten for
+  each glyph byte.
+
+### Not covered here
+
+Drawn into the back buffer every frame, and their own subsystem:
+
+- the sprite code, `0:C5CE` and `0:C47D`;
+- the code that marks the cells it drew, `0:C688`.
+
+The scenery renderer, `0:CD73` with `0:CE27`, draws each screen of the map,
+and goes with the map. The bank 4 code at `4:C086` fills all three buffers
+at the menu.
+
 ## Sound
 
 - **It uses the AY sound chip.** It selects registers through `0xFFFD` and
