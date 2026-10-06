@@ -99,16 +99,18 @@ pub const SPECTRUM_48: Timing = Timing {
 ///   757503). It agrees with the written references.
 /// - `line`: 228, from the World of Spectrum 128K reference and Fuse. Written;
 ///   311 lines of it make the measured frame.
-/// - `first_contended`: 14,361, from the same references. Written, and not
-///   yet checked: Alford's `ptime` puts the ULA's screen fetch at 14,359,
-///   which measures something related but not this.
+/// - `first_contended`: 14,362, measured: Rak's Timing Test on a real grey +2
+///   (Víctor Iborra's +2 ES in 128K mode, photographed 2023-07-05, redcode
+///   ZXSpectrum wiki, *Timing Test*) shows the contended-NOP pattern one
+///   T-state later than the written references' 14,361, and Brendan Alford's
+///   `btime` on a 128K agrees (14,362).
 /// - `int_len`: 35, measured with `minfo` on a Zilog toastrack 128K. A NEC
 ///   grey +2 measured 34, and Fuse's written figure is 36.
 pub const SPECTRUM_128: Timing = Timing {
     cpu_hz: 3_546_900,
     frame: 70908,
     line: 228,
-    first_contended: 14361,
+    first_contended: 14362,
     int_len: 35,
 };
 
