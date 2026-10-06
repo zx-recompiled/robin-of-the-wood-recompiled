@@ -124,12 +124,6 @@ impl Inputs {
             rom_sha1,
         })
     }
-
-    /// Memory image the analysis starts from: the 64K the processor sees as
-    /// the program starts, the ROM included.
-    pub fn memory(&self) -> Vec<u8> {
-        (0..=0xFFFFu16).map(|a| self.machine.read(a)).collect()
-    }
 }
 
 /// A `.tap` file's blocks, as they are on tape.

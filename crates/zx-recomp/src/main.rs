@@ -9,6 +9,7 @@
 use std::path::PathBuf;
 
 use zx_recomp::{Config, Inputs, analysis, read_misses, report, tracer};
+use zx_runtime::memory::PAGE;
 use zx_runtime::{png, screen};
 
 fn main() {
@@ -97,9 +98,14 @@ fn run() -> Result<(), String> {
         z.iff1
     );
     if trace_only {
-        let rom_entries: Vec<String> = (0..0x4000)
-            .filter(|&a| traced.trace.entries[a])
-            .map(|a| format!("{a:04x}"))
+        // The ROM is page 0 on a 48K; on a 128K, pages 0 and 1, named by page.
+        let rom_pages = if z.memory.pages() > 4 { 2 } else { 1 };
+        let rom_entries: Vec<String> = (0..rom_pages * PAGE)
+            .filter(|&i| traced.trace.entries[i])
+            .map(|i| match rom_pages {
+                1 => format!("{i:04x}"),
+                _ => format!("rom{}:{:04x}", i / PAGE, i % PAGE),
+            })
             .collect();
         println!("ROM entry points reached: {}", rom_entries.join(" "));
         return Ok(());
