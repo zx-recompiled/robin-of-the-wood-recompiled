@@ -3,12 +3,13 @@
 //!
 //! ```text
 //! zx-recomp <config.toml> [--assets DIR] [--out FILE] [--misses FILE]
-//!           [--shot FRAME:FILE.png]... [--trace-only]
+//!           [--shot FRAME:FILE.png]... [--trace-only] [--listing FILE]
 //! ```
 
 use std::path::PathBuf;
 
 use zx_recomp::{Config, Inputs, analysis, read_misses, report, tracer};
+use zx_runtime::memory::PAGE;
 use zx_runtime::{png, screen};
 
 fn main() {
@@ -97,26 +98,27 @@ fn run() -> Result<(), String> {
         z.iff1
     );
     if trace_only {
-        let rom_entries: Vec<String> = (0..0x4000)
-            .filter(|&a| traced.trace.entries[a])
-            .map(|a| format!("{a:04x}"))
+        // The ROM is page 0 on a 48K; on a 128K, pages 0 and 1, named by page.
+        let rom_pages = if z.memory.pages() > 4 { 2 } else { 1 };
+        let rom_entries: Vec<String> = (0..rom_pages * PAGE)
+            .filter(|&i| traced.trace.entries[i])
+            .map(|i| match rom_pages {
+                1 => format!("{i:04x}"),
+                _ => format!("rom{}:{:04x}", i / PAGE, i % PAGE),
+            })
             .collect();
         println!("ROM entry points reached: {}", rom_entries.join(" "));
         return Ok(());
     }
 
     let extra = misses.map(|p| read_misses(&p)).unwrap_or_default();
-    let analysis = analysis::analyze(
-        &cfg,
-        &inputs.memory(),
-        inputs.start.pc,
-        inputs.rom.is_some(),
-        &traced.trace,
-        &extra,
-    );
+    let analysis = analysis::analyze(&cfg, &inputs.machine, &traced.trace, &extra);
     print!("{}", report(&analysis));
     if let Some(path) = listing {
-        let text = zx_recomp::listing::listing(&analysis, &traced.trace, 0x5b00, 0xffff);
+        let text = zx_recomp::listing::listing(&analysis, &traced.trace);
+        if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
+            std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        }
         std::fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))?;
         println!("wrote {}", path.display());
     }

@@ -20,6 +20,29 @@ hand-over, and `games/robin/tests/census.rs` counts the game's use of the ROM
 over 20,000 frames of play. What is still **provisional** has not been seen in
 the reference machine yet.
 
+## Making a listing
+
+The notes are written from listings: the original traced as it plays and
+disassembled (#4). `tools/re/robin.toml` boots it from its tape to the
+hand-over, plays 20,000 frames (0 to start, then random held keys), and
+writes one file with a section per page:
+
+```
+cargo run --release -p zx-recomp -- tools/re/robin.toml --listing target/re/robin.lst
+```
+
+It needs the tape and `128.rom` in `assets/`. **A listing is the original's
+code and is never committed**: keep it under `target/` (`*.lst` is ignored
+everywhere, and CI refuses one). What it teaches goes here, in our own words.
+
+Code is named by where it is, not only by the address it runs at, because
+banks 0, 4 and 6 hold different code at the same addresses. Code in the bank
+paged at `0xC000` is `bank:address` (`0:CD5F`); the ROM and banks 5 and 2,
+which never move, are the plain address (`5B8A`). The trace follows the code
+it saw running in each bank, and the banked-call routine at `0x5B8A`
+(*Memory and paging*) is decoded so the code it calls is found even when the
+trace never reached it.
+
 ## The tape
 
 - **The dump**: a TZX 1.10 file, SHA-1

@@ -21,17 +21,35 @@ pub struct Config {
 #[serde(deny_unknown_fields)]
 pub struct Game {
     pub name: String,
-    /// Tape file name (`.tap`), looked up in the assets directory.
+    /// The model: a 48K (the default) or a 128K.
+    #[serde(default)]
+    pub model: Model,
+    /// Tape file name (`.tap` or `.tzx`), looked up in the assets directory.
     pub tape: String,
     /// Expected SHA-1 of the tape. Builds fail on a mismatch.
     pub tape_sha1: Option<String>,
-    /// Where the ROM's loader returns into the program once the tape has
-    /// loaded, and the stack pointer then.
-    pub entry_pc: u16,
-    pub entry_sp: u16,
-    /// 48K ROM file name. Without it, ROM code cannot run.
+    /// On a 48K: where the ROM's loader returns into the program once the
+    /// tape has loaded, and the stack pointer then. The program is placed in
+    /// memory as its code blocks say.
+    pub entry_pc: Option<u16>,
+    pub entry_sp: Option<u16>,
+    /// On a 128K: the address the program hands over to once the tape has
+    /// loaded. The machine boots from its ROM and loads the tape for real
+    /// (`zx_runtime::loader::boot_128k`), stopping there.
+    pub boot_until: Option<u16>,
+    /// ROM file name: the 16K 48K ROM, or the 32K 128K one. A 48K can run
+    /// without one, but ROM code cannot run then; a 128K boots from it.
     pub rom: Option<String>,
     pub rom_sha1: Option<String>,
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize)]
+pub enum Model {
+    #[default]
+    #[serde(rename = "48k")]
+    Spectrum48,
+    #[serde(rename = "128k")]
+    Spectrum128,
 }
 
 #[derive(Debug, Deserialize)]
@@ -49,6 +67,11 @@ pub struct Analysis {
     /// and return after it.
     #[serde(default)]
     pub inline_strings: Vec<u16>,
+    /// Banked-call routines: each CALL to one is followed by the address to
+    /// call and the paging byte that selects its bank (its low three bits),
+    /// and the routine returns after them.
+    #[serde(default)]
+    pub banked_calls: Vec<u16>,
     /// Inclusive address ranges that are always interpreted, never compiled.
     #[serde(default)]
     pub interpret: Vec<[u16; 2]>,
@@ -67,6 +90,7 @@ impl Default for Analysis {
             entry_points: Vec::new(),
             noreturn: Vec::new(),
             inline_strings: Vec::new(),
+            banked_calls: Vec::new(),
             interpret: Vec::new(),
             max_block_instrs: default_max_block(),
         }
@@ -143,5 +167,35 @@ impl Config {
     /// If the text is not valid TOML, or does not match the schema.
     pub fn parse(text: &str) -> Result<Config, String> {
         toml::from_str(text).map_err(|e| e.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_48k_config_is_as_it_was() {
+        let cfg = Config::parse(
+            "[game]\nname = \"g\"\ntape = \"g.tap\"\nentry_pc = 0x5E24\nentry_sp = 0x5E20\n",
+        )
+        .expect("parses");
+        assert_eq!(cfg.game.model, Model::Spectrum48);
+        assert_eq!(
+            (cfg.game.entry_pc, cfg.game.entry_sp),
+            (Some(0x5E24), Some(0x5E20))
+        );
+    }
+
+    #[test]
+    fn a_128k_config_boots_to_its_hand_over() {
+        let cfg = Config::parse(
+            "[game]\nname = \"g\"\nmodel = \"128k\"\ntape = \"g.tzx\"\nboot_until = 0x5B00\n\
+             rom = \"128.rom\"\n",
+        )
+        .expect("parses");
+        assert_eq!(cfg.game.model, Model::Spectrum128);
+        assert_eq!(cfg.game.boot_until, Some(0x5B00));
+        assert!(Config::parse("[game]\nname = \"g\"\nmodel = \"+3\"\ntape = \"g\"\n").is_err());
     }
 }

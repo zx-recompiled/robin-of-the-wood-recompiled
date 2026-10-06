@@ -74,8 +74,9 @@ pub fn step(z: &mut Zx) {
     let next = pc.wrapping_add(d.len as u16);
     if z.trace.is_some() {
         let bytes = [0u16, 1, 2, 3].map(|i| z.read(pc.wrapping_add(i)));
+        let slots = z.memory.slots();
         if let Some(trace) = &mut z.trace {
-            trace.on_exec(pc, bytes, d.len);
+            trace.on_exec(&slots, pc, bytes, d.len);
         }
     }
     // The cycles are worked out before anything moves, because each address

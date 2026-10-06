@@ -14,7 +14,7 @@ against z80test), copied 2026-10-06.
 |---|---|
 | `crates/zx-core` | One comment qualified as starquake-recompiled's. Since diverged (#2): a machine's timing as a value (`timing::Timing`), contention that asks the machine, and a `Model` in `MachineState`. Then (#12): a `.szx` reader, with `miniz_oxide`. |
 | `crates/zx-runtime`, with `tests/fuse.rs` and `tests/z80test.rs` | Nothing. Since diverged (#2): memory as four slots over ROM and RAM pages, the 128K machine, the AY's registers, and z80test on both machines. The 48K machine's results are unchanged. Then (#12): a tape feeder and a screen reader, and two interrupt faults fixed (no interrupt after a lone `DD`/`FD` prefix; the pulse ends at its length), which starquake-recompiled's copy still has. |
-| `crates/zx-recomp` | One comment qualified as starquake-recompiled's. |
+| `crates/zx-recomp` | One comment qualified as starquake-recompiled's. Since diverged (#4): code is traced, analysed and listed by where it is (a page and an offset), so the same address in two 128K banks is two pieces of code; a configuration can name a 128K, booted from its tape and ROM; `banked_calls` decodes a banked-call routine's inline target; the listing has a section per page. A 48K is numbered as before. |
 | `.claude/skills/*` (`board`, `build-slice`, `design-slice`, `issue-comment-replies`, `merge-pr`, `mockup`, `work-the-board`) | This repository and its board; Starquake's issue numbers written as `starquake-recompiled#NN`; Starquake's code examples swapped for this repository's; no fixed suite count. |
 | `.claude/scripts/check.sh` | Builds `robin`; says loudly that there are no differential suites yet, in place of running `sq-verify`. |
 | `.claude/scripts/board.sh` | This repository and its board. |

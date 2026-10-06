@@ -29,9 +29,9 @@ jobs:
 
       - name: No game dumps anywhere in the tree
         run: |
-          stray=$(git ls-files | grep -iE '\.(tap|tzx|z80|sna|rom|szx)$' || true)
+          stray=$(git ls-files | grep -iE '\.(tap|tzx|z80|sna|rom|szx|lst)$' || true)
           if [ -n "$stray" ]; then
-            echo "::error::Game or ROM dumps must never be committed:"
+            echo "::error::Game or ROM dumps and listings must never be committed:"
             echo "$stray"
             exit 1
           fi

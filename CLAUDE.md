@@ -34,6 +34,10 @@ order, is the board's Backlog.
   against test programs measured on real ones (`minfo`, Fuse Test, Rak's
   Timing Test against a real +2's photographs, Butler's), booting the real
   ROMs and loading each program from its tape. Needs the files in `assets/`.
+- `cargo run --release -p zx-recomp -- tools/re/robin.toml --listing target/re/robin.lst`
+  traces the original as it plays and writes its disassembly, a section per
+  page (`docs/re/robin.md`, *Making a listing*). Needs the tape and ROM in
+  `assets/`. **A listing is never committed**: it is the original's code.
 - The tool shell is zsh: never name a variable `status`, and run anything
   loop-shaped as a `bash` script.
 

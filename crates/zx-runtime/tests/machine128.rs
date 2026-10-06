@@ -7,7 +7,7 @@
 //! the job of the hardware-measured timing tests (#12).
 
 use zx_core::{MachineState, Model, bus::Cycle, state::RAM_128};
-use zx_runtime::Zx;
+use zx_runtime::{Zx, memory::Memory};
 
 /// A 128K machine whose every bank is filled with its own number, and whose
 /// ROMs are `0xA0` and `0xA1` throughout.
@@ -207,4 +207,25 @@ fn a_48k_has_no_ay() {
     z.port_out(0xBFFD, 0x0F);
     assert_eq!(z.ay.reg(8), 0);
     assert_eq!(z.port_in(0xFFFD), 0xFF);
+}
+
+#[test]
+fn a_trace_keeps_the_same_address_in_two_banks_apart() {
+    use zx_runtime::trace::Trace;
+    let mut z = machine(0);
+    z.trace = Some(Box::new(Trace::new(z.memory.pages())));
+    // NOP in bank 0 at 0xC000, then INC A in bank 6 at the same address.
+    z.memory.poke(0xC000, 0x00);
+    z.port_out(0x7FFD, 0x16);
+    z.memory.poke(0xC000, 0x3C);
+    for port in [0x10, 0x16] {
+        z.port_out(0x7FFD, port);
+        z.pc = 0xC000;
+        zx_runtime::interp::step(&mut z);
+    }
+    let t = z.trace.as_ref().expect("tracing");
+    let at = |bank: usize| (Memory::bank(bank)) * 0x4000;
+    assert_eq!(t.executed[at(0)].map(|e| e.1[0]), Some(0x00));
+    assert_eq!(t.executed[at(6)].map(|e| e.1[0]), Some(0x3C));
+    assert!(!t.self_modified.iter().any(|&b| b));
 }
