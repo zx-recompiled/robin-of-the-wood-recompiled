@@ -112,3 +112,108 @@ pub fn load_tap(bytes: &[u8]) -> Result<Tape, String> {
         loading_screen,
     })
 }
+
+/// The blocks of a `.tzx` file, each as it would be on a `.tap`: flag byte,
+/// data, checksum.
+///
+/// Only what a tape loaded at the ROM's own speed holds is read: standard
+/// data blocks (`0x10`). The information blocks a dump carries alongside
+/// (`0x30` text, `0x32` archive info) are skipped. Anything else, such as a
+/// turbo, pure-tone or direct-recording block, means a loader this reader
+/// cannot stand in for, and is refused by name.
+///
+/// # Errors
+///
+/// If the file is not a TZX file, a block runs off its end, or a block is of
+/// a kind this reader does not take.
+pub fn load_tzx(bytes: &[u8]) -> Result<Vec<Vec<u8>>, String> {
+    const HEADER: &[u8] = b"ZXTape!\x1A";
+    if bytes.len() < 10 || &bytes[..8] != HEADER {
+        return Err("not a TZX file".into());
+    }
+    let word = |at: usize| {
+        bytes
+            .get(at..at + 2)
+            .map(|b| usize::from(b[0]) | usize::from(b[1]) << 8)
+    };
+    let mut blocks = Vec::new();
+    let mut i = 10usize;
+    while i < bytes.len() {
+        let id = bytes[i];
+        let short = || format!("TZX block {id:#04x} at {i:#x} runs off the end");
+        match id {
+            0x10 => {
+                let len = word(i + 3).ok_or_else(short)?;
+                let data = bytes.get(i + 5..i + 5 + len).ok_or_else(short)?;
+                if len < 2 {
+                    return Err(format!(
+                        "TZX block at {i:#x} is too short to be a tape block"
+                    ));
+                }
+                blocks.push(data.to_vec());
+                i += 5 + len;
+            }
+            0x30 => i += 2 + usize::from(*bytes.get(i + 1).ok_or_else(short)?),
+            0x32 => i += 3 + word(i + 1).ok_or_else(short)?,
+            _ => {
+                return Err(format!(
+                    "TZX block {id:#04x} at {i:#x} is not a standard-speed block; this tape needs a loader that is not supported"
+                ));
+            }
+        }
+    }
+    if i > bytes.len() {
+        return Err("the last TZX block runs off the end".into());
+    }
+    Ok(blocks)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A TZX file of these blocks, each `(id, body)` as it follows the id.
+    fn tzx(blocks: &[(u8, Vec<u8>)]) -> Vec<u8> {
+        let mut out = b"ZXTape!\x1A\x01\x14".to_vec();
+        for (id, body) in blocks {
+            out.push(*id);
+            out.extend_from_slice(body);
+        }
+        out
+    }
+
+    /// A standard-speed block's body: a pause, then the tape block.
+    fn standard(block: &[u8]) -> Vec<u8> {
+        let mut body = vec![0xE8, 0x03];
+        body.extend_from_slice(&(block.len() as u16).to_le_bytes());
+        body.extend_from_slice(block);
+        body
+    }
+
+    #[test]
+    fn standard_blocks_come_out_as_tap_blocks() {
+        let file = tzx(&[
+            (0x32, vec![3, 0, 1, 0, 0x41]),
+            (0x10, standard(&[0x00, 1, 2, 3])),
+            (0x30, vec![2, b'h', b'i']),
+            (0x10, standard(&[0xFF, 9, 9])),
+        ]);
+        assert_eq!(
+            load_tzx(&file).expect("reads"),
+            vec![vec![0x00, 1, 2, 3], vec![0xFF, 9, 9]]
+        );
+    }
+
+    #[test]
+    fn other_blocks_and_bad_files_are_refused() {
+        assert!(load_tzx(b"ZXTape").is_err());
+        assert!(
+            load_tzx(&tzx(&[(0x11, vec![0; 18])]))
+                .unwrap_err()
+                .contains("0x11")
+        );
+        let mut cut = tzx(&[(0x10, standard(&[0xFF, 1, 2, 3]))]);
+        cut.pop();
+        assert!(load_tzx(&cut).is_err());
+    }
+}

@@ -26,6 +26,33 @@ mod tests {
         assert!(!is_the_tape(b"ZXTape!\x1a\x01\x14"));
     }
 
+    /// The supported tape from `assets/`, if it is there.
+    fn local_tape() -> Option<Vec<u8>> {
+        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+        std::fs::read_dir(&dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter_map(|e| std::fs::read(e.path()).ok())
+            .find(|b| is_the_tape(b))
+    }
+
+    /// The tape's blocks are the eight `docs/re/robin.md` lists: the BASIC
+    /// loader and `r1`, each with its header, then four headerless blocks.
+    /// Each length includes the flag and checksum.
+    #[test]
+    fn the_tape_has_the_blocks_the_notes_list() {
+        let Some(tape) = local_tape() else {
+            println!("skipped: no supported tape in assets/");
+            return;
+        };
+        let blocks = zx_core::tape::load_tzx(&tape).expect("the tape reads");
+        let lengths: Vec<usize> = blocks.iter().map(Vec::len).collect();
+        assert_eq!(lengths, [19, 62, 19, 258, 6914, 34562, 4098, 16386]);
+        let flags: Vec<u8> = blocks.iter().map(|b| b[0]).collect();
+        assert_eq!(flags, [0x00, 0xFF, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]);
+    }
+
     /// The tape in `assets/`, if there is one, must be the supported dump:
     /// a different one would make every later check compare against the
     /// wrong program. Without a tape there is nothing to check, and it says
