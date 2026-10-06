@@ -6,7 +6,7 @@ ignored by git):
 
 | File | What | Needed by |
 |------|------|-----------|
-| the tape | Robin of the Wood, the 128K release, `.tzx`, SHA-1 `2aad3402cdc08907000900c5da8c29eeb2f48c9e` | the game (once it exists) |
+| the tape | Robin of the Wood, the 128K release, `.tzx`, SHA-1 `2aad3402cdc08907000900c5da8c29eeb2f48c9e` | the game |
 | `128.rom` | ZX Spectrum 128K ROM, 32K: the 128 editor ROM then the 128's own 48 BASIC ROM (which is not `48.rom`), SHA-1 `16375d42ea109b47edded7a16028de7fdb3013a1` | development tools only (the reference machine) |
 | `48.rom` | ZX Spectrum 48K ROM, SHA-1 `5ea7c2b824672e914525d1d5c419d71b84a426a2` | development tools only (the 48K reference machine) |
 | `tests.in`, `tests.expected` | The Fuse project's Z80 test corpus | development tools only (the processor conformance test) |
@@ -17,8 +17,9 @@ ignored by git):
 
 The tape is the 128K release as a TZX file, every block at the ROM's standard
 speed (`docs/re/robin.md`, *The tape*). Its name does not matter; its SHA-1
-does. It is pinned in `games/robin` (`TAPE_SHA1`), the game will refuse any
-other dump, and `cargo test` fails if the tape here is a different one.
+does. It is pinned in `games/robin` (`robin::assets::TAPE_SHA1`). The game
+refuses any other file, naming its SHA-1 and the supported one, and
+`cargo test` fails if the tape here is a different one.
 
 **Only the tape will be needed to play.** Everything else is for the tools
 that run the original for comparison and check the interpreter; you can

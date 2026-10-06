@@ -85,14 +85,16 @@ pub fn banks_from_tape(blocks: &[Vec<u8>]) -> Result<Vec<u8>, String> {
     let mut ram = vec![0u8; 8 * 0x4000];
     for (i, b) in GAME_BLOCKS.iter().enumerate() {
         let n = LOADER_BLOCKS + i;
+        // Numbered from 1 in messages, as `docs/re/robin.md` lists them.
         let block = blocks
             .get(n)
-            .ok_or_else(|| format!("the tape has no block {n}"))?;
+            .ok_or_else(|| format!("the tape has no block {}", n + 1))?;
         // Flag, data, checksum.
         let data = block.get(1..block.len().saturating_sub(1)).unwrap_or(&[]);
         if data.len() != b.len {
             return Err(format!(
-                "block {n} holds {} bytes, not {}",
+                "block {} holds {} bytes, not {}",
+                n + 1,
                 data.len(),
                 b.len
             ));

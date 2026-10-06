@@ -8,14 +8,14 @@ The original is by Steve Wetheril, Paul Salmon and Fred Gray, as credited in the
 
 ## Status
 
-Nothing to play yet. The original now boots from its tape in the 128K reference machine, through the real ROM and its own loader, to the state the checks will start from. A census of 20,000 frames of play found it running no ROM code, and reading the ROM in three places, one of which feeds its random numbers (#21).
+Nothing to play yet. The original now boots from its tape in the 128K reference machine, through the real ROM and its own loader, to the state the checks will start from. A census of 20,000 frames of play found it running no ROM code, and reading the ROM in three places, one of which feeds its random numbers (#21). The game can read its tape: it refuses anything but the one supported dump, and builds the 128K's memory banks from the tape alone, with no ROM. A second census found the game reading only one byte the tape didn't load, which is zero both in the original and in what the game builds (`docs/re/robin.md`).
 
 What exists is the groundwork copied from [starquake-recompiled](https://github.com/zx-recompiled/starquake-recompiled), where the same approach produced a complete rewrite of Starquake (`REUSED.md` lists what came from there):
 
 - `crates/zx-runtime`: a reference Z80 interpreter, which runs the original for comparison, as a 48K Spectrum or a 128K one: two ROMs and eight memory banks paged through port `0x7FFD`, the shadow screen, contention by bank, and the AY sound chip's registers. The 128K's timing is the grey +2's; its frame and interrupt lengths were measured on real machines, and the rest is from the written references until hardware-checked timing tests confirm it (#12).
 - `crates/zx-recomp`: traces the original as it runs and disassembles it into listings to read.
 - `crates/zx-core`: the Z80 decoder, `.tap` loading, screen layout, PNG and SHA-1.
-- `games/robin`: the game, a stub so far.
+- `games/robin`: the game, so far only reading the player's tape (`robin::assets`).
 
 The work ahead, in order, is on the project board: establish the facts about the tape, build the 128K reference machine, load and boot the original in it, trace it, read its assets from the tape, rewrite it subsystem by subsystem with a differential check for each, then the window, sound and input, and long runs comparing every frame.
 
