@@ -13,9 +13,12 @@ Each fact is marked with how it is known:
 - **read**: understood from the bytes or the disassembly;
 - **guess**.
 
-Nothing here is confirmed yet: the reference machine cannot run a 128K until
-#2. Everything was read from the tape's bytes, then watched in zx84 running
-the same 128K ROM (`assets/128.rom`, whose SHA-1 matches zx84's own).
+The facts were first read from the tape's bytes and watched in zx84 (#1).
+Booting the original in the reference machine (#3) then confirmed what is
+marked **confirmed**: `games/robin/tests/boot.rs` checks the loading and the
+hand-over, and `games/robin/tests/census.rs` counts the game's use of the ROM
+over 20,000 frames of play. What is still **provisional** has not been seen in
+the reference machine yet.
 
 ## The tape
 
@@ -23,8 +26,9 @@ the same 128K ROM (`assets/128.rom`, whose SHA-1 matches zx84's own).
   `2aad3402cdc08907000900c5da8c29eeb2f48c9e`, 62,599 bytes. **read**
 - **Every data block is at the ROM's standard speed** (TZX block `0x10`). There
   are no turbo, pure-data or custom blocks, so a reader needs only standard
-  blocks, plus skipping the archive-info block (`0x32`) at the start. **read**
-- The blocks, in order: **read**
+  blocks, plus skipping the archive-info block (`0x32`) at the start.
+  **confirmed** (`zx_core::tape::load_tzx` reads it)
+- The blocks, in order: **confirmed**
 
   | # | What | Length |
   |---|---|---|
@@ -49,7 +53,7 @@ the same 128K ROM (`assets/128.rom`, whose SHA-1 matches zx84's own).
   sets its stack below itself (`0x508C`). Then, for each headerless block,
   it pages memory through `0x7FFD`, sets the load address and length, and
   enters the ROM's tape loader. Only the first 76 bytes of `r1` are code; the
-  rest are never reached. **read**, and the hand-over **provisional**
+  rest are never reached. **read**, and the hand-over **confirmed**
 - **It enters the ROM loader at `0x0563`, not at `LD-BYTES` (`0x0556`).** It
   does `LD-BYTES`'s first few instructions itself and jumps past the rest of
   its preamble. `0x0563` is the operand byte of an `IN A,(0xFE)`, so the ROM
@@ -58,7 +62,8 @@ the same 128K ROM (`assets/128.rom`, whose SHA-1 matches zx84's own).
   of the routine that finishes a load. So `LD-BYTES` returns straight to
   `r1`, with no BREAK check and interrupts left disabled. A loader trap
   placed on `LD-BYTES` would never fire; it has to be at `0x0563`. **read**
-- Where each block lands, with the value written to `0x7FFD` first: **read**
+- Where each block lands, with the value written to `0x7FFD` first:
+  **confirmed**, every byte (the facts are `games/robin/src/layout.rs`)
 
   | Block | `0x7FFD` | Lands at |
   |---|---|---|
@@ -73,16 +78,17 @@ the same 128K ROM (`assets/128.rom`, whose SHA-1 matches zx84's own).
 - At the end, `r1` writes `0x10` to `0x7FFD` (bank 0 at `0xC000`, the normal
   screen in bank 5, ROM 1, paging not locked) and jumps to `0x5B00`.
   Interrupts are disabled, the processor is in IM 1, and SP is `0x508C`.
-  **provisional**
+  **confirmed**
 
 ## Where the program starts
 
 - `0x5B00` writes `0x10` to `0x7FFD` again and jumps to `0xBE4A`, the
   program's own start. That disables interrupts, sets its stack to `0x5B8A`,
-  initialises, and enters its main loop. **read**
+  initialises, and enters its main loop. **read**; the jump to `0xBE4A`
+  **confirmed**
 - **Entry state for the checks**: PC `0x5B00`, SP `0x508C`, interrupts
   disabled, IM 1, `0x7FFD` = `0x10`, with banks 0, 2, 4, 5, 6 and 7 loaded as
-  above. Banks 1 and 3 are never loaded. **provisional**
+  above. Banks 1 and 3 are never loaded. **confirmed**
 
 ## Memory and paging
 
@@ -105,7 +111,8 @@ the same 128K ROM (`assets/128.rom`, whose SHA-1 matches zx84's own).
   `0xFFFF` whatever the bus carries. At `0xFFFF` is a relative jump whose
   displacement is the next byte, which wraps round to the ROM's first byte
   (`0xF3`), landing at `0xFFF4`. That jumps to the handler at `0xDED3`.
-  **read**, the handler's address **provisional**
+  **read**; the jump at `0xFFFF` reading the ROM's first byte **confirmed** by
+  the census (every frame of play), the handler's address **provisional**
 - So **the game depends on the ROM's first byte as data**, though it never
   runs the ROM's interrupt routine. **read**
 
@@ -130,12 +137,24 @@ the same 128K ROM (`assets/128.rom`, whose SHA-1 matches zx84's own).
 
 ## What it uses from the ROM
 
-- **No ROM code ran** in six traced frames (about 53,000 instructions), at
-  the menu and in play, and no instruction in them names a ROM address as
-  data. The only use of the ROM seen is the interrupt's jump reading its
-  first byte. Six frames is a small sample: the reference machine should
-  count every execution and read below `0x4000` over long runs (#3).
-  **provisional**
+- **No ROM code runs.** Over 20,000 frames from the hand-over, through the
+  menu and into play under random held keys, not one instruction was executed
+  below `0x4000`. **confirmed** (`games/robin/tests/census.rs`)
+- **It reads the ROM in three places**, and nowhere else in that run.
+  **confirmed**
+  - **The interrupt**: the jump at `0xFFFF` takes its displacement from the
+    ROM's first byte (*Interrupts*).
+  - **A delay**: a routine at `0x8B32` plays a beeper sound eleven times, each
+    a little slower. Between the notes, an `LDIR` copies the 16K at `0x0000`
+    onto itself. Writes to ROM go nowhere, and the flags it leaves are thrown
+    away straight after, so only the time it takes matters: 16,384 uncontended
+    transfers each time. Nothing depends on what the ROM holds. **read**
+    (called from at least `0xB796` and `0xCD4E`; what for is #4's to find)
+  - **The random numbers**: the routine at `0xCD5F` takes R, reads the byte
+    at `R × 0x101`, and mixes it with R into the seed at `0xD26A`. When R is
+    below `0x40` that address is in the ROM, so **the ROM's contents feed the
+    random numbers** (25 reads at 4 addresses in the run). The rewrite has no
+    ROM, so this needs a decision: #21. **read**
 - IY is not BASIC's `0x5C3A` in play (`0xFF20` was seen), which fits a game
   that calls nothing in the ROM that needs the system variables.
   **provisional**
