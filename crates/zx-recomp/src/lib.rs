@@ -167,7 +167,7 @@ pub fn report(a: &analysis::Analysis) -> String {
     let _ = writeln!(r, "instructions compiled: {}", s.instrs);
     let _ = writeln!(r, "self-modifying instrs: {}", s.self_modifying.len());
     for a in &s.self_modifying {
-        let _ = writeln!(r, "  {a:04x}");
+        let _ = writeln!(r, "  {a}");
     }
     r
 }

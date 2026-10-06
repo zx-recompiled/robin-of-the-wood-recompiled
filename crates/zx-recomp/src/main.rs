@@ -106,17 +106,10 @@ fn run() -> Result<(), String> {
     }
 
     let extra = misses.map(|p| read_misses(&p)).unwrap_or_default();
-    let analysis = analysis::analyze(
-        &cfg,
-        &inputs.memory(),
-        inputs.machine.pc,
-        inputs.rom_loaded,
-        &traced.trace,
-        &extra,
-    );
+    let analysis = analysis::analyze(&cfg, &inputs.machine, &traced.trace, &extra);
     print!("{}", report(&analysis));
     if let Some(path) = listing {
-        let text = zx_recomp::listing::listing(&analysis, &traced.trace, 0x5b00, 0xffff);
+        let text = zx_recomp::listing::listing(&analysis, &traced.trace);
         std::fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))?;
         println!("wrote {}", path.display());
     }

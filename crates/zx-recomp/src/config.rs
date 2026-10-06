@@ -67,6 +67,11 @@ pub struct Analysis {
     /// and return after it.
     #[serde(default)]
     pub inline_strings: Vec<u16>,
+    /// Banked-call routines: each CALL to one is followed by the address to
+    /// call and the paging byte that selects its bank (its low three bits),
+    /// and the routine returns after them.
+    #[serde(default)]
+    pub banked_calls: Vec<u16>,
     /// Inclusive address ranges that are always interpreted, never compiled.
     #[serde(default)]
     pub interpret: Vec<[u16; 2]>,
@@ -85,6 +90,7 @@ impl Default for Analysis {
             entry_points: Vec::new(),
             noreturn: Vec::new(),
             inline_strings: Vec::new(),
+            banked_calls: Vec::new(),
             interpret: Vec::new(),
             max_block_instrs: default_max_block(),
         }

@@ -106,6 +106,12 @@ impl Memory {
         self.pages[page][addr as usize & (PAGE - 1)] = v;
     }
 
+    /// Whether a ROM was loaded: without one the bottom 16K is just memory.
+    #[must_use]
+    pub fn rom_loaded(&self) -> bool {
+        self.rom[0]
+    }
+
     /// The page each slot shows.
     #[must_use]
     pub fn slots(&self) -> [usize; 4] {

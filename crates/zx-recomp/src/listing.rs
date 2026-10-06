@@ -4,19 +4,28 @@
 //! else is dumped as data. Instructions the trace actually executed are
 //! marked `*`, so code only found statically (possibly data misread as
 //! code) stands out.
+//!
+//! There is a section for each page of memory that holds code: on a 48K, the
+//! RAM; on a 128K, the fixed banks 5 and 2 and each bank seen paged at
+//! 0xC000. Places in a paged bank are written `bank:address` (`0:cd5f`),
+//! everything else by its address alone.
+//!
+//! A listing is the original's code, disassembled. It is never committed;
+//! what goes into the repository is the notes written from it.
 
 use std::collections::BTreeMap;
 use std::fmt::Write;
 
-use crate::analysis::Analysis;
-use zx_core::{Addr, Instr, Op8, decode};
+use crate::analysis::{Analysis, Place};
+use zx_core::{Addr, Instr, Op8};
+use zx_runtime::memory::PAGE;
 use zx_runtime::trace::Trace;
 
-fn label(a: u16, analysis: &Analysis) -> String {
-    if analysis.call_targets.contains(&a) {
-        format!("sub_{a:04x}")
+fn label(at: Place, analysis: &Analysis) -> String {
+    if analysis.call_targets.contains(&at) {
+        format!("sub_{at}")
     } else {
-        format!("l_{a:04x}")
+        format!("l_{at}")
     }
 }
 
@@ -34,96 +43,146 @@ fn data_refs(i: &Instr) -> Vec<u16> {
     }
 }
 
-pub fn listing(analysis: &Analysis, trace: &Trace, from: u16, to: u16) -> String {
-    let image = &analysis.image;
-    let mem = |a: u16| image[a as usize];
+/// What a page is called in a section heading.
+fn page_name(analysis: &Analysis, page: usize, first: Place) -> String {
+    match (first.bank, analysis.layout.fixed[0] == Some(page)) {
+        (Some(b), _) => format!("bank {b}, at c000"),
+        (None, true) => "ROM".to_string(),
+        (None, false) => {
+            let base = first.addr & 0xC000;
+            if analysis.layout.fixed[3].is_none() {
+                format!("bank {}, at {base:04x}", page - 2)
+            } else {
+                format!("RAM at {base:04x}")
+            }
+        }
+    }
+}
 
-    // Cross references: who jumps/calls to, and who reads/writes, each address.
-    let mut xrefs: BTreeMap<u16, Vec<u16>> = BTreeMap::new();
-    for a in 0..0x10000usize {
-        if !analysis.code_starts[a] {
+pub fn listing(analysis: &Analysis, trace: &Trace) -> String {
+    let pages = analysis.image.len() / PAGE;
+
+    // Cross references: who jumps or calls to, and who reads or writes, each
+    // place.
+    let mut xrefs: BTreeMap<Place, Vec<Place>> = BTreeMap::new();
+    for i in 0..analysis.code_starts.len() {
+        if !analysis.code_starts[i] {
             continue;
         }
-        let d = decode(&mem, a as u16);
+        let from = analysis.layout.place_of(i);
+        let d = analysis.decode(from);
         let targets: Vec<u16> = match d.instr.flow() {
             zx_core::Flow::Jump(t) | zx_core::Flow::Branch(t) => vec![t],
             zx_core::Flow::Call { target, .. } => vec![target],
             _ => data_refs(&d.instr),
         };
         for t in targets {
-            xrefs.entry(t).or_default().push(a as u16);
+            for p in analysis.places(trace, from, t) {
+                xrefs.entry(p).or_default().push(from);
+            }
         }
     }
+    let refs = |r: &[Place]| {
+        let list: Vec<String> = r.iter().take(8).map(ToString::to_string).collect();
+        let more = if r.len() > 8 { " ..." } else { "" };
+        format!("{}{more}", list.join(" "))
+    };
+
+    // The fixed pages in address order, then the paged banks.
+    let fixed: Vec<usize> = analysis.layout.fixed.iter().flatten().copied().collect();
+    let order = fixed
+        .iter()
+        .copied()
+        .chain((0..pages).filter(|p| !fixed.contains(p)));
 
     let mut out = String::new();
-    let mut a = from as u32;
-    while a <= to as u32 {
-        let pc = a as u16;
-        if analysis.code_starts[pc as usize] {
-            let d = decode(&mem, pc);
-            if analysis.entries.contains(&pc) || xrefs.contains_key(&pc) {
-                let refs = xrefs.get(&pc).map_or(String::new(), |r| {
-                    let list: Vec<String> = r.iter().take(8).map(|x| format!("{x:04x}")).collect();
-                    let more = if r.len() > 8 { " ..." } else { "" };
-                    format!("  ; from {}{more}", list.join(" "))
-                });
-                let _ = writeln!(out, "\n{}:{refs}", label(pc, analysis));
-            }
-            let bytes: Vec<String> = (0..d.len as u16)
-                .map(|i| format!("{:02x}", mem(pc.wrapping_add(i))))
-                .collect();
-            let traced = if trace.executed[pc as usize].is_some() {
-                '*'
+    for page in order {
+        let base = page * PAGE;
+        if !analysis.code_starts[base..base + PAGE].iter().any(|&c| c) {
+            continue;
+        }
+        // From the first code, or the first data something refers to, in
+        // the page: on a 48K that skips the screen and BASIC's variables.
+        let first = (0..PAGE)
+            .find(|&o| {
+                analysis.code_starts[base + o]
+                    || xrefs.contains_key(&analysis.layout.place_of(base + o))
+            })
+            .unwrap_or(0)
+            & !0xF;
+        let _ = writeln!(
+            out,
+            "\n; ==== {} ====",
+            page_name(analysis, page, analysis.layout.place_of(base))
+        );
+        let mut o = first;
+        while o < PAGE {
+            let at = analysis.layout.place_of(base + o);
+            let byte = |k: usize| analysis.image[base + (o + k) % PAGE];
+            if analysis.code_starts[base + o] {
+                let d = analysis.decode(at);
+                if analysis.entries.contains(&at) || xrefs.contains_key(&at) {
+                    let from = xrefs
+                        .get(&at)
+                        .map_or(String::new(), |r| format!("  ; from {}", refs(r)));
+                    let _ = writeln!(out, "\n{}:{from}", label(at, analysis));
+                }
+                let bytes: Vec<String> = (0..usize::from(d.len))
+                    .map(|k| format!("{:02x}", byte(k)))
+                    .collect();
+                let traced = if trace.executed[base + o].is_some() {
+                    '*'
+                } else {
+                    ' '
+                };
+                let smc = if trace.self_modified[base + o] {
+                    "  ; SELF-MODIFIED"
+                } else {
+                    ""
+                };
+                let _ = writeln!(
+                    out,
+                    "{:<6} {traced} {:<12} {}{smc}",
+                    at.to_string(),
+                    bytes.join(" "),
+                    d.instr
+                );
+                o += usize::from(d.len);
             } else {
-                ' '
-            };
-            let smc = if trace.self_modified[pc as usize] {
-                "  ; SELF-MODIFIED"
-            } else {
-                ""
-            };
-            let _ = writeln!(
-                out,
-                "{pc:04x} {traced} {:<12} {}{smc}",
-                bytes.join(" "),
-                d.instr
-            );
-            a += d.len as u32;
-        } else {
-            // Data: up to 16 bytes, stopping at the next code or label.
-            let start = pc;
-            let mut n = 0u32;
-            while n < 16
-                && a + n <= to as u32
-                && !analysis.code_starts[(a + n) as usize]
-                && (n == 0 || !xrefs.contains_key(&((a + n) as u16)))
-            {
-                n += 1;
+                // Data: up to 16 bytes, stopping at the next code or label.
+                let mut n = 0usize;
+                while n < 16
+                    && o + n < PAGE
+                    && !analysis.code_starts[base + o + n]
+                    && (n == 0 || !xrefs.contains_key(&analysis.layout.place_of(base + o + n)))
+                {
+                    n += 1;
+                }
+                if let Some(r) = xrefs.get(&at) {
+                    let _ = writeln!(out, "\nd_{at}:  ; used by {}", refs(r));
+                }
+                let bytes: Vec<u8> = (0..n).map(byte).collect();
+                let hex: Vec<String> = bytes.iter().map(|b| format!("{b:02x}")).collect();
+                let ascii: String = bytes
+                    .iter()
+                    .map(|&b| {
+                        if (0x20..0x7f).contains(&b) {
+                            b as char
+                        } else {
+                            '.'
+                        }
+                    })
+                    .collect();
+                let written = (0..n).any(|k| trace.written_code[base + o + k]);
+                let _ = writeln!(
+                    out,
+                    "{:<6}   db {:<47} ; {ascii}{}",
+                    at.to_string(),
+                    hex.join(" "),
+                    if written { " (written)" } else { "" }
+                );
+                o += n;
             }
-            if let Some(r) = xrefs.get(&start) {
-                let list: Vec<String> = r.iter().take(8).map(|x| format!("{x:04x}")).collect();
-                let _ = writeln!(out, "\nd_{start:04x}:  ; used by {}", list.join(" "));
-            }
-            let bytes: Vec<u8> = (0..n).map(|i| mem(start.wrapping_add(i as u16))).collect();
-            let hex: Vec<String> = bytes.iter().map(|b| format!("{b:02x}")).collect();
-            let ascii: String = bytes
-                .iter()
-                .map(|&b| {
-                    if (0x20..0x7f).contains(&b) {
-                        b as char
-                    } else {
-                        '.'
-                    }
-                })
-                .collect();
-            let written = (0..n).any(|i| trace.written_code[(a + i) as usize]);
-            let _ = writeln!(
-                out,
-                "{start:04x}   db {:<47} ; {ascii}{}",
-                hex.join(" "),
-                if written { " (written)" } else { "" }
-            );
-            a += n;
         }
     }
     out
