@@ -54,6 +54,18 @@ fi
 # loudly rather than passed quietly, because a silent skip is how a gate rots.
 echo "!!! differential suites: none yet, so the fidelity gate did NOT run."
 
+# The machines' timing against test programs measured on real machines
+# (crates/zx-runtime/tests/hardware.rs, #12). They run in `cargo test` above,
+# but need the real ROMs and the programs in assets/, which CI has not got;
+# without them they pass by saying they were skipped, so say it here too.
+missing=""
+for f in 128.rom 48.rom minfo.tap fusetest.tap timingtest.tap butler-128k.szx; do
+  [ -f "assets/$f" ] || missing="$missing $f"
+done
+if [ -n "$missing" ]; then
+  echo "!!! hardware timing tests SKIPPED for want of:$missing (see assets/README.md)"
+fi
+
 if [ ${#failed[@]} -ne 0 ]; then
   printf 'FAILED: %s\n' "${failed[@]}"
   exit 1
