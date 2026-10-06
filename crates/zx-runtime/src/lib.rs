@@ -9,6 +9,7 @@ pub mod ay;
 pub mod bus;
 pub mod interp;
 pub mod keys;
+pub mod loader;
 pub use zx_core::png;
 pub mod machine;
 pub mod memory;
@@ -31,7 +32,12 @@ pub struct Misses {
 
 impl Zx {
     /// Runs one 50 Hz frame.
-    pub fn run_frame(&mut self, code: BlockFn, misses: &mut Misses) {
+    ///
+    /// `code` is called before each instruction: if it returns true it has
+    /// dealt with that point itself (run compiled code, or stood in for a
+    /// ROM routine, as [`crate::loader::TapeFeeder`] does), and the loop
+    /// looks again at wherever it left the processor.
+    pub fn run_frame(&mut self, mut code: impl FnMut(&mut Zx) -> bool, misses: &mut Misses) {
         self.int_pending = true;
 
         let mut in_fallback = false;
