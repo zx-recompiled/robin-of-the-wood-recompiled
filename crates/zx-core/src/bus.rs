@@ -12,7 +12,7 @@
 //! the two cannot disagree about what a push costs, because there is only one
 //! answer to ask.
 
-use crate::timing::contention;
+use crate::timing::{SPECTRUM_48, Timing};
 
 /// What the processor is doing with the bus for one machine cycle.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -133,13 +133,21 @@ pub const fn contended(addr: u16) -> bool {
     0x4000 <= addr && addr < 0x8000
 }
 
-/// Charges one machine cycle onto `t`, the ULA's delay included.
+/// Charges one machine cycle onto `t`, the ULA's delay included, on a 48K
+/// machine.
 pub fn charge(t: &mut u32, c: Cycle) {
+    charge_on(t, c, &SPECTRUM_48, contended);
+}
+
+/// Charges one machine cycle onto `t` on any machine: its `timing`, and
+/// whether an address is in memory the ULA shares, which on a 128K machine
+/// depends on what is paged where.
+pub fn charge_on(t: &mut u32, c: Cycle, timing: &Timing, contended: impl Fn(u16) -> bool) {
     match c.kind {
-        Kind::PortRead | Kind::PortWrite => charge_io(t, c.at),
+        Kind::PortRead | Kind::PortWrite => charge_io_on(t, c.at, timing, contended),
         _ => {
             if contended(c.at) {
-                *t += contention(*t);
+                *t += timing.contention(*t);
             }
             *t += c.len;
         }
@@ -154,11 +162,17 @@ pub fn charge(t: &mut u32, c: Cycle) {
 /// with bit 0 clear is the ULA's own, and it holds the processor for the
 /// three T-states it takes to answer.
 pub fn charge_io(t: &mut u32, port: u16) {
-    let ula_range = (0x40..0x80).contains(&(port >> 8));
+    charge_io_on(t, port, &SPECTRUM_48, contended);
+}
+
+/// [`charge_io`] on any machine. The port's high byte is on the address bus,
+/// so a port whose high byte would name contended memory is contended.
+pub fn charge_io_on(t: &mut u32, port: u16, timing: &Timing, contended: impl Fn(u16) -> bool) {
+    let ula_range = contended(port);
     let ula_port = port & 1 == 0;
     let tick = |t: &mut u32, contend: bool, len: u32| {
         if contend {
-            *t += contention(*t);
+            *t += timing.contention(*t);
         }
         *t += len;
     };

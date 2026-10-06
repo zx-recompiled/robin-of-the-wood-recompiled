@@ -5,11 +5,13 @@
 //! functions by program counter and falls back to the [`interp`]reter for
 //! anything that was not compiled (or whose bytes have since changed).
 
+pub mod ay;
 pub mod bus;
 pub mod interp;
 pub mod keys;
 pub use zx_core::png;
 pub mod machine;
+pub mod memory;
 pub mod screen;
 pub mod trace;
 
@@ -33,7 +35,7 @@ impl Zx {
         self.int_pending = true;
 
         let mut in_fallback = false;
-        while self.t < FRAME_T {
+        while self.t < self.timing.frame {
             if self.int_pending {
                 if self.iff1 && !self.ei_delay {
                     self.int_pending = false;
@@ -41,7 +43,7 @@ impl Zx {
                         trace.on_interrupt();
                     }
                     self.accept_interrupt();
-                } else if self.t >= INT_LEN {
+                } else if self.t >= self.timing.int_len {
                     self.int_pending = false;
                 }
             }
@@ -52,7 +54,7 @@ impl Zx {
                 let until = if self.int_pending {
                     self.t + 4
                 } else {
-                    FRAME_T
+                    self.timing.frame
                 };
                 let nops = (until - self.t).div_ceil(4);
                 self.r = (self.r & 0x80) | (self.r.wrapping_add(nops as u8) & 0x7F);
@@ -71,7 +73,7 @@ impl Zx {
             }
             interp::step(self);
         }
-        self.t -= FRAME_T;
+        self.t -= self.timing.frame;
         self.frame += 1;
     }
 }
@@ -99,8 +101,8 @@ impl Zx {
         let mut frames = 0;
         let mut first = true;
         loop {
-            if self.t >= FRAME_T {
-                self.t -= FRAME_T;
+            if self.t >= self.timing.frame {
+                self.t -= self.timing.frame;
                 self.frame += 1;
                 frames += 1;
                 if frames > max_frames {
@@ -112,7 +114,7 @@ impl Zx {
                 if self.iff1 && !self.ei_delay {
                     self.int_pending = false;
                     self.accept_interrupt();
-                } else if self.t >= INT_LEN {
+                } else if self.t >= self.timing.int_len {
                     self.int_pending = false;
                 }
             }
@@ -121,7 +123,7 @@ impl Zx {
                 let until = if self.int_pending {
                     self.t + 4
                 } else {
-                    FRAME_T
+                    self.timing.frame
                 };
                 let nops = (until - self.t).div_ceil(4);
                 self.r = (self.r & 0x80) | (self.r.wrapping_add(nops as u8) & 0x7F);

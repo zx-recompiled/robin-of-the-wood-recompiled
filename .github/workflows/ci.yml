@@ -156,7 +156,9 @@ jobs:
             | tee /tmp/z80.log
           grep -q '/1335 cases match' /tmp/z80.log
           for v in z80full z80ccf z80memptr; do
-            grep -q "z80test $v: [0-9]*/160 tests pass" /tmp/z80.log
+            for m in 48K 128K; do
+              grep -q "z80test $v on the $m: [0-9]*/160 tests pass" /tmp/z80.log
+            done
           done
 
       - name: Formatting

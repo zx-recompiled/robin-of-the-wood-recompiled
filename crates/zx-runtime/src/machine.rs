@@ -4,7 +4,7 @@
 //! Recompiled code manipulates this struct directly (`z.a = z.read(z.hl());`),
 //! so everything the generated code touches is public and kept flat.
 
-use zx_core::{BlockOp, Cond, MachineState, Reg8, Reg16};
+use zx_core::{BlockOp, Cond, MachineState, Model, Reg8, Reg16};
 
 pub const CF: u8 = 0x01;
 pub const NF: u8 = 0x02;
@@ -15,10 +15,12 @@ pub const YF: u8 = 0x20;
 pub const ZF: u8 = 0x40;
 pub const SF: u8 = 0x80;
 
-/// T-states per frame on a 48K Spectrum (224 per line * 312 lines).
+/// T-states per frame on a 48K Spectrum (224 per line * 312 lines). A
+/// machine's own is [`Zx::timing`].
 pub use zx_core::timing::FRAME_T;
-/// How long the ULA holds /INT low at the start of each frame.
-pub const INT_LEN: u32 = 32;
+/// How long the ULA holds /INT low at the start of each frame, on a 48K
+/// Spectrum. A machine's own is [`Zx::timing`].
+pub const INT_LEN: u32 = zx_core::timing::SPECTRUM_48.int_len;
 
 #[inline]
 fn sz53(v: u8) -> u8 {
@@ -88,10 +90,23 @@ pub struct Zx {
     /// rests on*). Set by [`crate::interp::step`].
     pub wz: u16,
 
+    /// The shape of the machine's frame: its length, the interrupt's, and
+    /// where the ULA's contention falls.
+    pub timing: zx_core::timing::Timing,
     /// T-states since the start of the current frame.
     pub t: u32,
-    pub mem: Box<[u8; 0x10000]>,
-    pub rom_loaded: bool,
+    /// Which Spectrum this is.
+    pub model: Model,
+    /// The ROM and RAM, and which page each quarter of the address space
+    /// shows.
+    pub memory: crate::memory::Memory,
+    /// The last value written to port `0x7FFD` on a 128K machine: the bank
+    /// at `0xC000` (bits 0–2), the screen shown (bit 3: bank 5 or 7), the ROM
+    /// (bit 4), and whether paging is locked until reset (bit 5).
+    pub port_7ffd: u8,
+    /// The 128K's sound chip, as registers. A 48K has none, and its ports
+    /// answer nothing there.
+    pub ay: crate::ay::Ay,
 
     pub border: u8,
     /// Current level of the beeper (EAR output, bit 4 of port 0xFE).
@@ -120,14 +135,6 @@ pub struct Zx {
 
 impl Zx {
     pub fn new(state: &MachineState, rom: Option<&[u8]>) -> Zx {
-        let mut mem = Box::new([0u8; 0x10000]);
-        mem[0x4000..].copy_from_slice(&state.ram);
-        if let Some(rom) = rom {
-            // A user-supplied file: a short or wrong one should not be an
-            // index panic. Whatever is there is used, and the rest stays zero.
-            let n = rom.len().min(0x4000);
-            mem[..n].copy_from_slice(&rom[..n]);
-        }
         Zx {
             a: state.a,
             f: state.f,
@@ -158,9 +165,17 @@ impl Zx {
             ei_delay: false,
             q: 0,
             wz: 0,
+            timing: state.model.timing(),
             t: 0,
-            mem,
-            rom_loaded: rom.is_some(),
+            model: state.model,
+            memory: match state.model {
+                Model::Spectrum48 => crate::memory::Memory::new_48k(&state.ram, rom),
+                Model::Spectrum128 => {
+                    crate::memory::Memory::new_128k(&state.ram, rom, state.port_7ffd)
+                }
+            },
+            port_7ffd: state.port_7ffd,
+            ay: crate::ay::Ay::default(),
             border: state.border,
             ear: false,
 
@@ -347,24 +362,53 @@ impl Zx {
 
     /// Charges one machine cycle, ULA delay included.
     pub fn charge(&mut self, c: crate::bus::Cycle) {
-        zx_core::bus::charge(&mut self.t, c);
+        let mut t = self.t;
+        zx_core::bus::charge_on(&mut t, c, &self.timing, |a| self.contended(a));
+        self.t = t;
+    }
+
+    /// Whether `addr` is in memory the ULA shares. On a 48K machine, the 16K
+    /// at `0x4000`. On a 128K, the odd banks (1, 3, 5, 7) wherever they are
+    /// paged: always bank 5 at `0x4000`, and `0xC000` when an odd bank is
+    /// there.
+    #[must_use]
+    pub fn contended(&self, addr: u16) -> bool {
+        match self.model {
+            Model::Spectrum48 => zx_core::bus::contended(addr),
+            Model::Spectrum128 => {
+                let page = self.memory.slot(usize::from(addr >> 14));
+                page >= crate::memory::Memory::bank(0)
+                    && (page - crate::memory::Memory::bank(0)) % 2 == 1
+            }
+        }
     }
 
     // --- memory -------------------------------------------------------------
 
     #[inline(always)]
     pub fn read(&self, addr: u16) -> u8 {
-        self.mem[addr as usize]
+        self.memory.read(addr)
     }
 
-    /// Writes a byte. The bottom 16K is the ROM and ignores writes — but
-    /// only when a ROM was actually loaded; with none, it is just memory.
+    /// Writes a byte. ROM ignores writes — but only when a ROM was actually
+    /// loaded; with none, the bottom 16K is just memory.
     #[inline(always)]
     pub fn write(&mut self, addr: u16, v: u8) {
-        if addr >= 0x4000 || !self.rom_loaded {
-            self.mem[addr as usize] = v;
-            if let Some(trace) = &mut self.trace {
-                trace.on_write(addr);
+        if self.memory.write(addr, v)
+            && let Some(trace) = &mut self.trace
+        {
+            trace.on_write(addr);
+        }
+    }
+
+    /// The page the ULA displays: on a 48K machine, the one at `0x4000`; on
+    /// a 128K, bank 5 or bank 7, as bit 3 of port `0x7FFD` says.
+    #[must_use]
+    pub fn screen_page(&self) -> usize {
+        match self.model {
+            Model::Spectrum48 => self.memory.slot(1),
+            Model::Spectrum128 => {
+                crate::memory::Memory::bank(if self.port_7ffd & 0x08 == 0 { 5 } else { 7 })
             }
         }
     }
@@ -396,8 +440,12 @@ impl Zx {
     /// Whether memory at `addr` still holds the bytes a block was compiled from.
     #[inline(always)]
     pub fn code_ok(&self, addr: u16, bytes: &[u8]) -> bool {
-        let start = addr as usize;
-        self.mem.get(start..start + bytes.len()) == Some(bytes)
+        // Not wrapping round past 0xFFFF: a block cannot run off the top.
+        addr as usize + bytes.len() <= 0x10000
+            && bytes
+                .iter()
+                .enumerate()
+                .all(|(i, &b)| self.read(addr.wrapping_add(i as u16)) == b)
     }
 
     // --- I/O ----------------------------------------------------------------
@@ -417,6 +465,9 @@ impl Zx {
             // Issue 3 behaviour: bit 6 follows the EAR output.
             let ear = if self.ear { 0x40 } else { 0 };
             0xA0 | ear | keys
+        } else if self.model == Model::Spectrum128 && port & 0xC002 == 0xC000 {
+            // The AY's register, decoded from A15, A14 and A1.
+            self.ay.read()
         } else if port & 0x20 == 0 {
             self.kempston
         } else {
@@ -428,6 +479,22 @@ impl Zx {
         if port & 1 == 0 {
             self.border = v & 7;
             self.ear = v & 0x10 != 0;
+        }
+        // The 128K decodes its paging port from A15 and A1 alone, so any port
+        // with both low pages memory, `0x7FFD` being the usual one. Once bit 5
+        // has been written, nothing pages until reset.
+        if self.model == Model::Spectrum128 && port & 0x8002 == 0 && self.port_7ffd & 0x20 == 0 {
+            self.port_7ffd = v;
+            self.memory.page_128k(v);
+        }
+        // The AY: `0xFFFD` selects a register and `0xBFFD` writes it, decoded
+        // from A15, A14 and A1.
+        if self.model == Model::Spectrum128 {
+            match port & 0xC002 {
+                0xC000 => self.ay.select(v),
+                0x8000 => self.ay.write(v, self.frame, self.t),
+                _ => {}
+            }
         }
     }
 

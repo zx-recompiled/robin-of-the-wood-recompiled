@@ -243,6 +243,8 @@ fn blank_machine() -> Zx {
         iff2: false,
         im: 0,
         border: 0,
+        model: zx_core::Model::Spectrum48,
+        port_7ffd: 0,
         ram: vec![0; 0xC000],
     };
     let mut z = Zx::new(&state, None);
@@ -278,7 +280,7 @@ fn load(z: &mut Zx, case: &Case) {
     z.t = 0;
     for (at, bytes) in &case.mem {
         for (i, &b) in bytes.iter().enumerate() {
-            z.mem[(*at as usize + i) & 0xFFFF] = b;
+            z.memory.poke(at.wrapping_add(i as u16), b);
         }
     }
 }
@@ -425,16 +427,17 @@ fn matches_the_z80_test_corpus() {
         // should have.
         for (at, bytes) in &want.mem {
             for (i, &b) in bytes.iter().enumerate() {
-                before.mem[(*at as usize + i) & 0xFFFF] = b;
+                before.memory.poke(at.wrapping_add(i as u16), b);
             }
         }
         let wrong: Vec<usize> = (0..0x10000)
-            .filter(|&a| before.mem[a] != z.mem[a])
+            .filter(|&a| before.read(a as u16) != z.read(a as u16))
             .collect();
         for &a in wrong.iter().take(4) {
             diffs.push(format!(
                 "[{a:04x}] want {:02x} got {:02x}",
-                before.mem[a], z.mem[a]
+                before.read(a as u16),
+                z.read(a as u16)
             ));
         }
         if wrong.len() > 4 {

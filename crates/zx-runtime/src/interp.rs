@@ -9,8 +9,7 @@ use crate::machine::Zx;
 use zx_core::{Addr, BlockOp, Decoded, Instr, Op8, Reg8, decode};
 
 pub fn decode_at(z: &Zx, pc: u16) -> Decoded {
-    let mem = &z.mem;
-    decode(&|a| mem[a as usize], pc)
+    decode(&|a| z.read(a), pc)
 }
 
 fn addr(z: &Zx, a: Addr) -> u16 {
@@ -73,8 +72,11 @@ pub fn step(z: &mut Zx) {
     let pc = z.pc;
     let d = decode_at(z, pc);
     let next = pc.wrapping_add(d.len as u16);
-    if let Some(trace) = &mut z.trace {
-        trace.on_exec(pc, &z.mem, d.len);
+    if z.trace.is_some() {
+        let bytes = [0u16, 1, 2, 3].map(|i| z.read(pc.wrapping_add(i)));
+        if let Some(trace) = &mut z.trace {
+            trace.on_exec(pc, bytes, d.len);
+        }
     }
     // The cycles are worked out before anything moves, because each address
     // they name is the one the processor has at the moment it puts it out.

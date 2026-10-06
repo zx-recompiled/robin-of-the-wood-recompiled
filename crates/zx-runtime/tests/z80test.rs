@@ -7,11 +7,11 @@
 //! the results with one taken on a real 48K Spectrum with a Zilog Z80. So this
 //! is the authority on flags and registers, and Fuse is kept for timing.
 //!
-//! Three variants are run: `z80full` (every flag and register), `z80ccf`
-//! (`CCF` after every instruction, which shows the hidden Q register) and
-//! `z80memptr` (`BIT n,(HL)` after every instruction, which shows MEMPTR). The
-//! others are subsets of `z80full`, or, for `z80ccfscr`, a picture with no
-//! verdict.
+//! Three variants are run, on both the 48K and the 128K machine: `z80full`
+//! (every flag and register), `z80ccf` (`CCF` after every instruction, which
+//! shows the hidden Q register) and `z80memptr` (`BIT n,(HL)` after every
+//! instruction, which shows MEMPTR). The others are subsets of `z80full`, or,
+//! for `z80ccfscr`, a picture with no verdict.
 //!
 //! The tapes are not in this repository: they would trip the guard against
 //! committed tapes, and they are fetched in CI. See `assets/README.md`.
@@ -20,7 +20,7 @@
 
 use std::path::PathBuf;
 
-use zx_core::{MachineState, tape};
+use zx_core::{MachineState, Model, state::RAM_128, tape};
 use zx_runtime::{Zx, interp};
 
 /// Where z80test is loaded and started: `LOAD "" CODE` puts it here.
@@ -51,10 +51,10 @@ fn port_in(_: u16) -> u8 {
 fn stub_rom(z: &mut Zx) {
     const RET: u8 = 0xC9;
     const EI: u8 = 0xFB;
-    z.mem[RST_10 as usize] = RET;
-    z.mem[CHAN_OPEN as usize] = RET;
-    z.mem[IM1 as usize] = EI;
-    z.mem[IM1 as usize + 1] = RET;
+    z.memory.poke(RST_10, RET);
+    z.memory.poke(CHAN_OPEN, RET);
+    z.memory.poke(IM1, EI);
+    z.memory.poke(IM1 + 1, RET);
 }
 
 /// The text z80test prints, as lines.
@@ -108,8 +108,30 @@ fn tapes() -> PathBuf {
     )
 }
 
+/// The machine z80test runs on: a 48K, or a 128K with the tape's memory
+/// in banks 5, 2 and 0, paged as the 128K's 48 BASIC leaves it (`0x10`).
+fn machine(tape: &tape::Tape, model: Model) -> Zx {
+    let state = MachineState::from_tape(tape, START, STACK);
+    let state = match model {
+        Model::Spectrum48 => state,
+        Model::Spectrum128 => {
+            let mut ram = vec![0u8; RAM_128];
+            for (bank, chunk) in [5, 2, 0].into_iter().zip(tape.ram.chunks(0x4000)) {
+                ram[bank * 0x4000..][..chunk.len()].copy_from_slice(chunk);
+            }
+            MachineState {
+                model,
+                port_7ffd: 0x10,
+                ram,
+                ..state
+            }
+        }
+    };
+    Zx::new(&state, None)
+}
+
 /// Runs one variant to the end, or says why it cannot and returns `None`.
-fn run(variant: &str) -> Option<Outcome> {
+fn run(variant: &str, model: Model) -> Option<Outcome> {
     let path = tapes().join(format!("{variant}.tap"));
     let Ok(bytes) = std::fs::read(&path) else {
         println!(
@@ -119,7 +141,7 @@ fn run(variant: &str) -> Option<Outcome> {
         return None;
     };
     let tape = tape::load_tap(&bytes).expect("z80test tape loads");
-    let mut z = Zx::new(&MachineState::from_tape(&tape, START, STACK), None);
+    let mut z = machine(&tape, model);
     z.port_in_hook = Some(port_in);
     stub_rom(&mut z);
 
@@ -173,13 +195,17 @@ fn run(variant: &str) -> Option<Outcome> {
     })
 }
 
-fn check(variant: &str) {
-    let Some(out) = run(variant) else {
+fn check(variant: &str, model: Model) {
+    let Some(out) = run(variant, model) else {
         return;
     };
     let total = out.passed + out.skipped + out.failed.len();
+    let on = match model {
+        Model::Spectrum48 => "48K",
+        Model::Spectrum128 => "128K",
+    };
     println!(
-        "z80test {variant}: {}/{total} tests pass, {} skipped as z80test intends",
+        "z80test {variant} on the {on}: {}/{total} tests pass, {} skipped as z80test intends",
         out.passed, out.skipped
     );
     for f in &out.failed {
@@ -196,15 +222,33 @@ fn check(variant: &str) {
 
 #[test]
 fn z80full() {
-    check("z80full");
+    check("z80full", Model::Spectrum48);
 }
 
 #[test]
 fn z80ccf() {
-    check("z80ccf");
+    check("z80ccf", Model::Spectrum48);
 }
 
 #[test]
 fn z80memptr() {
-    check("z80memptr");
+    check("z80memptr", Model::Spectrum48);
+}
+
+// The 128K has the same processor, so the same results; its paging and
+// timing must not disturb them.
+
+#[test]
+fn z80full_on_the_128k() {
+    check("z80full", Model::Spectrum128);
+}
+
+#[test]
+fn z80ccf_on_the_128k() {
+    check("z80ccf", Model::Spectrum128);
+}
+
+#[test]
+fn z80memptr_on_the_128k() {
+    check("z80memptr", Model::Spectrum128);
 }

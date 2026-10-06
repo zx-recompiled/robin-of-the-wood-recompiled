@@ -61,7 +61,7 @@ maintainer's.
 - **Goal**: what ships, plus the one-line reason.
 - **Decisions**: numbered, each with its why. Anything unsettled is a question
   TO the maintainer. Never decide design direction yourself.
-- **Fidelity**: say whether the change can move any of the 25 differential
+- **Fidelity**: say whether the change can move any of the differential
   suites or the Z80 conformance tests (z80test and the Fuse corpus). If it
   can, the ticket says why that is right before the work starts — a suite
   is never adjusted to make a change pass. Say too whether it needs the game

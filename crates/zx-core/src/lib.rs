@@ -13,5 +13,5 @@ pub mod tape;
 pub mod timing;
 
 pub use decode::*;
-pub use state::MachineState;
+pub use state::{MachineState, Model};
 pub use tape::Tape;
