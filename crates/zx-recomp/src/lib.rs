@@ -25,15 +25,17 @@ use std::path::Path;
 
 use zx_core::MachineState;
 use zx_core::sha1::sha1_hex;
+use zx_runtime::Zx;
 
 pub use config::Config;
 
-/// The user-supplied files a build works from.
+/// The user-supplied files a build works from, and the machine they make.
 pub struct Inputs {
     /// The machine as the tape's program starts.
-    pub start: MachineState,
+    pub machine: Zx,
     pub tape_sha1: String,
-    pub rom: Option<Vec<u8>>,
+    /// Whether a ROM was loaded (without one, ROM code cannot run).
+    pub rom_loaded: bool,
     pub rom_sha1: Option<String>,
 }
 
@@ -66,45 +68,83 @@ impl Inputs {
     /// If either file is missing or unreadable, its SHA-1 does not match the
     /// one the configuration pins, or the tape will not parse.
     pub fn load(cfg: &Config, assets: &Path) -> Result<Inputs, String> {
-        let tape_path = assets.join(&cfg.game.tape);
+        use config::Machine;
+        let g = &cfg.game;
+        let tape_path = assets.join(&g.tape);
         let tape_bytes = read(&tape_path, "tape")?;
         let tape_sha1 = sha1_hex(&tape_bytes);
-        check_hash("tape", &tape_sha1, cfg.game.tape_sha1.as_deref())?;
-        let tape = zx_core::tape::load_tap(&tape_bytes)
-            .map_err(|e| format!("{}: {e}", tape_path.display()))?;
-        let start = MachineState::from_tape(&tape, cfg.game.entry_pc, cfg.game.entry_sp);
+        check_hash("tape", &tape_sha1, g.tape_sha1.as_deref())?;
+        let in_tape = |e: String| format!("{}: {e}", tape_path.display());
 
-        let (rom, rom_sha1) = match &cfg.game.rom {
+        let rom_len = match g.machine {
+            Machine::Spectrum48 => 0x4000,
+            Machine::Spectrum128 => 0x8000,
+        };
+        let (rom, rom_sha1) = match &g.rom {
             Some(name) => {
                 let bytes = read(&assets.join(name), "ROM")?;
-                if bytes.len() != 0x4000 {
+                if bytes.len() != rom_len {
                     return Err(format!(
-                        "ROM {name} is {} bytes, expected 16384",
+                        "ROM {name} is {} bytes, expected {rom_len}",
                         bytes.len()
                     ));
                 }
                 let hash = sha1_hex(&bytes);
-                check_hash("ROM", &hash, cfg.game.rom_sha1.as_deref())?;
+                check_hash("ROM", &hash, g.rom_sha1.as_deref())?;
                 (Some(bytes), Some(hash))
             }
             None => (None, None),
         };
+
+        let machine = match g.machine {
+            Machine::Spectrum48 => {
+                let (Some(pc), Some(sp)) = (g.entry_pc, g.entry_sp) else {
+                    return Err("a 48K config needs entry_pc and entry_sp".into());
+                };
+                let tape = zx_core::tape::load_tap(&tape_bytes).map_err(in_tape)?;
+                Zx::new(&MachineState::from_tape(&tape, pc, sp), rom.as_deref())
+            }
+            Machine::Spectrum128 => {
+                let until = g.boot_until.ok_or("a 128K config needs boot_until")?;
+                let rom = rom
+                    .as_deref()
+                    .ok_or("a 128K boots from its ROM: name it in rom")?;
+                let blocks = if tape_bytes.starts_with(b"ZXTape!") {
+                    zx_core::tape::load_tzx(&tape_bytes).map_err(in_tape)?
+                } else {
+                    tape_blocks(&tape_bytes).map_err(in_tape)?
+                };
+                zx_runtime::loader::boot_128k(rom, blocks, until, 3000)?
+            }
+        };
         Ok(Inputs {
-            start,
+            machine,
             tape_sha1,
-            rom,
+            rom_loaded: rom.is_some(),
             rom_sha1,
         })
     }
 
-    /// Memory image the analysis starts from: RAM from the tape, plus the ROM.
+    /// Memory image the analysis starts from: the 64K the processor sees as
+    /// the program starts, the ROM included.
     pub fn memory(&self) -> Vec<u8> {
-        let mut mem = self.start.memory();
-        if let Some(rom) = &self.rom {
-            mem[..0x4000].copy_from_slice(rom);
-        }
-        mem
+        (0..=0xFFFFu16).map(|a| self.machine.read(a)).collect()
     }
+}
+
+/// A `.tap` file's blocks, as they are on tape.
+fn tape_blocks(bytes: &[u8]) -> Result<Vec<Vec<u8>>, String> {
+    let mut blocks = Vec::new();
+    let mut i = 0usize;
+    while i + 2 <= bytes.len() {
+        let len = usize::from(bytes[i]) | usize::from(bytes[i + 1]) << 8;
+        let block = bytes
+            .get(i + 2..i + 2 + len)
+            .ok_or_else(|| format!("truncated tape block at {i:#x}"))?;
+        blocks.push(block.to_vec());
+        i += 2 + len;
+    }
+    Ok(blocks)
 }
 
 /// Reads a miss log written by the runtime: one hex address per line.

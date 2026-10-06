@@ -109,8 +109,8 @@ fn run() -> Result<(), String> {
     let analysis = analysis::analyze(
         &cfg,
         &inputs.memory(),
-        inputs.start.pc,
-        inputs.rom.is_some(),
+        inputs.machine.pc,
+        inputs.rom_loaded,
         &traced.trace,
         &extra,
     );

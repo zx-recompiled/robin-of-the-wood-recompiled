@@ -61,7 +61,7 @@ pub fn run(
     let mut rng = Rng(random.as_ref().map_or(1, |(r, _)| r.seed) | 1);
     let mut held_random: Vec<Key> = Vec::new();
 
-    let mut z = Zx::new(&inputs.start, inputs.rom.as_deref());
+    let mut z = inputs.machine.clone();
     z.trace = Some(Box::new(Trace::new(z.memory.pages())));
     let mut misses = Misses::default();
 
