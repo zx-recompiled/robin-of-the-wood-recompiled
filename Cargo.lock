@@ -45,6 +45,9 @@ dependencies = [
 [[package]]
 name = "robin"
 version = "0.1.0"
+dependencies = [
+ "zx-core",
+]
 
 [[package]]
 name = "serde"
