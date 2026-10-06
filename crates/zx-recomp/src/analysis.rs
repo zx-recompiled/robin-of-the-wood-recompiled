@@ -17,7 +17,7 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
-use crate::config::{Config, Machine};
+use crate::config::{Config, Model};
 use zx_core::{Decoded, Flow, decode};
 use zx_runtime::Zx;
 use zx_runtime::memory::PAGE;
@@ -289,7 +289,7 @@ pub fn analyze(cfg: &Config, start: &Zx, trace: &Trace, extra_entries: &[u16]) -
     // ROM paged at 0x0000 can change, so only the trace says whether a
     // handler there runs (Robin's never does: `docs/re/robin.md`, *What it
     // uses from the ROM*).
-    if analysis.rom_loaded && cfg.game.machine == Machine::Spectrum48 {
+    if analysis.rom_loaded && cfg.game.model == Model::Spectrum48 {
         entries.insert(here(0x0038));
     }
     entries.extend(cfg.analysis.entry_points.iter().map(|&a| here(a)));

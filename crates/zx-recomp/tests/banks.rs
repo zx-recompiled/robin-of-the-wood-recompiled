@@ -53,7 +53,7 @@ fn trace(z: &Zx) -> Trace {
 
 fn config() -> Config {
     Config::parse(
-        "[game]\nname = \"t\"\nmachine = \"128k\"\ntape = \"t.tzx\"\nboot_until = 0x8000\n\
+        "[game]\nname = \"t\"\nmodel = \"128k\"\ntape = \"t.tzx\"\nboot_until = 0x8000\n\
          [analysis]\nbanked_calls = [0x8100]\n",
     )
     .expect("parses")

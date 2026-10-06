@@ -68,7 +68,7 @@ impl Inputs {
     /// If either file is missing or unreadable, its SHA-1 does not match the
     /// one the configuration pins, or the tape will not parse.
     pub fn load(cfg: &Config, assets: &Path) -> Result<Inputs, String> {
-        use config::Machine;
+        use config::Model;
         let g = &cfg.game;
         let tape_path = assets.join(&g.tape);
         let tape_bytes = read(&tape_path, "tape")?;
@@ -76,9 +76,9 @@ impl Inputs {
         check_hash("tape", &tape_sha1, g.tape_sha1.as_deref())?;
         let in_tape = |e: String| format!("{}: {e}", tape_path.display());
 
-        let rom_len = match g.machine {
-            Machine::Spectrum48 => 0x4000,
-            Machine::Spectrum128 => 0x8000,
+        let rom_len = match g.model {
+            Model::Spectrum48 => 0x4000,
+            Model::Spectrum128 => 0x8000,
         };
         let (rom, rom_sha1) = match &g.rom {
             Some(name) => {
@@ -96,15 +96,15 @@ impl Inputs {
             None => (None, None),
         };
 
-        let machine = match g.machine {
-            Machine::Spectrum48 => {
+        let machine = match g.model {
+            Model::Spectrum48 => {
                 let (Some(pc), Some(sp)) = (g.entry_pc, g.entry_sp) else {
                     return Err("a 48K config needs entry_pc and entry_sp".into());
                 };
                 let tape = zx_core::tape::load_tap(&tape_bytes).map_err(in_tape)?;
                 Zx::new(&MachineState::from_tape(&tape, pc, sp), rom.as_deref())
             }
-            Machine::Spectrum128 => {
+            Model::Spectrum128 => {
                 let until = g.boot_until.ok_or("a 128K config needs boot_until")?;
                 let rom = rom
                     .as_deref()

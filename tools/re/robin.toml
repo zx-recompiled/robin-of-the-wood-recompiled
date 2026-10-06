@@ -8,7 +8,7 @@
 
 [game]
 name = "Robin of the Wood"
-machine = "128k"
+model = "128k"
 # Any name; the SHA-1 is what is checked (games/robin, TAPE_SHA1).
 tape = "Robin Of The Wood - 128k.tzx"
 tape_sha1 = "2aad3402cdc08907000900c5da8c29eeb2f48c9e"

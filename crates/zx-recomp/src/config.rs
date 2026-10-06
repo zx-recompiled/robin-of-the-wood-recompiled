@@ -21,9 +21,9 @@ pub struct Config {
 #[serde(deny_unknown_fields)]
 pub struct Game {
     pub name: String,
-    /// The machine: a 48K (the default) or a 128K.
+    /// The model: a 48K (the default) or a 128K.
     #[serde(default)]
-    pub machine: Machine,
+    pub model: Model,
     /// Tape file name (`.tap` or `.tzx`), looked up in the assets directory.
     pub tape: String,
     /// Expected SHA-1 of the tape. Builds fail on a mismatch.
@@ -44,7 +44,7 @@ pub struct Game {
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize)]
-pub enum Machine {
+pub enum Model {
     #[default]
     #[serde(rename = "48k")]
     Spectrum48,
@@ -180,7 +180,7 @@ mod tests {
             "[game]\nname = \"g\"\ntape = \"g.tap\"\nentry_pc = 0x5E24\nentry_sp = 0x5E20\n",
         )
         .expect("parses");
-        assert_eq!(cfg.game.machine, Machine::Spectrum48);
+        assert_eq!(cfg.game.model, Model::Spectrum48);
         assert_eq!(
             (cfg.game.entry_pc, cfg.game.entry_sp),
             (Some(0x5E24), Some(0x5E20))
@@ -190,12 +190,12 @@ mod tests {
     #[test]
     fn a_128k_config_boots_to_its_hand_over() {
         let cfg = Config::parse(
-            "[game]\nname = \"g\"\nmachine = \"128k\"\ntape = \"g.tzx\"\nboot_until = 0x5B00\n\
+            "[game]\nname = \"g\"\nmodel = \"128k\"\ntape = \"g.tzx\"\nboot_until = 0x5B00\n\
              rom = \"128.rom\"\n",
         )
         .expect("parses");
-        assert_eq!(cfg.game.machine, Machine::Spectrum128);
+        assert_eq!(cfg.game.model, Model::Spectrum128);
         assert_eq!(cfg.game.boot_until, Some(0x5B00));
-        assert!(Config::parse("[game]\nname = \"g\"\nmachine = \"+3\"\ntape = \"g\"\n").is_err());
+        assert!(Config::parse("[game]\nname = \"g\"\nmodel = \"+3\"\ntape = \"g\"\n").is_err());
     }
 }
