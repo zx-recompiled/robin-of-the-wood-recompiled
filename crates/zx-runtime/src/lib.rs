@@ -42,16 +42,20 @@ impl Zx {
 
         let mut in_fallback = false;
         while self.t < self.timing.frame {
-            if self.int_pending {
-                if self.iff1 && !self.ei_delay {
-                    self.int_pending = false;
-                    if let Some(trace) = &mut self.trace {
-                        trace.on_interrupt();
-                    }
-                    self.accept_interrupt();
-                } else if self.t >= self.timing.int_len {
-                    self.int_pending = false;
+            // /INT is held for the first `int_len` T-states of the frame, and
+            // only then: once that has passed it is gone, whether or not
+            // interrupts were enabled to see it. Checking that first matters:
+            // a pulse that lasted until the next enabled instruction instead
+            // made Patrik Rak's `minfo` measure it 8 T-states too long.
+            if self.int_pending && self.t >= self.timing.int_len {
+                self.int_pending = false;
+            }
+            if self.int_pending && self.iff1 && !self.ei_delay {
+                self.int_pending = false;
+                if let Some(trace) = &mut self.trace {
+                    trace.on_interrupt();
                 }
+                self.accept_interrupt();
             }
             self.ei_delay = false;
 
@@ -116,13 +120,13 @@ impl Zx {
                 }
                 self.int_pending = true;
             }
-            if self.int_pending {
-                if self.iff1 && !self.ei_delay {
-                    self.int_pending = false;
-                    self.accept_interrupt();
-                } else if self.t >= self.timing.int_len {
-                    self.int_pending = false;
-                }
+            // As in `run_frame`: the pulse ends at `int_len`, enabled or not.
+            if self.int_pending && self.t >= self.timing.int_len {
+                self.int_pending = false;
+            }
+            if self.int_pending && self.iff1 && !self.ei_delay {
+                self.int_pending = false;
+                self.accept_interrupt();
             }
             self.ei_delay = false;
             if self.halted {
