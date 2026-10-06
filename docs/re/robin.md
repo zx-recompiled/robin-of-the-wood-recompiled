@@ -144,5 +144,5 @@ the same 128K ROM (`assets/128.rom`, whose SHA-1 matches zx84's own).
 
 - The program's own menu says "© 1986 Odin Computer Graphics". **provisional**
 - The individual credits (Steve Wetheril, Paul Salmon, Fred Gray) come only
-  from the dump's archive-info block so far, not from the inlay or the
-  program.
+  from the dump's archive-info block, not from the inlay or the program. The
+  maintainer accepted that as the README's source (#1).

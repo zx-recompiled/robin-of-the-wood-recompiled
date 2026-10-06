@@ -2,6 +2,8 @@
 
 Robin of the Wood, the ZX Spectrum 128K release (Odin Computer Graphics, 1986), rewritten from scratch in Rust to run natively: no emulator and no Z80 at runtime.
 
+The original is by Steve Wetheril, Paul Salmon and Fred Gray, as credited in the dump's archive information.
+
 **This project is not affiliated with or endorsed by the rights holders of Robin of the Wood. You need your own copy of the game:** the program will contain no part of it, and will read the graphics, maps, text and music from your tape when it starts.
 
 ## Status
