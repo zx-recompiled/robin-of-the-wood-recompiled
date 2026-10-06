@@ -28,6 +28,10 @@ plan, in order, is the board's Backlog.
   Z80 corpus (1335 cases, for timing). Their files go in `assets/`.
 - `cargo test -p zx-runtime --test machine128` checks the 128K machine's own
   behaviour: paging, the lock, the shadow screen, contention by bank, the AY.
+- `cargo test -p zx-runtime --test hardware -- --nocapture` runs both machines
+  against test programs measured on real ones (`minfo`, Fuse Test, Rak's
+  Timing Test against a real +2's photographs, Butler's), booting the real
+  ROMs and loading each program from its tape. Needs the files in `assets/`.
 - The tool shell is zsh: never name a variable `status`, and run anything
   loop-shaped as a `bash` script.
 
@@ -62,10 +66,11 @@ plan, in order, is the board's Backlog.
   for timing. All three z80test programs must pass, and the corpus must match
   in every case but the six `KNOWN_WRONG` ones in `tests/fuse.rs`. Most of
   MEMPTR is unconfirmed (starquake-recompiled#145). They pass on both the 48K
-  and the 128K machine. The 128K's timing is checked against test programs
+  and the 128K machine. The machines' timing is checked against test programs
   whose results were measured on real machines, never against another emulator
-  (#12); until then its values say which are measured and which are only
-  written (`zx_core::timing::SPECTRUM_128`).
+  (`tests/hardware.rs`): every known difference is listed by name, with its
+  ticket, and the test checks exactly those differ (#14 the end of a contended
+  line, #16 Butler's tests, the floating bus out of scope).
 - **Fidelity first, and say so when it is not.** Where the rewrite cannot match
   the original exactly, the reason is written down (`README.md`, *Status*)
   rather than left to be discovered.
