@@ -5,6 +5,8 @@
 //! music from the player's own tape at startup, and the rewrite is checked
 //! against the original routine by routine; see `README.md`.
 
+pub mod layout;
+
 /// SHA-1 of the one dump this project supports: the 128K release as a TZX
 /// file (`docs/re/robin.md`, *The tape*). Any other file is refused.
 pub const TAPE_SHA1: &str = "2aad3402cdc08907000900c5da8c29eeb2f48c9e";

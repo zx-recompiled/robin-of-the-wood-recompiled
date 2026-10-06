@@ -144,3 +144,72 @@ pub fn basic_rom(z: &Zx) -> &[u8; PAGE] {
         zx_core::Model::Spectrum128 => 1,
     })
 }
+
+/// Frames from power-on until the 128K's menu takes a key: its ROM tests and
+/// clears memory first.
+const MENU_FRAMES: u32 = 150;
+/// Frames Enter is held at the menu, as a hand would hold it.
+const ENTER_FRAMES: u32 = 5;
+
+/// A 128K machine as it is switched on: `rom` (the 32K `128.rom`), empty RAM,
+/// the processor at 0.
+#[must_use]
+pub fn power_on_128k(rom: &[u8]) -> Zx {
+    let tape = zx_core::tape::Tape {
+        ram: vec![0; 0xC000],
+        loading_screen: None,
+    };
+    let state = zx_core::MachineState {
+        model: zx_core::Model::Spectrum128,
+        port_7ffd: 0,
+        ram: vec![0; zx_core::state::RAM_128],
+        pc: 0,
+        iff1: false,
+        iff2: false,
+        im: 0,
+        ..zx_core::MachineState::from_tape(&tape, 0, 0)
+    };
+    Zx::new(&state, Some(rom))
+}
+
+/// Loads a tape on a 128K the way a person would: switches on, picks Tape
+/// Loader from the menu, and plays the tape (`blocks`, through a
+/// [`TapeFeeder`]). Stops the first time the processor reaches `until` once
+/// every block has loaded: the program's hand-over to itself.
+///
+/// # Errors
+///
+/// If that hasn't happened within `max_frames`, or the tape was not all
+/// loaded by then.
+pub fn boot_128k(
+    rom: &[u8],
+    blocks: Vec<Vec<u8>>,
+    until: u16,
+    max_frames: u32,
+) -> Result<Zx, String> {
+    let mut z = power_on_128k(rom);
+    let mut feeder = TapeFeeder::from_blocks(blocks);
+    let enter = crate::keys::Key::Matrix(6, 0);
+    let mut misses = crate::Misses::default();
+    for f in 0..MENU_FRAMES + ENTER_FRAMES {
+        z.set_key(enter, f >= MENU_FRAMES);
+        z.run_frame(crate::no_code, &mut misses);
+    }
+    z.set_key(enter, false);
+    let start = z.frame;
+    loop {
+        let left = max_frames.saturating_sub((z.frame - start) as u32);
+        if !z.run_until_any_with(&[until], left, |z| feeder.on_step(z)) {
+            return Err(format!(
+                "not at {until:#06x} after {max_frames} frames; {} tape block(s) not loaded",
+                feeder.remaining()
+            ));
+        }
+        // The ROM passes through the same address on its own business while
+        // the tape is still loading; only the arrival after the last block
+        // is the hand-over.
+        if feeder.remaining() == 0 {
+            return Ok(z);
+        }
+    }
+}
