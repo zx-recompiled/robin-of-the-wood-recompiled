@@ -7,18 +7,16 @@
 
 use std::path::PathBuf;
 
-use robin::layout::{
-    ENTRY_7FFD, ENTRY_IM, ENTRY_PC, ENTRY_SP, GAME_BLOCKS, LOADER_BLOCKS, START, banks_from_tape,
-};
+use robin::layout::{ENTRY_7FFD, ENTRY_IM, ENTRY_PC, ENTRY_SP, GAME_BLOCKS, LOADER_BLOCKS, START};
 use zx_runtime::{Zx, loader::boot_128k, memory::Memory};
 
 fn assets() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets")
 }
 
-/// The tape's blocks and the machine booted from them to the hand-over, or
-/// `None` (and a note) without the tape or the ROM.
-fn booted() -> Option<(Vec<Vec<u8>>, Zx)> {
+/// The tape, its blocks, and the machine booted from them to the hand-over,
+/// or `None` (and a note) without the tape or the ROM.
+fn booted() -> Option<(Vec<u8>, Vec<Vec<u8>>, Zx)> {
     let tape = std::fs::read_dir(assets())
         .into_iter()
         .flatten()
@@ -32,12 +30,12 @@ fn booted() -> Option<(Vec<Vec<u8>>, Zx)> {
     };
     let blocks = zx_core::tape::load_tzx(&tape).expect("the tape reads");
     let z = boot_128k(&rom, blocks.clone(), ENTRY_PC, 2000).expect("the original boots");
-    Some((blocks, z))
+    Some((tape, blocks, z))
 }
 
 #[test]
 fn the_hand_over_is_as_the_facts_say() {
-    let Some((_, z)) = booted() else {
+    let Some((_, _, z)) = booted() else {
         return;
     };
     assert_eq!(z.pc, ENTRY_PC);
@@ -49,7 +47,7 @@ fn the_hand_over_is_as_the_facts_say() {
 
 #[test]
 fn the_stub_at_the_hand_over_goes_to_the_programs_start() {
-    let Some((_, mut z)) = booted() else {
+    let Some((_, _, mut z)) = booted() else {
         return;
     };
     assert!(
@@ -59,15 +57,15 @@ fn the_stub_at_the_hand_over_goes_to_the_programs_start() {
     assert_eq!(z.port_7ffd, ENTRY_7FFD);
 }
 
-/// Each of the game's blocks is where the facts say, byte for byte, and the
-/// banks built from the tape and the facts alone, as the game will build
-/// them, match the booted machine there.
+/// Each of the game's blocks is where the facts say, byte for byte, and what
+/// the game's own reader builds from the tape alone (`robin::assets`)
+/// matches the booted machine there.
 #[test]
 fn the_blocks_are_where_the_facts_say() {
-    let Some((blocks, z)) = booted() else {
+    let Some((tape, blocks, z)) = booted() else {
         return;
     };
-    let facts = banks_from_tape(&blocks).expect("the tape fits the facts");
+    let read = robin::assets::read_tape(&tape).expect("the game reads its tape");
     let mut checked = 0usize;
     for (i, b) in GAME_BLOCKS.iter().enumerate() {
         let data = &blocks[LOADER_BLOCKS + i];
@@ -88,9 +86,9 @@ fn the_blocks_are_where_the_facts_say() {
                 LOADER_BLOCKS + i
             );
             assert_eq!(
-                facts[bank * 0x4000 + off],
+                read.bank(bank)[off],
                 booted,
-                "facts-built bank {bank} {off:#06x}"
+                "as the game reads it: bank {bank} {off:#06x}"
             );
             checked += 1;
         }
