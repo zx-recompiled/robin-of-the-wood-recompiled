@@ -90,8 +90,9 @@ pub struct Zx {
 
     /// T-states since the start of the current frame.
     pub t: u32,
-    pub mem: Box<[u8; 0x10000]>,
-    pub rom_loaded: bool,
+    /// The ROM and RAM, and which page each quarter of the address space
+    /// shows.
+    pub memory: crate::memory::Memory,
 
     pub border: u8,
     /// Current level of the beeper (EAR output, bit 4 of port 0xFE).
@@ -120,14 +121,6 @@ pub struct Zx {
 
 impl Zx {
     pub fn new(state: &MachineState, rom: Option<&[u8]>) -> Zx {
-        let mut mem = Box::new([0u8; 0x10000]);
-        mem[0x4000..].copy_from_slice(&state.ram);
-        if let Some(rom) = rom {
-            // A user-supplied file: a short or wrong one should not be an
-            // index panic. Whatever is there is used, and the rest stays zero.
-            let n = rom.len().min(0x4000);
-            mem[..n].copy_from_slice(&rom[..n]);
-        }
         Zx {
             a: state.a,
             f: state.f,
@@ -159,8 +152,7 @@ impl Zx {
             q: 0,
             wz: 0,
             t: 0,
-            mem,
-            rom_loaded: rom.is_some(),
+            memory: crate::memory::Memory::new_48k(&state.ram, rom),
             border: state.border,
             ear: false,
 
@@ -354,19 +346,24 @@ impl Zx {
 
     #[inline(always)]
     pub fn read(&self, addr: u16) -> u8 {
-        self.mem[addr as usize]
+        self.memory.read(addr)
     }
 
-    /// Writes a byte. The bottom 16K is the ROM and ignores writes — but
-    /// only when a ROM was actually loaded; with none, it is just memory.
+    /// Writes a byte. ROM ignores writes — but only when a ROM was actually
+    /// loaded; with none, the bottom 16K is just memory.
     #[inline(always)]
     pub fn write(&mut self, addr: u16, v: u8) {
-        if addr >= 0x4000 || !self.rom_loaded {
-            self.mem[addr as usize] = v;
-            if let Some(trace) = &mut self.trace {
-                trace.on_write(addr);
-            }
+        if self.memory.write(addr, v)
+            && let Some(trace) = &mut self.trace
+        {
+            trace.on_write(addr);
         }
+    }
+
+    /// The page the ULA displays: on a 48K machine, the one at `0x4000`.
+    #[must_use]
+    pub fn screen_page(&self) -> usize {
+        self.memory.slot(1)
     }
 
     #[inline(always)]
@@ -396,8 +393,12 @@ impl Zx {
     /// Whether memory at `addr` still holds the bytes a block was compiled from.
     #[inline(always)]
     pub fn code_ok(&self, addr: u16, bytes: &[u8]) -> bool {
-        let start = addr as usize;
-        self.mem.get(start..start + bytes.len()) == Some(bytes)
+        // Not wrapping round past 0xFFFF: a block cannot run off the top.
+        addr as usize + bytes.len() <= 0x10000
+            && bytes
+                .iter()
+                .enumerate()
+                .all(|(i, &b)| self.read(addr.wrapping_add(i as u16)) == b)
     }
 
     // --- I/O ----------------------------------------------------------------

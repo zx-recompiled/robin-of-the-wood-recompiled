@@ -36,16 +36,16 @@ impl Default for Trace {
 }
 
 impl Trace {
-    pub fn on_exec(&mut self, pc: u16, mem: &[u8; 0x10000], len: u8) {
+    /// Records the instruction at `pc`: its `len` bytes, the first of the four
+    /// `bytes` read from there.
+    pub fn on_exec(&mut self, pc: u16, bytes: [u8; 4], len: u8) {
         if self.fallthrough != Some(pc) {
             self.entries[pc as usize] = true;
         }
         self.fallthrough = Some(pc.wrapping_add(len as u16));
 
-        let mut bytes = [0u8; 4];
-        for (i, b) in bytes.iter_mut().enumerate().take(len as usize) {
-            *b = mem[pc.wrapping_add(i as u16) as usize];
-        }
+        let mut bytes = bytes;
+        bytes[len as usize..].fill(0);
         match &self.executed[pc as usize] {
             Some(prev) if *prev != (len, bytes) => self.self_modified[pc as usize] = true,
             Some(_) => {}

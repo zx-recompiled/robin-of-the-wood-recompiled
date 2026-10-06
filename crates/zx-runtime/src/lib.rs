@@ -10,6 +10,7 @@ pub mod interp;
 pub mod keys;
 pub use zx_core::png;
 pub mod machine;
+pub mod memory;
 pub mod screen;
 pub mod trace;
 

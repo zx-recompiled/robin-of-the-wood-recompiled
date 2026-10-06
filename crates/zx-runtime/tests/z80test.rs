@@ -51,10 +51,10 @@ fn port_in(_: u16) -> u8 {
 fn stub_rom(z: &mut Zx) {
     const RET: u8 = 0xC9;
     const EI: u8 = 0xFB;
-    z.mem[RST_10 as usize] = RET;
-    z.mem[CHAN_OPEN as usize] = RET;
-    z.mem[IM1 as usize] = EI;
-    z.mem[IM1 as usize + 1] = RET;
+    z.memory.poke(RST_10, RET);
+    z.memory.poke(CHAN_OPEN, RET);
+    z.memory.poke(IM1, EI);
+    z.memory.poke(IM1 + 1, RET);
 }
 
 /// The text z80test prints, as lines.
