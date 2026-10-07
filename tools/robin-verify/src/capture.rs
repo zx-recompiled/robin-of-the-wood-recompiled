@@ -127,8 +127,9 @@ pub struct Routine {
     /// routine, which runs to its return.
     pub exits: &'static [u16],
     /// The rewrite: the state, the data parsed from the tape, the registers
-    /// at entry, and the controls as the original saw them; returns the
-    /// registers with its outputs set.
+    /// at entry, and the inputs: the controls as the original saw them, and
+    /// what it read from R (#37); returns the registers with its outputs
+    /// set.
     pub rewrite: fn(&mut Game, &Assets, Regs, &mut Inputs) -> Regs,
 }
 

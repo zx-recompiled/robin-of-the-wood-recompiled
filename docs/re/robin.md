@@ -580,56 +580,85 @@ values the original read (#37).
 
 ### The four on each row
 
+**confirmed**: the rewrite (`robin::characters`) matches the original in
+every call play and the tour make (#38), unless marked.
+
 - **Each row of the map has four characters.** Their list is one of four at
   `0x8B02`, 12 bytes each, chosen by the row number modulo 4 (`0:C2F2`), so
   rows 0, 4, 8 and so on share theirs. `0xC444` points at the current row's.
   Each character is three bytes:
   - the column of the map it's in;
-  - its position within that screen;
-  - a state byte: bit 7 the way it faces, bit 6 a copy of it, bits 4 and 5
-    two more flags.
+  - its position within that screen, from 0 to `0x6F`, in units of 2
+    pixels;
+  - a state byte: bit 7 the way it faces (set for right), bit 6 the way it
+    faced before it last turned, bit 4 set while it stands still, and bit 5
+    set to make it stop (#42).
 - **The floors they walk.** A screen's floor is row 12 of its attribute
-  buffer, across the play area. Three are kept: the screen to the left
-  (`0xDD9B`), the current one (`0xDDB7`) and the one to the right
-  (`0xDDD3`), 28 bytes each.
+  buffer, across the play area: a byte that isn't 0 is in the way. Three are
+  kept: the screen to the left (`0xDD9B`), the current one (`0xDDB7`) and
+  the one to the right (`0xDDD3`), 28 bytes each.
   - On entering a location sideways, the old screen's floor becomes the
     neighbour on the side Robin came from, and the other neighbour is
     cleared.
   - Entering up or down clears both neighbours.
   - Either way, the new screen's floor is copied in (`0:DD49`–`0:DD8F`).
+  - A character at position `p` stands on the three bytes from
+    `p / 4 − 4` of its screen's floor, four if `p` isn't a multiple of 4.
+    The `− 4` reaches into the bytes before each floor.
 - **Entering a location** (`0:C16E`, called from the entry, `0xBF0E`):
   1. The columns of the four characters two rows above are shuffled, each
-     XORed with R.
-  2. The current row's list is taken.
-  3. If the location is the special one at `0xD295`, a scripted scene is
-     set up instead. Robin is walked in automatically, through the controls'
-     override (*The controls*), and another character's record (`0xB7BD`)
-     is set up (#42).
+     XORed with R and kept below 16. Their bits 4 and 5 are cleared.
+  2. The current row's list is taken, and the controls' override is
+     cleared.
+  3. At the location kept at `0xD295`, a scripted scene starts (#42). Two
+     of the four are put either side of Robin's screen, facing in. Robin is
+     walked in by the controls' override (*The controls*), and another
+     character's record (`0xB7BD`) is set up and drawn. Where it stands
+     depends on bit 7 of a byte for each location at `0x7AC2`. The tour
+     reaches this, but never with that bit set.
   4. The floors are updated.
-  5. Each character near Robin's location is put on solid ground (`0:DCDC`).
-  6. Their sprite records at `0xAAB8` (11 bytes apart) are given their
-     animation sequences (`0xAAF6`–`0xAB24`).
+  5. Each character in Robin's column, or one beside it, is put on its
+     floor (`0:DCDC`). Its position is rounded down to a multiple of 4. If
+     something is in the way there (`0:DD3D`), it goes to the first clear
+     place from the left, or to `0x64` if there's none.
+  6. Their sprite records at `0xAAB8`, 11 bytes apart, are given their
+     animation sequences: walking left (`0xAAF6`) or right (`0xAB01`), or
+     standing still (`0xAB24`). Bit 6 of each state becomes a copy of
+     bit 7.
   7. The four are moved once each (`0xA8D6`, four times).
-  8. Everything else that moves is reset: the objects in flight (#40), the
-     wanderer (#39), and a second group of four characters for the
-     locations from 256 up (records at `0xDBF1`, lists at `0xDC2B`, #42).
+  8. Everything else that moves is reset:
+     - the objects in flight (`0xBE3F`–`0xBE46`, #40);
+     - the wanderer (#39);
+     - for the locations from 256 up, a second group of four characters,
+       with their records at `0xDBF1` and their lists at `0xDC2B`, one for
+       each row (#42).
   9. Robin's sprite is drawn.
 - **Moving them** (`0xA8D6`, from the main loop) takes one character a
   frame, cycling through the four with a counter kept in its own code
-  (`0xA8D7`). A character acts only if it's within two columns of Robin's
-  location:
-  - it looks at the floor ahead, and turns if the way is blocked;
-  - one time in 16 it turns anyway: R decides (`0xA969`);
-  - it steps along its screen, and past an edge into the next column.
-- **Drawing them.** A character on Robin's screen, or just entering it from
-  the next, gets its position in its sprite record. Its animation sequence
-  is chosen by which way it faces and what it's doing, and it's redrawn
-  (`0:C7EF`, *Sprites*), from frame table `0x8C69`. One that isn't on the
-  screen is erased.
-- **Firing.** A character that faces Robin, within `0x30` pixels of him, may
-  fire. It always does while a flag at `0xD47B` is set; otherwise R decides,
-  one time in 2. The shot goes into the character's slot of the objects in
-  flight (`0xBE41`, two bytes each), if the slot is free (#40).
+  (`0xA8D7`). A character moves only if it isn't standing still and is in
+  Robin's column or one beside it:
+  - if anything is in the way under it, it turns round;
+  - otherwise, one time in 16, it turns to face Robin's position on his
+    floor: R decides (`0xA969`);
+  - then it steps 1 along its screen, and past an edge into the next
+    column.
+- **Drawing them.** A character in Robin's column is drawn at its
+  position. One in the column to the right, within `0x10` of its left
+  edge, is drawn at its position plus `0x70`, about to walk on. Anything
+  else is erased.
+  - Just after it turns, it's given a turning sequence (`0xAB0C` right,
+    `0xAB10` left), and bit 6 catches up with bit 7.
+  - With bit 5 set, it's given the sequence for stopping (`0xAB20`), and
+    bit 5 becomes bit 4.
+  - It's drawn from frame table `0x8C69` (`0:C7EF`, *Sprites*).
+- **Firing.** A character that faces Robin from at least `0x30` away (96
+  pixels) may fire. It always does while a flag at `0xD47B` is set; otherwise R
+  decides, one time in 2 (`0xAA34`). The shot goes into a slot of the
+  objects in flight (`0xBE41`, two bytes each), if that slot is free (#40).
+  The slot is 1 for the first of the four, 2 for the second, and 0 for the
+  other two, which share it. The shot gets the character's position and its
+  way, and the character the sequence for firing (`0xAB14` right, `0xAB1A`
+  left).
 
 ## Sound
 

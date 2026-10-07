@@ -85,7 +85,7 @@ pub fn in_the_way(g: &Game, at: u16) -> Option<(u8, u8)> {
 }
 
 /// Puts each character of the current row that is in Robin's column, or
-/// one beside it, on its floor: its position rounded down to 4 pixels, and
+/// one beside it, on its floor: its position rounded down to a multiple of 4, and
 /// if something is in the way there, the first clear place from the left
 /// (or `0x64` if there's none) (`0:DCDC`).
 pub fn place(g: &mut Game) {
@@ -124,14 +124,14 @@ const STILL: u8 = 0x10;
 const TO_BE_STILL: u8 = 0x20;
 
 /// Their animation sequences (*Sprites*).
-pub const WALK_LEFT: u16 = 0xAAF6;
-pub const WALK_RIGHT: u16 = 0xAB01;
+const WALK_LEFT: u16 = 0xAAF6;
+const WALK_RIGHT: u16 = 0xAB01;
 const TURN_RIGHT: u16 = 0xAB0C;
 const TURN_LEFT: u16 = 0xAB10;
 const FIRE_RIGHT: u16 = 0xAB14;
 const FIRE_LEFT: u16 = 0xAB1A;
 const STOPPING: u16 = 0xAB20;
-pub const STOPPED: u16 = 0xAB24;
+const STOPPED: u16 = 0xAB24;
 
 /// `base + size × (n − 1)`, counted as the original counts it: `size` added
 /// `n` times (0 meaning 256), then taken away with the last addition's carry.
@@ -148,8 +148,8 @@ fn nth(base: u16, size: u16, n: u8) -> u16 {
 /// within a column of Robin's, and not still, steps along its floor: it
 /// turns where the way ahead is blocked, and otherwise turns to face Robin
 /// one time in 16. One on Robin's screen, or about to walk onto it from the
-/// right, is drawn, and may fire if it faces him from at least `0x30`
-/// pixels away; one that isn't is erased.
+/// right, is drawn, and may fire if it faces him from at least `0x30` away
+/// (96 pixels); one that isn't is erased.
 pub fn move_one(g: &mut Game, sprites: &Sprites, random: &mut Random) {
     g.characters.cycle = g.characters.cycle.wrapping_sub(1);
     if g.characters.cycle == 0 {
@@ -264,7 +264,7 @@ fn draw(g: &mut Game, sprites: &Sprites, at: u16, record: u16, random: &mut Rand
     sprites::animate(g, sprites, record);
 }
 
-/// Fires, if the character faces Robin from at least `0x30` pixels away, it
+/// Fires, if the character faces Robin from at least `0x30` away (96 pixels), it
 /// always does or R says so, and its slot of the objects in flight is free:
 /// the sequence to show it firing.
 fn fire(g: &mut Game, at: u16, record: u16, random: &mut Random) -> Option<u16> {
