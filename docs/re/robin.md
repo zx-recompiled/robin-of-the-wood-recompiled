@@ -291,9 +291,93 @@ Drawn into the back buffer every frame, and their own subsystem:
 - the sprite code, `0:C5CE` and `0:C47D`;
 - the code that marks the cells it drew, `0:C688`.
 
-The scenery renderer, `0:CD73` with `0:CE27`, draws each screen of the map,
-and goes with the map. The bank 4 code at `4:C086` fills all three buffers
+The scenery is drawn by `0xBF6A` (*The map*). `0:CD73` with `0:CE27`, first
+taken for the scenery renderer, is a transition effect that goes with the
+menus. The bank 4 code at `4:C086` fills all three buffers
 at the menu.
+
+## The map
+
+Found by watching which code draws the play area's scenery during play, then
+reading it (#28). **read**, unless marked.
+
+### The grid
+
+- **The forest is 16 locations wide and 20 high, and wraps at every edge.**
+  The current location is the word at `0xC440`, row × 16 + column, so 0 to
+  `0x13F`. **confirmed** (the step below)
+- **The step**, `0:C127`, moves it by the bits of A: bit 0 right, bit 1
+  left, bit 2 down, bit 3 up. Each wraps: column 15 to 0, row 19 to 0, and
+  back. The game takes it when Robin leaves the screen by an edge
+  (`0xBECE`), then enters the new location.
+- **Entering a location**, `0xBF0E`, does these in turn:
+  1. clears the play area;
+  2. draws the scenery (`0xBF6A`, below) and the three special locations'
+     extras (`0:C056`);
+  3. sets up what else is there, the characters and objects (`0:C33C`,
+     `0:C306`, `0:C35A`, `0:C16E`, `0:D484`: other subsystems);
+  4. copies the whole play area to the screen.
+- **Location `0x69`**, row 6, column 9, is not entered that way. Walking into
+  it takes another path, with the border flashing and a wait for a key. It
+  looks like part of the ending.
+- In 20,000 frames of play, Robin never left rows 16 to 19, about 21
+  locations in all. So the extras for locations below 256 never ran.
+  **confirmed**
+
+### The tables
+
+All are in the main block, read straight from the tape.
+
+| Table | Where | What |
+|---|---|---|
+| **Locations** | `0x7AC2`, 320 bytes | One per location: the layout number (bits 0–6), and bit 7 to draw it mirrored left to right. 116 of the 320 are mirrored, so one layout serves several locations. |
+| **Layouts** | `0x7C02`–`0x8553` | 128 records, one after another. Each is a count, then that many items of two bytes: a position (the character row in bits 3–7, and a column in steps of 4 characters in bits 0–2), then a block number (bits 0–6), with bit 7 to mirror that block. Layout *n* is found by stepping over the *n* before it (`0:C0B9`). |
+| **Extras** | `0x85DA`–`0x8AFF` | 256 more records of the same kind, one for each location below 256: blocks drawn on top of the layout. 134 of them are not empty. |
+| **Blocks** | addresses at `0x5BC9`, 84 blocks | See below. |
+
+### A block
+
+- **A header byte.** Its height in character rows is in bits 0–2. Bit 6 means
+  one attribute colours the whole block. Bit 7 is the way it currently
+  faces: 0 as on the tape, 1 mirrored. Bits 3–5 are clear in all 84.
+- **Then the pixels**: 8 pixel rows per character row, 4 bytes each, so 32
+  pixels wide.
+- **Then the attributes**: 4 a character row, or the single one.
+- **The game mirrors a block in place, in memory.** When a block is wanted
+  the other way round from how it faces now (`0:C0CE`), it flips the header's
+  bit 7. Then it swaps each pixel row's 4 bytes end for end, each through the
+  mirror table, and swaps each attribute row's 4 bytes end for end. So the
+  blocks' bytes are part of the game's state, not constant data.
+
+### Drawing a location
+
+`0xBF6A`, into the play area's buffers (*The screen*):
+
+1. It looks the location up in the location table. It keeps the layout
+   number at `0xC43F` and the table's address at `0xC442`. If the location is
+   mirrored, it patches the drawing code, so every column is reflected
+   (`column × 4 XOR 0x1C`).
+2. It draws the layout's items (`0xBFA7`, `0xBFAA`). For each one, it draws the
+   block (`0xBFC9`), first mirroring it in place if the way it faces differs
+   from the way it's wanted (the item's bit 7, XOR the location's).
+3. **Drawing a block** writes its pixel rows into the back buffer, at
+   `0xEB00` + row × 256 + column × 4, then its attributes into the attribute
+   buffer. Its code starts in bank 2 and runs on into bank 0 at `0:C002`,
+   since the main block loads both contiguously.
+4. For a location below 256, it then draws that location's extras the same
+   way, with `0xC43F` and `0xC442` pointed at the extras table.
+
+`0:C056` adds 4 more blocks when the location is one of three kept as
+words at `0xD28F`, `0xD291` and `0xD293`. Those are set when a game starts
+(`0:CE57`–`0:CE88`), so they move from game to game. Their lists are at
+`0xC462`, `0xC46B` and `0xC474`.
+
+### Not covered here
+
+`0:CD73`, called in #24 the scenery renderer, isn't one. It redraws the
+screen from the screen itself and the row table, as a transition: it ran
+3 times in 20,000 frames, at the menu and twice in play. It goes with the
+menus.
 
 ## Sound
 
