@@ -263,12 +263,6 @@ pub fn draw_special(g: &mut crate::Game, map: &Map) {
     }
 }
 
-/// A count the original keeps in an 8-bit register and counts down to zero
-/// after the first time round: 0 means 256.
-fn times(n: u8) -> u16 {
-    if n == 0 { 256 } else { u16::from(n) }
-}
-
 /// Mirrors the block whose header is at `at` in place (`0:C0CE`): flips the
 /// way it faces in its header, then swaps each pixel row's four bytes end
 /// for end, each through the mirror table, and each attribute row's four
@@ -277,7 +271,7 @@ pub fn mirror_block(g: &mut crate::Game, at: u16) {
     let header = g.read(at) ^ 0x80;
     g.write(at, header);
     let mut row = at.wrapping_add(1);
-    for _ in 0..times((header & 7) << 3) {
+    for _ in 0..crate::times((header & 7) << 3) {
         // In the original's order: the outer pair, then the inner pair from
         // the right, which is the order the last lookups are kept in.
         for (l, r) in [(0, 3), (2, 1)] {
@@ -294,7 +288,7 @@ pub fn mirror_block(g: &mut crate::Game, at: u16) {
     if header & 0x40 != 0 {
         return;
     }
-    for _ in 0..times(header & 7) {
+    for _ in 0..crate::times(header & 7) {
         for (l, r) in [(0, 3), (1, 2)] {
             let (left, right) = (row.wrapping_add(l), row.wrapping_add(r));
             let (a, b) = (g.read(left), g.read(right));
@@ -330,7 +324,7 @@ pub fn draw_block(g: &mut crate::Game, map: &Map, block: u8, row: u8, column: u8
     let mut from = at;
     let lines = (g.read(from) << 3) & 0xF8;
     from = from.wrapping_add(1);
-    for _ in 0..times(lines) {
+    for _ in 0..crate::times(lines) {
         for i in 0..4 {
             let v = g.read(from);
             g.write(to.wrapping_add(i), v);
@@ -343,7 +337,7 @@ pub fn draw_block(g: &mut crate::Game, map: &Map, block: u8, row: u8, column: u8
     g.map.attr_step = if header & 0x40 != 0 { 0 } else { 0x13 };
     let x = ((row & 7) << 5 | column << 2) ^ g.map.attr_column_xor;
     let mut to = 0xE800u16.wrapping_add(u16::from(row >> 3) << 8 | u16::from(x));
-    for _ in 0..times(g.map.attr_rows) {
+    for _ in 0..crate::times(g.map.attr_rows) {
         for _ in 0..4 {
             let v = g.read(from);
             g.write(to, v);

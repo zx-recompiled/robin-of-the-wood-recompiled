@@ -17,3 +17,9 @@ pub mod sprites;
 
 pub use assets::{TAPE_SHA1, is_the_tape};
 pub use game::Game;
+
+/// A count the original keeps in an 8-bit register and counts down to zero
+/// after the first time round: 0 means 256.
+pub(crate) fn times(n: u8) -> u16 {
+    if n == 0 { 256 } else { u16::from(n) }
+}

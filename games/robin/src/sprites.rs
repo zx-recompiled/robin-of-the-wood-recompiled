@@ -78,12 +78,6 @@ impl Sprites {
     }
 }
 
-/// A count the original keeps in an 8-bit register and counts down to zero
-/// after the first time round: 0 means 256.
-fn times(n: u8) -> u16 {
-    if n == 0 { 256 } else { u16::from(n) }
-}
-
 /// Mirrors the pixel frame at `at` in place if it faces the other way from
 /// `want`'s bit 7 (`0:C7AF`): flips its header's bit 7, then, for each row,
 /// swaps the outer two bytes and mirrors all three through the mirror table.
@@ -94,7 +88,7 @@ pub fn mirror_frame(g: &mut crate::Game, at: u16, want: u8) {
     let header = g.read(at) ^ 0x80;
     g.write(at, header);
     let mut row = at.wrapping_add(3);
-    for _ in 0..times(g.read(at.wrapping_add(1))) {
+    for _ in 0..crate::times(g.read(at.wrapping_add(1))) {
         let (first, second, third) = (row, row.wrapping_add(1), row.wrapping_add(2));
         let look = |g: &crate::Game, b: u8| g.read(0xFD00 | u16::from(b));
         let t = g.read(third);
@@ -264,7 +258,7 @@ pub fn draw_frame(g: &mut crate::Game, sprites: &Sprites, frame: u8, x: u8, y: u
     let mut to =
         BACK_BUFFER.wrapping_add(u16::from(y >> 3) << 8 | u16::from((y & 7) << 5 | column));
     let mut from = at.wrapping_add(3);
-    for _ in 0..times(g.read(at.wrapping_add(1))) {
+    for _ in 0..crate::times(g.read(at.wrapping_add(1))) {
         let row = u32::from(g.read(from)) << 24
             | u32::from(g.read(from.wrapping_add(1))) << 16
             | u32::from(g.read(from.wrapping_add(2))) << 8;
