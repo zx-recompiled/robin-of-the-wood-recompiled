@@ -13,6 +13,7 @@ pub mod layout;
 pub mod map;
 pub mod print;
 pub mod screen;
+pub mod sprites;
 
 pub use assets::{TAPE_SHA1, is_the_tape};
 pub use game::Game;
