@@ -299,7 +299,15 @@ at the menu.
 ## The map
 
 Found by watching which code draws the play area's scenery during play, then
-reading it (#28). **read**, unless marked.
+reading it (#28).
+
+**Everything in this section is rewritten (`games/robin/src/map.rs`) and
+confirmed** against the original by `tools/robin-verify`, from play and from
+a tour of every location. The tour walks the original round all 320
+locations, each reached through the original's own step and entry. Every
+call it makes to the drawing is compared, as in play. Location `0x69` is
+drawn by its drawing routine alone (*The grid*). Every instruction of the
+drawing and the step was reached.
 
 ### The grid
 
@@ -321,8 +329,8 @@ reading it (#28). **read**, unless marked.
   it takes another path, with the border flashing and a wait for a key. It
   looks like part of the ending.
 - In 20,000 frames of play, Robin never left rows 16 to 19, about 21
-  locations in all. So the extras for locations below 256 never ran.
-  **confirmed**
+  locations in all. So the extras for locations below 256 never ran in
+  play, and only the tour reaches them. **confirmed**
 
 ### The tables
 
