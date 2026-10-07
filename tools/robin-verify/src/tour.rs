@@ -96,13 +96,15 @@ pub fn run(mut z: Zx, frame: u32, quiet: &Script, assets: &Assets, v: &mut Verif
         drawn: BTreeSet::new(),
         problems: Vec::new(),
     };
-    let first = z.read16(LOCATION);
-    toured.drawn.insert(first);
-    // Row by row: fifteen steps right, then one down, twenty times. Then
-    // twenty up, so going up, and its wrap from the top row, are taken too.
-    let moves = (0..map::ROWS)
-        .flat_map(|_| (0..map::COLUMNS - 1).map(|_| 1u8).chain([4]))
-        .chain((0..map::ROWS).map(|_| 8));
+    // One step left and back, so the starting location is drawn by the
+    // tour too. Then row by row: fifteen steps right, then one down, twenty
+    // times. Then twenty up, so going up, and its wrap from the top row, are
+    // taken too.
+    let moves = [2u8, 1].into_iter().chain(
+        (0..map::ROWS)
+            .flat_map(|_| (0..map::COLUMNS - 1).map(|_| 1u8).chain([4]))
+            .chain((0..map::ROWS).map(|_| 8)),
+    );
     for direction in moves {
         let from = z.read16(LOCATION);
         let to = map::step(from, direction);
