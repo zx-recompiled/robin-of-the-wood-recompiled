@@ -18,6 +18,7 @@ use std::hash::{Hash, Hasher};
 
 use robin::Game;
 use robin::assets::BANK;
+use zx_recomp::script::Script;
 use zx_runtime::memory::Memory;
 use zx_runtime::{Zx, bus, interp};
 
@@ -129,6 +130,9 @@ pub struct Tally {
     /// original had), and those that did not return.
     pub varied: u64,
     pub varied_hung: u64,
+    /// Scrambling checks whose stack never came back to the caller's level,
+    /// so that stretch of it was left out of the comparison.
+    pub stack_left_out: u64,
     seen: HashSet<u64>,
     scrambled_by_caller: BTreeMap<u16, u32>,
     pub executed: BTreeSet<u16>,
@@ -186,7 +190,7 @@ impl Routine {
     }
 
     /// Takes the call `z` is about to make.
-    pub fn capture(&self, z: &Zx, t: &mut Tally) {
+    pub fn capture(&self, z: &Zx, play: &Play, t: &mut Tally) {
         t.calls += 1;
         let entry = z.clone();
         let run = match self.run_original(&entry) {
@@ -292,8 +296,10 @@ impl Routine {
         if *n < SCRAMBLE_PER_CALLER {
             *n += 1;
             t.scrambled += 1;
-            if let Some(e) = self.scramble(&run.after, run.entry_sp) {
-                fail(t, format!("{}: {at}: {e}", self.name));
+            match self.scramble(&run.after, run.entry_sp, play) {
+                Scrambled::Reads(e) => fail(t, format!("{}: {at}: {e}", self.name)),
+                Scrambled::UnreadStackLeftOut => t.stack_left_out += 1,
+                Scrambled::Unread => {}
             }
         }
     }
@@ -436,10 +442,14 @@ impl Routine {
     }
 
     /// Follows the original from its return twice, once with every register
-    /// and flag that is neither an output nor preserved scrambled, until the
-    /// caller returns or [`FOLLOW`] steps. Any difference in where they go or
-    /// what they write means a caller reads one of those registers.
-    fn scramble(&self, returned: &Zx, entry_sp: u16) -> Option<String> {
+    /// and flag that is neither an output nor preserved scrambled. Both play
+    /// on as the original would: interrupts taken, and the input script
+    /// carried on from `play`. Where they go is compared at every
+    /// instruction until the caller returns, or for [`FOLLOW`] instructions,
+    /// then until the stack is back at the caller's level; then all of
+    /// memory but the dead stack. Any difference means a caller reads one of
+    /// those registers.
+    fn scramble(&self, returned: &Zx, entry_sp: u16, play: &Play) -> Scrambled {
         let mut same = returned.clone();
         let mut odd = returned.clone();
         let mut regs = Regs::of(&odd);
@@ -452,49 +462,58 @@ impl Routine {
             regs.set(r, !regs.get(r) ^ 0x5A);
         }
         regs.put(&mut odd);
-        let mut low = same.sp.min(odd.sp);
-        for step in 0..FOLLOW {
-            if same.pc != odd.pc {
-                return Some(format!(
-                    "with {scrambled:?} scrambled, the caller went to {:04x} instead of {:04x} after {step} steps: it reads one of them",
-                    odd.pc, same.pc
-                ));
-            }
-            if same.sp > entry_sp.wrapping_add(2) {
-                break;
-            }
-            interp::step(&mut same);
-            interp::step(&mut odd);
-            low = low.min(same.sp).min(odd.sp);
-        }
-        // A later routine may have saved a scrambled register on the stack,
-        // to restore it before returning: that is not reading it. So carry
-        // on until the stack is back at the caller's level, every such value
-        // popped, before comparing memory.
-        // A caller waiting for an interrupt never gets there, as these runs
-        // have none; then the stack from the deepest point up to the
-        // caller's level is left out of the comparison, and only where they
-        // went and what they wrote elsewhere counts.
+        let (mut keys_same, mut keys_odd) = (play.script.clone(), play.script.clone());
+        let start = same.frame;
         let level = entry_sp.wrapping_add(2);
-        for _ in 0..FOLLOW {
-            if same.sp >= level || same.pc != odd.pc {
-                break;
+        let mut low = same.sp;
+        let mut step = |same: &mut Zx, odd: &mut Zx| {
+            // A frame is over: the next step begins another, so its keys go
+            // down first, as the play loop does it.
+            if same.t >= same.timing.frame {
+                let f = play.frame + (same.frame + 1 - start) as u32;
+                keys_same.press(f, same);
+                keys_odd.press(f, odd);
             }
-            interp::step(&mut same);
-            interp::step(&mut odd);
-            low = low.min(same.sp).min(odd.sp);
-        }
-        if same.pc != odd.pc {
-            return Some(format!(
+            same.step_in_frame();
+            odd.step_in_frame();
+        };
+        let diverged = |same: &Zx, odd: &Zx| {
+            Scrambled::Reads(format!(
                 "with {scrambled:?} scrambled, the caller went to {:04x} instead of {:04x}: it reads one of them",
                 odd.pc, same.pc
-            ));
+            ))
+        };
+        // Until the caller returns...
+        for _ in 0..FOLLOW {
+            if same.pc != odd.pc {
+                return diverged(&same, &odd);
+            }
+            if same.sp > level {
+                break;
+            }
+            step(&mut same, &mut odd);
+            low = low.min(same.sp).min(odd.sp);
+        }
+        // ...then until the stack is back at its level, so that what a later
+        // routine saved there, a scrambled register among it, is popped.
+        let mut back = same.sp >= level;
+        for _ in 0..FOLLOW {
+            if same.pc != odd.pc {
+                return diverged(&same, &odd);
+            }
+            if same.sp >= level {
+                back = true;
+                break;
+            }
+            step(&mut same, &mut odd);
+            low = low.min(same.sp).min(odd.sp);
         }
         // What either pushed below where the stack now is, nobody reads; and
-        // if the stack is not back, what is between is left out too.
+        // if the stack never came back, what is between is left out too, and
+        // counted.
         let mut dead: HashSet<(usize, usize)> = HashSet::new();
         let mut a = low;
-        let top = if same.sp < level { level } else { same.sp };
+        let top = if back { same.sp } else { level };
         while a != top {
             if let Some(p) = ram_place(&same, a) {
                 dead.insert(p);
@@ -510,13 +529,15 @@ impl Routine {
                 }
             }
         }
-        live.first().map(|&(n, i)| {
-            format!(
+        match live.first() {
+            Some(&(n, i)) => Scrambled::Reads(format!(
                 "with {scrambled:?} scrambled, the caller wrote memory differently: {} byte(s), first {n}:{i:04x} in {}",
                 live.len(),
                 Game::part_at(n, i)
-            )
-        })
+            )),
+            None if back => Scrambled::Unread,
+            None => Scrambled::UnreadStackLeftOut,
+        }
     }
 
     /// The instructions of this routine no case executed.
@@ -536,6 +557,24 @@ impl Routine {
         }
         out
     }
+}
+
+/// Where play is when a call is caught: the input script as it stands and
+/// the frame it is in, so a copy of the machine can play on as the original.
+pub struct Play<'a> {
+    pub script: &'a Script,
+    pub frame: u32,
+}
+
+/// What the scrambling check found.
+enum Scrambled {
+    /// No difference: the caller does not read those registers.
+    Unread,
+    /// No difference, but the stack never came back to the caller's level,
+    /// so that stretch of it was left out.
+    UnreadStackLeftOut,
+    /// A difference: the caller reads one of them.
+    Reads(String),
 }
 
 /// One run of the original routine.
@@ -620,9 +659,24 @@ mod tests {
         }
     }
 
+    /// No keys pressed, ever.
+    fn quiet() -> Script {
+        let cfg =
+            zx_recomp::Config::parse("[game]\nname = \"t\"\ntape = \"t\"\n").expect("a config");
+        Script::new(&cfg.trace).expect("a script")
+    }
+
     fn failures(r: &Routine, z: &Zx) -> Vec<String> {
         let mut t = Tally::default();
-        r.capture(z, &mut t);
+        let script = quiet();
+        r.capture(
+            z,
+            &Play {
+                script: &script,
+                frame: 0,
+            },
+            &mut t,
+        );
         assert_eq!(t.compared, 1);
         t.failures
     }
@@ -697,8 +751,13 @@ mod tests {
             r
         });
         let mut t = Tally::default();
-        r.capture(&z, &mut t);
-        r.capture(&z, &mut t);
+        let script = quiet();
+        let play = Play {
+            script: &script,
+            frame: 0,
+        };
+        r.capture(&z, &play, &mut t);
+        r.capture(&z, &play, &mut t);
         assert_eq!((t.calls, t.compared, t.repeats), (2, 1, 1));
     }
 }

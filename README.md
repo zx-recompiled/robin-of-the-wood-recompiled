@@ -25,7 +25,7 @@ The work ahead, in order, is on the project board: establish the facts about the
 Each rewritten routine is run beside the original's, which runs in the reference interpreter (`tools/robin-verify`).
 - **Real calls.** The original boots from the tape and plays 20,000 frames of scripted and random input. Every call it makes to a rewritten routine is caught at the routine's entry. The original routine runs alone to its return, and the rewrite runs from the same state. All of memory is compared, with the routine's outputs and any port it writes. Calls whose registers and every byte read were seen before are counted and skipped.
 - **Each distinct call runs twice more.** Once with the bytes it only writes changed first, so a write the rewrite leaves out shows even where the old value happened to be right. Once with the screen and play-area data it read changed, for values play never shows.
-- **Registers.** After a return, every register and flag that isn't a declared output is scrambled, and the original must carry on exactly as before. That shows no caller reads them.
+- **Registers.** After a return, every register and flag that isn't a declared output is scrambled. The original plays on, interrupts and input included, until the caller's stack is back where it was, and must go the same way and write the same memory as without the scrambling. That shows no caller reads them.
 - **The report** lists every instruction of a routine that no call reached: code play never ran, checked only by reading.
 
 Each part of this was shown to fail on a planted bug, and the verifier's own tests check it on a made-up program in CI.

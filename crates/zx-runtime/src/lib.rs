@@ -42,36 +42,9 @@ impl Zx {
 
         let mut in_fallback = false;
         while self.t < self.timing.frame {
-            // /INT is held for the first `int_len` T-states of the frame, and
-            // only then: once that has passed it is gone, whether or not
-            // interrupts were enabled to see it. Checking that first matters:
-            // a pulse that lasted until the next enabled instruction instead
-            // made Patrik Rak's `minfo` measure it 8 T-states too long.
-            if self.int_pending && self.t >= self.timing.int_len {
-                self.int_pending = false;
-            }
-            if self.int_pending && self.iff1 && !self.ei_delay {
-                self.int_pending = false;
-                if let Some(trace) = &mut self.trace {
-                    trace.on_interrupt();
-                }
-                self.accept_interrupt();
-            }
-            self.ei_delay = false;
-
-            if self.halted {
-                // HALT executes NOPs until the next interrupt.
-                let until = if self.int_pending {
-                    self.t + 4
-                } else {
-                    self.timing.frame
-                };
-                let nops = (until - self.t).div_ceil(4);
-                self.r = (self.r & 0x80) | (self.r.wrapping_add(nops as u8) & 0x7F);
-                self.t += nops * 4;
+            if self.interrupt_or_halt() {
                 continue;
             }
-
             if code(self) {
                 in_fallback = false;
                 continue;
@@ -85,6 +58,59 @@ impl Zx {
         }
         self.t -= self.timing.frame;
         self.frame += 1;
+    }
+
+    /// One step of what [`Zx::run_frame`] does, for a caller that has to stop
+    /// between any two instructions: starts the next frame if this one is
+    /// over, takes an interrupt if one is due, and runs one instruction, or
+    /// the NOPs of a HALT. A frame run this way is the same as one run by
+    /// [`Zx::run_frame`] with no `code`.
+    pub fn step_in_frame(&mut self) {
+        if self.t >= self.timing.frame {
+            self.t -= self.timing.frame;
+            self.frame += 1;
+            self.int_pending = true;
+        }
+        if !self.interrupt_or_halt() {
+            interp::step(self);
+        }
+    }
+
+    /// Before each instruction of a frame: ends the interrupt pulse when it
+    /// has run its length, takes an interrupt if one is due, and runs a
+    /// halted processor's NOPs. Returns whether it did the latter, in which
+    /// case there is no instruction to run.
+    fn interrupt_or_halt(&mut self) -> bool {
+        // /INT is held for the first `int_len` T-states of the frame, and
+        // only then: once that has passed it is gone, whether or not
+        // interrupts were enabled to see it. Checking that first matters:
+        // a pulse that lasted until the next enabled instruction instead
+        // made Patrik Rak's `minfo` measure it 8 T-states too long.
+        if self.int_pending && self.t >= self.timing.int_len {
+            self.int_pending = false;
+        }
+        if self.int_pending && self.iff1 && !self.ei_delay {
+            self.int_pending = false;
+            if let Some(trace) = &mut self.trace {
+                trace.on_interrupt();
+            }
+            self.accept_interrupt();
+        }
+        self.ei_delay = false;
+
+        if self.halted {
+            // HALT executes NOPs until the next interrupt.
+            let until = if self.int_pending {
+                self.t + 4
+            } else {
+                self.timing.frame
+            };
+            let nops = (until - self.t).div_ceil(4);
+            self.r = (self.r & 0x80) | (self.r.wrapping_add(nops as u8) & 0x7F);
+            self.t += nops * 4;
+            return true;
+        }
+        false
     }
 }
 

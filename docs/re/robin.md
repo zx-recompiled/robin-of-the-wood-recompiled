@@ -157,9 +157,10 @@ three ways and compared with the rewrite on all of memory:
 - with the screen and play-area data it read changed.
 
 For the first 20 distinct calls from each caller, scrambling the
-registers these routines leave, after the return, changes nothing that
-caller does from then on, for up to a million instructions. So no caller
-was seen reading them. The exceptions, paths
+registers these routines leave, after the return, changes nothing. The
+original plays on, interrupts and input included, until the caller's stack
+is back where it was, and goes the same way and writes the same memory. So
+no caller was seen reading them. The exceptions, paths
 play never took, are marked **read** below.
 
 ### The play area and its buffers

@@ -19,7 +19,7 @@ use robin::Game;
 use robin::assets::BANK;
 use zx_runtime::{Misses, Zx, bus, interp, loader::boot_128k};
 
-use capture::Tally;
+use capture::{Play, Tally};
 
 fn main() -> ExitCode {
     match run() {
@@ -60,7 +60,14 @@ fn run() -> Result<bool, String> {
             |z: &mut Zx| {
                 for (r, t) in routines.iter().zip(tallies.iter_mut()) {
                     if r.is_entered(z) {
-                        r.capture(z, t);
+                        r.capture(
+                            z,
+                            &Play {
+                                script: &script,
+                                frame,
+                            },
+                            t,
+                        );
                     }
                 }
                 let pc = z.pc;
@@ -94,12 +101,13 @@ fn run() -> Result<bool, String> {
     for (r, t) in routines.iter().zip(&tallies) {
         let unreached = r.unreached(&z, t);
         println!(
-            "  {}: {} calls, {} compared, {} repeats skipped, {} scrambling checks, {} varied runs ({} did not return); {} instruction(s) never reached{}",
+            "  {}: {} calls, {} compared, {} repeats skipped, {} scrambling checks ({} with the stack left out), {} varied runs ({} did not return); {} instruction(s) never reached{}",
             r.name,
             t.calls,
             t.compared,
             t.repeats,
             t.scrambled,
+            t.stack_left_out,
             t.varied,
             t.varied_hung,
             unreached.len(),

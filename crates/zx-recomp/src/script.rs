@@ -14,6 +14,7 @@ fn keys(names: &[String]) -> Result<Vec<Key>, String> {
 }
 
 /// xorshift64*; deterministic so builds are reproducible.
+#[derive(Clone)]
 struct Rng(u64);
 
 impl Rng {
@@ -25,7 +26,9 @@ impl Rng {
     }
 }
 
-/// A trace configuration's input, ready to play.
+/// A trace configuration's input, ready to play. A copy carries on from
+/// where the original is, pressing what it would.
+#[derive(Clone)]
 pub struct Script {
     scripted: Vec<(u32, u32, Vec<Key>)>,
     random: Option<(u32, u32, Vec<Key>)>,
