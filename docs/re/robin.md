@@ -489,6 +489,77 @@ so it can't match those calls. `robin-verify` counts them as skipped, with
 the first such read named. What the rewrite should do there is #21's
 question, along with the random numbers.
 
+## Robin's movement
+
+Found by reading Robin's update and the code it calls (#34).
+
+**The controls, walking, the wall tests and the edge are rewritten
+(`games/robin/src/movement.rs`) and confirmed** against the original by
+`tools/robin-verify`. That covers play, the tour (which now walks Robin off
+the screen), and a short game with each control method chosen through the
+menu. Robin's update (`0:C59A`) also runs his actions, which go with the
+characters, so it is not rewritten yet. **read**, unless marked.
+
+### Robin
+
+- **Robin is a sprite**: his record is at `0xCB76` (*Sprites*), and his
+  position is its next position, `0xCB7F` horizontally and `0xCB80`
+  vertically. Next to it are his direction (`0xCB85`) and a state byte
+  (`0xCB81`).
+- **His update**, `0:C59A`, called from the main loop (**read**):
+  - it counts down a counter kept in its own code, and acts when it runs
+    out;
+  - it then resets the counter to 1, so it acts on every call, or to 3,
+    every third, while he's fighting (`0xCB74` or `0xCB75` non-zero);
+  - when it acts, it moves him (`0:C852`), runs his actions (`0:C8DF`:
+    firing and fighting, with the characters), and redraws his sprite from
+    frame table `0x8C25`.
+
+### The controls
+
+`0:D0C6` reads the controls through the method chosen at the menu, kept as
+an address at `0xD152`. It returns one byte, in the same bit order for
+every method: bit 0 right, 1 left, 2 down, 3 up, 4 fire. Opposite
+directions pressed together cancel out.
+
+| Menu key | Method | How it reads |
+|---|---|---|
+| (the tape's) and 1 | Redefined keys, `0xD06E` | Five key codes at `0xD154`, in the order fire, up, down, left, right. Each code names a half-row of the keyboard (its low three bits) and a key in it (the rest). Key 1 first lets the player set them, on the "SELECT KEYS FOR" screen, which names each key from a table at `0xD159`. |
+| 2 | Kempston joystick, `0xD07F` | Port `0x1F`, whose bits are already in that order. |
+| 3 | Sinclair joystick, `0xD088` | The keys 6 to 0, moved into that order. |
+
+### Walking
+
+`0:C852`:
+
+1. **It turns only when aligned.** It takes the controls and keeps the
+   direction in `0xCB85`. A change between left and right takes effect
+   only when his horizontal position is a multiple of 4. A change between
+   up and down only when his vertical position is a multiple of 8. The fire
+   bit only when both are.
+2. **It moves**, unless his state byte is 6 or more: one step right or left,
+   two down or up, each only if no wall is in the way.
+3. **A wall** is a non-zero attribute without bit 7 in the play area's
+   attribute buffer (*The screen*). The test looks at the cells just past
+   Robin's edge in the direction he's going (`0:DC5B`, `0:DC6C`, `0:DC7F`,
+   `0:DC8B`, through `0:DCC2`): two cells for a side, three for the top or
+   the bottom. A step that doesn't reach a new cell boundary isn't tested.
+
+### Leaving the screen
+
+The main loop, after everything else (`0xBE9B`), checks Robin's position
+against the play area's edges:
+
+| Where he is | Direction | He comes in at |
+|---|---|---|
+| horizontal below `0x0B` | left | horizontal + `0x6E` |
+| horizontal `0x7A` or more | right | horizontal − `0x6E` |
+| vertical below `0x28` | up | vertical `0x68` |
+| vertical `0x70` or more | down | vertical `0x30` |
+
+Then it takes the step (`0:C127`) and enters the new location (`0xBF0E`,
+*The map*). Otherwise it starts the loop again.
+
 ## Sound
 
 - **It uses the AY sound chip.** It selects registers through `0xFFFD` and

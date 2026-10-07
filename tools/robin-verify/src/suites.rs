@@ -1,9 +1,9 @@
 //! The routines of the original that have been rewritten, and how each
 //! rewrite takes the original's registers (`docs/re/robin.md`).
 
-use robin::{map, print, screen, sprites};
+use robin::{map, movement, print, screen, sprites};
 
-use crate::capture::{Reg, Routine};
+use crate::capture::{Reg, Regs, Routine};
 
 /// The tables the start-up code builds, and must never be rewritten after.
 pub const TABLES: [(&str, u16, u16); 2] = [
@@ -19,8 +19,9 @@ pub fn all() -> Vec<Routine> {
             entry: 0xCEC8,
             code: (0xCEC8, 0xCEDD),
             outputs: &[],
+            exits: &[],
             preserves: &[],
-            rewrite: |g, _, r| {
+            rewrite: |g, _, r, _| {
                 screen::build_mirror(g);
                 r
             },
@@ -31,8 +32,9 @@ pub fn all() -> Vec<Routine> {
             entry: 0xCEDE,
             code: (0xCEDE, 0xCEFD),
             outputs: &[],
+            exits: &[],
             preserves: &[],
-            rewrite: |g, _, r| {
+            rewrite: |g, _, r, _| {
                 screen::build_rows(g);
                 r
             },
@@ -43,8 +45,9 @@ pub fn all() -> Vec<Routine> {
             entry: 0xCEFE,
             code: (0xCEFE, 0xCF0B),
             outputs: &[],
+            exits: &[],
             preserves: &[],
-            rewrite: |g, _, r| {
+            rewrite: |g, _, r, _| {
                 screen::clear_screen(g);
                 r
             },
@@ -55,8 +58,9 @@ pub fn all() -> Vec<Routine> {
             entry: 0xCF0C,
             code: (0xCF0C, 0xCF18),
             outputs: &[],
+            exits: &[],
             preserves: &[],
-            rewrite: |g, _, r| {
+            rewrite: |g, _, r, _| {
                 screen::fill_attrs(g, r.get(Reg::A));
                 r
             },
@@ -67,8 +71,9 @@ pub fn all() -> Vec<Routine> {
             entry: 0xCF19,
             code: (0xCF19, 0xCF32),
             outputs: &[],
+            exits: &[],
             preserves: &[],
-            rewrite: |g, _, r| {
+            rewrite: |g, _, r, _| {
                 screen::clear_play_area(g, r.get(Reg::A));
                 r
             },
@@ -79,8 +84,9 @@ pub fn all() -> Vec<Routine> {
             entry: 0xCF33,
             code: (0xCF33, 0xCF40),
             outputs: &[],
+            exits: &[],
             preserves: &[],
-            rewrite: |g, _, r| {
+            rewrite: |g, _, r, _| {
                 screen::clear_changed(g);
                 r
             },
@@ -91,8 +97,9 @@ pub fn all() -> Vec<Routine> {
             entry: 0xCF41,
             code: (0xCF41, 0xCF5E),
             outputs: &[],
+            exits: &[],
             preserves: &[],
-            rewrite: |g, _, r| {
+            rewrite: |g, _, r, _| {
                 screen::clear_lower_panel(g);
                 r
             },
@@ -103,8 +110,9 @@ pub fn all() -> Vec<Routine> {
             entry: 0xC754,
             code: (0xC754, 0xC7AE),
             outputs: &[],
+            exits: &[],
             preserves: &[],
-            rewrite: |g, _, r| {
+            rewrite: |g, _, r, _| {
                 screen::flush(g);
                 r
             },
@@ -115,8 +123,9 @@ pub fn all() -> Vec<Routine> {
             entry: 0xC6FE,
             code: (0xC6FE, 0xC753),
             outputs: &[],
+            exits: &[],
             preserves: &[],
-            rewrite: |g, _, r| {
+            rewrite: |g, _, r, _| {
                 screen::copy_pixels(g);
                 r
             },
@@ -127,8 +136,9 @@ pub fn all() -> Vec<Routine> {
             entry: 0xC086,
             code: (0xC086, 0xC0A3),
             outputs: &[],
+            exits: &[],
             preserves: &[],
-            rewrite: |g, _, r| {
+            rewrite: |g, _, r, _| {
                 screen::copy_attrs(g);
                 r
             },
@@ -139,8 +149,9 @@ pub fn all() -> Vec<Routine> {
             entry: 0xD4F6,
             code: PRINTER,
             outputs: &[],
+            exits: &[],
             preserves: &[],
-            rewrite: |g, _, r| {
+            rewrite: |g, _, r, _| {
                 print::print_at(
                     g,
                     r.get(Reg::A),
@@ -155,8 +166,9 @@ pub fn all() -> Vec<Routine> {
             entry: 0xD4FC,
             code: PRINTER,
             outputs: &[],
+            exits: &[],
             preserves: &[],
-            rewrite: |g, _, r| {
+            rewrite: |g, _, r, _| {
                 print::print_from(
                     g,
                     r.get(Reg::D),
@@ -172,8 +184,9 @@ pub fn all() -> Vec<Routine> {
             entry: 0xD50E,
             code: PRINTER,
             outputs: &[],
+            exits: &[],
             preserves: &[],
-            rewrite: |g, _, r| {
+            rewrite: |g, _, r, _| {
                 print::print_message(g, r.get(Reg::A), r.get(Reg::D), r.get(Reg::E));
                 r
             },
@@ -184,8 +197,9 @@ pub fn all() -> Vec<Routine> {
             entry: 0xCEBB,
             code: (0xCEBB, 0xCEC7),
             outputs: &[],
+            exits: &[],
             preserves: &[],
-            rewrite: |g, _, r| {
+            rewrite: |g, _, r, _| {
                 print::print_replacing(g, u16::from_be_bytes([r.get(Reg::H), r.get(Reg::L)]));
                 r
             },
@@ -196,8 +210,9 @@ pub fn all() -> Vec<Routine> {
             entry: 0xC127,
             code: (0xC127, 0xC16D),
             outputs: &[],
+            exits: &[],
             preserves: &[],
-            rewrite: |g, _, r| {
+            rewrite: |g, _, r, _| {
                 g.map.location = map::step(g.map.location, r.get(Reg::A));
                 r
             },
@@ -208,8 +223,9 @@ pub fn all() -> Vec<Routine> {
             entry: 0xC0B9,
             code: (0xC0B9, 0xC0CD),
             outputs: &[Reg::H, Reg::L],
+            exits: &[],
             preserves: &[],
-            rewrite: |g, _, mut r| {
+            rewrite: |g, _, mut r, _| {
                 let at = map::find_record(g, g.map.table, g.map.record);
                 r.set(Reg::H, (at >> 8) as u8);
                 r.set(Reg::L, at as u8);
@@ -223,8 +239,9 @@ pub fn all() -> Vec<Routine> {
             entry: 0xBFC9,
             code: (0xBFC9, 0xC055),
             outputs: &[],
+            exits: &[],
             preserves: &[],
-            rewrite: |g, a, r| {
+            rewrite: |g, a, r, _| {
                 map::draw_block(g, a.map(), r.get(Reg::A), r.get(Reg::B), r.get(Reg::C));
                 r
             },
@@ -235,8 +252,9 @@ pub fn all() -> Vec<Routine> {
             entry: 0xC0CE,
             code: (0xC0CE, 0xC11F),
             outputs: &[],
+            exits: &[],
             preserves: &[],
-            rewrite: |g, _, r| {
+            rewrite: |g, _, r, _| {
                 map::mirror_block(g, u16::from_be_bytes([r.get(Reg::D), r.get(Reg::E)]));
                 r
             },
@@ -247,8 +265,9 @@ pub fn all() -> Vec<Routine> {
             entry: 0xBFAA,
             code: (0xBFAA, 0xBFC8),
             outputs: &[],
+            exits: &[],
             preserves: &[],
-            rewrite: |g, a, r| {
+            rewrite: |g, a, r, _| {
                 map::draw_list(
                     g,
                     a.map(),
@@ -263,8 +282,9 @@ pub fn all() -> Vec<Routine> {
             entry: 0xBFA7,
             code: (0xBFA7, 0xBFA9),
             outputs: &[],
+            exits: &[],
             preserves: &[],
-            rewrite: |g, a, r| {
+            rewrite: |g, a, r, _| {
                 map::draw_record(g, a.map());
                 r
             },
@@ -275,8 +295,9 @@ pub fn all() -> Vec<Routine> {
             entry: 0xBF6A,
             code: (0xBF6A, 0xBFA6),
             outputs: &[],
+            exits: &[],
             preserves: &[],
-            rewrite: |g, a, r| {
+            rewrite: |g, a, r, _| {
                 map::draw_location(g, a.map());
                 r
             },
@@ -287,8 +308,9 @@ pub fn all() -> Vec<Routine> {
             entry: 0xC056,
             code: (0xC056, 0xC085),
             outputs: &[],
+            exits: &[],
             preserves: &[],
-            rewrite: |g, a, r| {
+            rewrite: |g, a, r, _| {
                 map::draw_special(g, a.map());
                 r
             },
@@ -299,8 +321,9 @@ pub fn all() -> Vec<Routine> {
             entry: 0xC7AF,
             code: (0xC7AF, 0xC7EE),
             outputs: &[],
+            exits: &[],
             preserves: &[Reg::A, Reg::F, Reg::B, Reg::C, Reg::H, Reg::L],
-            rewrite: |g, _, r| {
+            rewrite: |g, _, r, _| {
                 sprites::mirror_frame(
                     g,
                     u16::from_be_bytes([r.get(Reg::H), r.get(Reg::L)]),
@@ -315,8 +338,9 @@ pub fn all() -> Vec<Routine> {
             entry: 0xC5CE,
             code: (0xC5CE, 0xC687),
             outputs: &[],
+            exits: &[],
             preserves: &[Reg::H, Reg::L],
-            rewrite: |g, a, r| {
+            rewrite: |g, a, r, _| {
                 sprites::draw_frame(g, a.sprites(), r.get(Reg::A), r.get(Reg::C), r.get(Reg::B));
                 r
             },
@@ -327,6 +351,7 @@ pub fn all() -> Vec<Routine> {
             entry: 0xC688,
             code: (0xC688, 0xC6FD),
             outputs: &[],
+            exits: &[],
             preserves: &[
                 Reg::A,
                 Reg::F,
@@ -337,7 +362,7 @@ pub fn all() -> Vec<Routine> {
                 Reg::H,
                 Reg::L,
             ],
-            rewrite: |g, _, r| {
+            rewrite: |g, _, r, _| {
                 sprites::mark_cells(
                     g,
                     u16::from_be_bytes([r.get(Reg::H), r.get(Reg::L)]),
@@ -355,8 +380,9 @@ pub fn all() -> Vec<Routine> {
             outputs: &[],
             // Its callers go on using the record (0:DBDA clears a flag
             // through IX), and it leaves IX as it was.
+            exits: &[],
             preserves: &[Reg::Ixh, Reg::Ixl],
-            rewrite: |g, a, r| {
+            rewrite: |g, a, r, _| {
                 sprites::animate(
                     g,
                     a.sprites(),
@@ -365,7 +391,149 @@ pub fn all() -> Vec<Routine> {
                 r
             },
         },
+        Routine {
+            name: "read the controls (0:D0C6)",
+            bank: Some(0),
+            entry: 0xD0C6,
+            code: (0xD0C6, 0xD0E7),
+            outputs: &[Reg::A, Reg::E],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, mut r, c| {
+                let e = movement::read_controls(g, c);
+                r.set(Reg::A, e);
+                r.set(Reg::E, e);
+                r
+            },
+        },
+        Routine {
+            name: "read the Kempston joystick (0:D07F)",
+            bank: Some(0),
+            entry: 0xD07F,
+            code: (0xD07F, 0xD087),
+            outputs: &[Reg::E],
+            exits: &[],
+            preserves: &[],
+            rewrite: |_, _, mut r, c| {
+                r.set(Reg::E, movement::read_kempston(c));
+                r
+            },
+        },
+        Routine {
+            name: "read the Sinclair joystick (0:D088)",
+            bank: Some(0),
+            entry: 0xD088,
+            code: (0xD088, 0xD0A0),
+            outputs: &[Reg::E],
+            exits: &[],
+            preserves: &[],
+            rewrite: |_, _, mut r, c| {
+                r.set(Reg::E, movement::read_sinclair(c));
+                r
+            },
+        },
+        Routine {
+            name: "read the redefined keys (0:D06E)",
+            bank: Some(0),
+            entry: 0xD06E,
+            code: (0xD053, 0xD07E),
+            outputs: &[Reg::E],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, mut r, c| {
+                r.set(Reg::E, movement::read_keys(g, c));
+                r
+            },
+        },
+        Routine {
+            name: "walk Robin a step (0:C852)",
+            bank: Some(0),
+            entry: 0xC852,
+            code: (0xC852, 0xC8DE),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, c| {
+                movement::walk(g, c);
+                r
+            },
+        },
+        wall("a wall to the right (0:DC6C)", 0xDC6C, (0xDC6C, 0xDC7E)),
+        wall("a wall to the left (0:DC5B)", 0xDC5B, (0xDC5B, 0xDC6B)),
+        wall("a wall above (0:DC7F)", 0xDC7F, (0xDC7F, 0xDC8A)),
+        wall("a wall below (0:DC8B)", 0xDC8B, (0xDC8B, 0xDC9A)),
+        Routine {
+            name: "find Robin's cell (0:DCC2)",
+            bank: Some(0),
+            entry: 0xDCC2,
+            code: (0xDCC2, 0xDCDB),
+            outputs: &[Reg::H, Reg::L],
+            exits: &[],
+            preserves: &[],
+            rewrite: |_, _, mut r, _| {
+                r.set_pair(Reg::H, Reg::L, movement::cell(r.get(Reg::L), r.get(Reg::H)));
+                r
+            },
+        },
+        Routine {
+            name: "leave by the screen's edge (0xBE9B, in the main loop)",
+            bank: Some(0),
+            entry: 0xBE9B,
+            code: (0xBE9B, 0xBECD),
+            outputs: &[Reg::E],
+            // Off the edge it goes on to take the step; otherwise the main
+            // loop starts again.
+            exits: &[0xBECE, 0xBE62],
+            preserves: &[],
+            rewrite: |g, _, mut r, _| {
+                if let Some(direction) = movement::leave_by_edge(g) {
+                    r.set(Reg::E, direction);
+                }
+                r
+            },
+        },
     ]
+}
+
+/// A wall test: it takes Robin's position in HL, and answers in A and the
+/// flags, as `OR (HL)` leaves them on a wall and `XOR A` does otherwise.
+fn wall(name: &'static str, entry: u16, code: (u16, u16)) -> Routine {
+    let rewrite: fn(
+        &mut robin::Game,
+        &robin::assets::Assets,
+        Regs,
+        &robin::controls::Controls,
+    ) -> Regs = match entry {
+        0xDC6C => |g, _, r, _| answer(r, movement::wall_right(g, r.get(Reg::L), r.get(Reg::H))),
+        0xDC5B => |g, _, r, _| answer(r, movement::wall_left(g, r.get(Reg::L), r.get(Reg::H))),
+        0xDC7F => |g, _, r, _| answer(r, movement::wall_up(g, r.get(Reg::L), r.get(Reg::H))),
+        _ => |g, _, r, _| answer(r, movement::wall_down(g, r.get(Reg::L), r.get(Reg::H))),
+    };
+    Routine {
+        name,
+        bank: Some(0),
+        entry,
+        code,
+        outputs: &[Reg::A, Reg::F],
+        exits: &[],
+        preserves: &[Reg::D, Reg::E, Reg::H, Reg::L],
+        rewrite,
+    }
+}
+
+/// A and the flags as the original's wall tests leave them: the wall's
+/// attribute after `OR (HL)`, or 0 after `XOR A`.
+fn answer(mut r: Regs, wall: Option<u8>) -> Regs {
+    let a = wall.unwrap_or(0);
+    let parity = if a.count_ones().is_multiple_of(2) {
+        0x04
+    } else {
+        0
+    };
+    let zero = if a == 0 { 0x40 } else { 0 };
+    r.set(Reg::A, a);
+    r.set(Reg::F, (a & 0xA8) | zero | parity);
+    r
 }
 
 /// The text printer's code, shared by its three ways in.

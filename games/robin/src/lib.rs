@@ -8,9 +8,11 @@
 //! `README.md`.
 
 pub mod assets;
+pub mod controls;
 pub mod game;
 pub mod layout;
 pub mod map;
+pub mod movement;
 pub mod print;
 pub mod screen;
 pub mod sprites;

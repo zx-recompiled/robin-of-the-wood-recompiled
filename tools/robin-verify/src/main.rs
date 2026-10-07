@@ -2,7 +2,8 @@
 //! the original's, from the original's own real calls, byte for byte (#6,
 //! #24).
 //!
-//! Usage: `robin-verify [ASSETS_DIR]`. It needs the supported tape and
+//! Usage: `robin-verify [--full] [ASSETS_DIR]`. `--full` walks Robin off the
+//! screen at every move of the tour, not one in four. It needs the supported tape and
 //! `128.rom`, and fails without them, since a check that didn't run must not
 //! look like one that passed. The original boots from the tape and plays
 //! `tools/re/robin.toml`'s script; every call it makes to a rewritten routine
@@ -10,6 +11,7 @@
 //! memory, which is never written to a file.
 
 mod capture;
+mod methods;
 mod suites;
 mod tour;
 
@@ -71,7 +73,12 @@ impl Verifier {
 }
 
 fn run() -> Result<bool, String> {
-    let dir = PathBuf::from(std::env::args().nth(1).unwrap_or_else(|| "assets".into()));
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+    // `--full` walks Robin off the screen at every move of the tour, not
+    // one in four: about ten minutes more (#34, Decision 5).
+    let full = args.iter().any(|a| a == "--full");
+    args.retain(|a| a != "--full");
+    let dir = PathBuf::from(args.first().cloned().unwrap_or_else(|| "assets".into()));
     let tape = std::fs::read_dir(&dir)
         .map_err(|e| format!("{}: {e}", dir.display()))?
         .flatten()
@@ -128,7 +135,8 @@ fn run() -> Result<bool, String> {
     let start = std::time::Instant::now();
     let (z0, frame) = tour_start.ok_or("the game never reached its main loop: no tour")?;
     let quiet = zx_recomp::script::Script::new(&zx_recomp::Config::parse(tour::QUIET)?.trace)?;
-    let toured = tour::run(z0, frame, &quiet, &assets, &mut v);
+    let walk_one_in = if full { 1 } else { tour::WALK_ONE_IN };
+    let toured = tour::run(z0, frame, &quiet, &assets, &mut v, walk_one_in);
     println!(
         "robin-verify: the tour drew {} of {} locations in {:.1?}{}",
         toured.drawn.len(),
@@ -140,6 +148,18 @@ fn run() -> Result<bool, String> {
             ""
         }
     );
+    println!(
+        "robin-verify: of the tour's moves, {} walked off the edge and {} tried but blocked by a wall or a character, walking one in {walk_one_in}{}",
+        toured.walked,
+        toured.fell_back,
+        if full {
+            " (--full)"
+        } else {
+            "; --full walks every move"
+        }
+    );
+    let toured_counts: Vec<u64> = v.tallies.iter().map(|t| t.compared).collect();
+    let method_problems = methods::run(&rom, &tape, &assets, &mut v)?;
     let (tallies, routines, table_writes) = (&v.tallies, &v.routines, &v.table_writes);
 
     let mut ok = toured.problems.is_empty() && toured.drawn.len() == robin::map::LOCATIONS;
@@ -153,14 +173,24 @@ fn run() -> Result<bool, String> {
             robin::map::LOCATIONS
         );
     }
-    for ((r, t), &before) in routines.iter().zip(tallies).zip(&played) {
+    for p in &method_problems {
+        println!("  FAIL the control methods: {p}");
+    }
+    ok &= method_problems.is_empty();
+    for (((r, t), &before), &toured) in routines
+        .iter()
+        .zip(tallies)
+        .zip(&played)
+        .zip(&toured_counts)
+    {
         let unreached = r.unreached(&z, t);
         println!(
-            "  {}: {} calls, {} compared ({} from the tour), {} repeats skipped, {} scrambling checks ({} with the stack left out), {} varied runs ({} did not return); {} instruction(s) never reached{}",
+            "  {}: {} calls, {} compared ({} from the tour, {} with the other control methods), {} repeats skipped, {} scrambling checks ({} with the stack left out), {} varied runs ({} did not return); {} instruction(s) never reached{}",
             r.name,
             t.calls,
             t.compared,
-            t.compared - before,
+            toured - before,
+            t.compared - toured,
             t.repeats,
             t.scrambled,
             t.stack_left_out,
