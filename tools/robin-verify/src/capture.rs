@@ -19,6 +19,7 @@ use std::hash::{Hash, Hasher};
 use robin::Game;
 use robin::assets::{Assets, BANK};
 use robin::controls::Controls;
+use robin::inputs::{Inputs, Random};
 use zx_recomp::script::Script;
 use zx_runtime::memory::Memory;
 use zx_runtime::{Zx, bus, interp};
@@ -126,9 +127,10 @@ pub struct Routine {
     /// routine, which runs to its return.
     pub exits: &'static [u16],
     /// The rewrite: the state, the data parsed from the tape, the registers
-    /// at entry, and the controls as the original saw them; returns the
-    /// registers with its outputs set.
-    pub rewrite: fn(&mut Game, &Assets, Regs, &Controls) -> Regs,
+    /// at entry, and the inputs: the controls as the original saw them, and
+    /// what it read from R (#37); returns the registers with its outputs
+    /// set.
+    pub rewrite: fn(&mut Game, &Assets, Regs, &mut Inputs) -> Regs,
 }
 
 /// What one routine's suite saw.
@@ -377,6 +379,7 @@ impl Routine {
                 self.exits.contains(&c.pc) && self.in_bank(c)
             }
         };
+        let mut random = Vec::new();
         while !done(&c) {
             steps += 1;
             if steps > STEP_LIMIT {
@@ -416,7 +419,13 @@ impl Routine {
                     _ => {}
                 }
             }
+            // `LD A,R`: what R gave is an input, like a key held (#37).
+            let reads_r = c.read(pc) == 0xED && c.read(pc.wrapping_add(1)) == 0x5F;
             interp::step(&mut c);
+            if reads_r {
+                random.push(c.a);
+                c.a.hash(&mut key);
+            }
             min_sp = min_sp.min(c.sp);
         }
         // The stack below the caller's is not the routine's output.
@@ -437,6 +446,7 @@ impl Routine {
             blind,
             read,
             rom_read,
+            random,
             banks: banks(&c),
             after: c,
         })
@@ -450,13 +460,16 @@ impl Routine {
         // A rewrite that panics where the original carries on is a
         // difference like any other: reported, not the end of the run.
         let rewrite = self.rewrite;
-        let controls = Controls {
-            keys: entry.keys,
-            kempston: entry.kempston,
-            ear: entry.ear,
+        let mut inputs = Inputs {
+            controls: Controls {
+                keys: entry.keys,
+                kempston: entry.kempston,
+                ear: entry.ear,
+            },
+            random: Random::given(run.random.clone()),
         };
         let out = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            rewrite(&mut g, play.assets, before, &controls)
+            rewrite(&mut g, play.assets, before, &mut inputs)
         })) {
             Ok(out) => out,
             Err(e) => {
@@ -470,6 +483,13 @@ impl Routine {
         };
         let after = Regs::of(&run.after);
         let mut differ = Vec::new();
+        if inputs.random.left() > 0 {
+            differ.push(format!(
+                "the original read R {} time(s) and the rewrite drew {} fewer",
+                run.random.len(),
+                inputs.random.left()
+            ));
+        }
 
         // All of memory, but for the stack below the caller's: the
         // original's pushes and calls leave bytes there that nobody reads.
@@ -678,6 +698,8 @@ struct Run {
     read: BTreeSet<(usize, usize)>,
     /// The first read of the ROM, if it made one: where, and what.
     rom_read: Option<(u16, u16)>,
+    /// What R gave each `LD A,R`, in order.
+    random: Vec<u8>,
     banks: Box<[[u8; BANK]; 8]>,
     after: Zx,
 }
@@ -738,7 +760,7 @@ mod tests {
 
     fn routine(
         outputs: &'static [Reg],
-        rewrite: fn(&mut Game, &Assets, Regs, &Controls) -> Regs,
+        rewrite: fn(&mut Game, &Assets, Regs, &mut Inputs) -> Regs,
     ) -> Routine {
         Routine {
             name: "made up",
@@ -901,8 +923,8 @@ mod tests {
 
     #[test]
     fn calls_with_different_keys_held_are_different_calls() {
-        let r = routine(&[Reg::A], |_, _, mut r, c| {
-            r.set(Reg::A, c.read(0x7FFE));
+        let r = routine(&[Reg::A], |_, _, mut r, i| {
+            r.set(Reg::A, i.controls.read(0x7FFE));
             r
         });
         let mut t = Tally::default();
@@ -947,5 +969,30 @@ mod tests {
         });
         wrong.exits = &[0x8110];
         assert!(failures(&wrong, &z).iter().any(|e| e.contains("output A")));
+    }
+
+    /// `LD A,R : RET`, and the caller stores A.
+    const READS_R: &[u8] = &[0xED, 0x5F, 0xC9];
+
+    #[test]
+    fn what_r_gave_is_an_input_and_must_be_drawn_exactly() {
+        let z = machine(READS_R, STORES_A);
+        let draws = routine(&[Reg::A], |_, _, mut r, i| {
+            r.set(Reg::A, i.random.r());
+            r
+        });
+        assert!(failures(&draws, &z).is_empty());
+        let ignores = routine(&[Reg::A], |_, _, r, _| r);
+        assert!(
+            failures(&ignores, &z)
+                .iter()
+                .any(|e| e.contains("drew 1 fewer"))
+        );
+        let twice = routine(&[Reg::A], |_, _, mut r, i| {
+            i.random.r();
+            r.set(Reg::A, i.random.r());
+            r
+        });
+        assert!(failures(&twice, &z).iter().any(|e| e.contains("panicked")));
     }
 }

@@ -20,9 +20,9 @@ will start from (#3; `games/robin/tests/boot.rs`). The facts it needs are in
 (`robin::assets::read_game`, #5): the SHA-1 checked, then the eight banks
 built from the tape alone, with no ROM. Rewritten and checked by the
 differential suites (`tools/robin-verify`): the screen and printing (#24),
-the map, drawn at all 320 locations by a tour (#28), the sprites (#32), and
-Robin's movement and controls (#34). The plan, in
-order, is the board's Backlog.
+the map, drawn at all 320 locations by a tour (#28), the sprites (#32),
+Robin's movement and controls (#34), and the four characters on each row
+(#38). The plan, in order, is the board's Backlog.
 
 ## Commands
 

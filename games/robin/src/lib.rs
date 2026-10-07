@@ -8,8 +8,10 @@
 //! `README.md`.
 
 pub mod assets;
+pub mod characters;
 pub mod controls;
 pub mod game;
+pub mod inputs;
 pub mod layout;
 pub mod map;
 pub mod movement;

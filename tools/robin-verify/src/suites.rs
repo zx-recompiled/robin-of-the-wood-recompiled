@@ -1,7 +1,7 @@
 //! The routines of the original that have been rewritten, and how each
 //! rewrite takes the original's registers (`docs/re/robin.md`).
 
-use robin::{map, movement, print, screen, sprites};
+use robin::{characters, map, movement, print, screen, sprites};
 
 use crate::capture::{Reg, Regs, Routine};
 
@@ -399,8 +399,8 @@ pub fn all() -> Vec<Routine> {
             outputs: &[Reg::A, Reg::E],
             exits: &[],
             preserves: &[],
-            rewrite: |g, _, mut r, c| {
-                let e = movement::read_controls(g, c);
+            rewrite: |g, _, mut r, i| {
+                let e = movement::read_controls(g, &i.controls);
                 r.set(Reg::A, e);
                 r.set(Reg::E, e);
                 r
@@ -414,8 +414,8 @@ pub fn all() -> Vec<Routine> {
             outputs: &[Reg::E],
             exits: &[],
             preserves: &[],
-            rewrite: |_, _, mut r, c| {
-                r.set(Reg::E, movement::read_kempston(c));
+            rewrite: |_, _, mut r, i| {
+                r.set(Reg::E, movement::read_kempston(&i.controls));
                 r
             },
         },
@@ -427,8 +427,8 @@ pub fn all() -> Vec<Routine> {
             outputs: &[Reg::E],
             exits: &[],
             preserves: &[],
-            rewrite: |_, _, mut r, c| {
-                r.set(Reg::E, movement::read_sinclair(c));
+            rewrite: |_, _, mut r, i| {
+                r.set(Reg::E, movement::read_sinclair(&i.controls));
                 r
             },
         },
@@ -440,8 +440,8 @@ pub fn all() -> Vec<Routine> {
             outputs: &[Reg::E],
             exits: &[],
             preserves: &[],
-            rewrite: |g, _, mut r, c| {
-                r.set(Reg::E, movement::read_keys(g, c));
+            rewrite: |g, _, mut r, i| {
+                r.set(Reg::E, movement::read_keys(g, &i.controls));
                 r
             },
         },
@@ -453,8 +453,8 @@ pub fn all() -> Vec<Routine> {
             outputs: &[],
             exits: &[],
             preserves: &[],
-            rewrite: |g, _, r, c| {
-                movement::walk(g, c);
+            rewrite: |g, _, r, i| {
+                movement::walk(g, &i.controls);
                 r
             },
         },
@@ -492,7 +492,141 @@ pub fn all() -> Vec<Routine> {
                 r
             },
         },
+        floor("save the floor (0:DD49)", 0xDD49, (0xDD49, 0xDD54)),
+        floor("the floor to the right (0:DD55)", 0xDD55, (0xDD55, 0xDD59)),
+        floor("the floor to the left (0:DD5A)", 0xDD5A, (0xDD5A, 0xDD65)),
+        floor("forget the left floor (0:DD66)", 0xDD66, (0xDD66, 0xDD6A)),
+        floor("forget the right floor (0:DD6B)", 0xDD6B, (0xDD6B, 0xDD78)),
+        floor(
+            "the floors going up or down (0:DD79)",
+            0xDD79,
+            (0xDD79, 0xDD82),
+        ),
+        floor("the floors going left (0:DD83)", 0xDD83, (0xDD83, 0xDD8C)),
+        floor("the floors going right (0:DD8D)", 0xDD8D, (0xDD8D, 0xDD96)),
+        Routine {
+            name: "find a row's characters (0:C2F2)",
+            bank: Some(0),
+            entry: 0xC2F2,
+            code: (0xC2F2, 0xC305),
+            outputs: &[Reg::H, Reg::L],
+            exits: &[],
+            preserves: &[],
+            rewrite: |_, _, mut r, _| {
+                r.set_pair(Reg::H, Reg::L, characters::row_list(r.get(Reg::A)));
+                r
+            },
+        },
+        Routine {
+            name: "put the characters on their floors (0:DCDC)",
+            bank: Some(0),
+            entry: 0xDCDC,
+            code: (0xDCDC, 0xDD3C),
+            // Its only caller sets every register it uses next.
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, _| {
+                characters::place(g);
+                r
+            },
+        },
+        Routine {
+            name: "the characters on entering a location (0:C16E)",
+            bank: Some(0),
+            entry: 0xC16E,
+            code: (0xC16E, 0xC2F1),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, a, r, inputs| {
+                characters::enter(g, a.sprites(), r.get(Reg::A), &mut inputs.random);
+                r
+            },
+        },
+        Routine {
+            name: "move and draw one of the four (A8D6)",
+            bank: None,
+            entry: 0xA8D6,
+            code: (0xA8D6, 0xAAB7),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, a, r, inputs| {
+                characters::move_one(g, a.sprites(), &mut inputs.random);
+                r
+            },
+        },
+        Routine {
+            name: "anything in a character's way (0:DD3D)",
+            bank: Some(0),
+            entry: 0xDD3D,
+            code: (0xDD3D, 0xDD48),
+            outputs: &[Reg::A, Reg::F, Reg::B],
+            exits: &[],
+            preserves: &[Reg::C, Reg::D, Reg::E, Reg::H, Reg::L, Reg::Ixh, Reg::Ixl],
+            rewrite: |g, _, r, _| {
+                let at = u16::from_be_bytes([r.get(Reg::H), r.get(Reg::L)]);
+                let found = characters::in_the_way(g, at);
+                let mut r = answer(r, found.map(|(_, b)| b));
+                r.set(Reg::B, found.map_or(0, |(n, _)| 3 - n));
+                r
+            },
+        },
     ]
+}
+
+/// A floor routine: no registers in or out.
+fn floor(name: &'static str, entry: u16, code: (u16, u16)) -> Routine {
+    let rewrite: fn(
+        &mut robin::Game,
+        &robin::assets::Assets,
+        Regs,
+        &mut robin::inputs::Inputs,
+    ) -> Regs = match entry {
+        0xDD49 => |g, _, r, _| {
+            characters::save_floor(g);
+            r
+        },
+        0xDD55 => |g, _, r, _| {
+            characters::current_to_right(g);
+            r
+        },
+        0xDD5A => |g, _, r, _| {
+            characters::current_to_left(g);
+            r
+        },
+        0xDD66 => |g, _, r, _| {
+            characters::clear_left(g);
+            r
+        },
+        0xDD6B => |g, _, r, _| {
+            characters::clear_right(g);
+            r
+        },
+        0xDD79 => |g, _, r, _| {
+            characters::floors_vertically(g);
+            r
+        },
+        0xDD83 => |g, _, r, _| {
+            characters::floors_going_left(g);
+            r
+        },
+        _ => |g, _, r, _| {
+            characters::floors_going_right(g);
+            r
+        },
+    };
+    Routine {
+        name,
+        bank: Some(0),
+        entry,
+        code,
+        outputs: &[],
+        exits: &[],
+        preserves: &[],
+        rewrite,
+    }
 }
 
 /// A wall test: it takes Robin's position in HL, and answers in A and the
@@ -502,7 +636,7 @@ fn wall(name: &'static str, entry: u16, code: (u16, u16)) -> Routine {
         &mut robin::Game,
         &robin::assets::Assets,
         Regs,
-        &robin::controls::Controls,
+        &mut robin::inputs::Inputs,
     ) -> Regs = match entry {
         0xDC6C => |g, _, r, _| answer(r, movement::wall_right(g, r.get(Reg::L), r.get(Reg::H))),
         0xDC5B => |g, _, r, _| answer(r, movement::wall_left(g, r.get(Reg::L), r.get(Reg::H))),
