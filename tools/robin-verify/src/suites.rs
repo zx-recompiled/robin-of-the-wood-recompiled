@@ -449,6 +449,23 @@ pub fn all() -> Vec<Routine> {
                 r
             },
         },
+        Routine {
+            name: "leave by the screen's edge (0xBE9B, in the main loop)",
+            bank: Some(0),
+            entry: 0xBE9B,
+            code: (0xBE9B, 0xBECD),
+            outputs: &[Reg::E],
+            // Off the edge it goes on to take the step; otherwise the main
+            // loop starts again.
+            exits: &[0xBECE, 0xBE62],
+            preserves: &[],
+            rewrite: |g, _, mut r, _| {
+                if let Some(direction) = movement::leave_by_edge(g) {
+                    r.set(Reg::E, direction);
+                }
+                r
+            },
+        },
     ]
 }
 

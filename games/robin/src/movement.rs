@@ -210,3 +210,25 @@ pub fn walk(g: &mut Game, controls: &Controls) {
     g.robin.x = x;
     g.robin.y = y;
 }
+
+/// Whether Robin is off the play area's edge (`0xBE9B`, in the main loop):
+/// the direction he left by, with his position moved to come in at the
+/// opposite edge; or none.
+pub fn leave_by_edge(g: &mut Game) -> Option<u8> {
+    let (x, y) = (g.robin.x, g.robin.y);
+    if x < 0x0B {
+        g.robin.x = x.wrapping_add(0x6E);
+        Some(2)
+    } else if x >= 0x7A {
+        g.robin.x = x.wrapping_sub(0x6E);
+        Some(1)
+    } else if y < 0x28 {
+        g.robin.y = 0x68;
+        Some(8)
+    } else if y >= 0x70 {
+        g.robin.y = 0x30;
+        Some(4)
+    } else {
+        None
+    }
+}
