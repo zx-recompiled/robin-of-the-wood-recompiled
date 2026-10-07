@@ -341,6 +341,8 @@ pub struct Characters {
     pub cycle: u8,
     /// While set, a character facing Robin always fires.
     pub fire_always: u8,
+    /// The four's sprite records, 11 bytes each (*Sprites*).
+    pub records: [u8; 44],
 }
 
 parts!(Characters {
@@ -349,6 +351,7 @@ parts!(Characters {
     floors: [u8; 84] = 0xDD9B => "characters.floors",
     cycle: u8 = 0xA8D7 => "characters.cycle",
     fire_always: u8 = 0xD47B => "characters.fire_always",
+    records: [u8; 44] = 0xAAB8 => "characters.records",
 });
 
 #[derive(Clone, PartialEq, Eq, Debug)]

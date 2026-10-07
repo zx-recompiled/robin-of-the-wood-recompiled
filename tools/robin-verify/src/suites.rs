@@ -517,6 +517,62 @@ pub fn all() -> Vec<Routine> {
                 r
             },
         },
+        Routine {
+            name: "put the characters on their floors (0:DCDC)",
+            bank: Some(0),
+            entry: 0xDCDC,
+            code: (0xDCDC, 0xDD3C),
+            // Its only caller sets every register it uses next.
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, _| {
+                characters::place(g);
+                r
+            },
+        },
+        Routine {
+            name: "the characters on entering a location (0:C16E)",
+            bank: Some(0),
+            entry: 0xC16E,
+            code: (0xC16E, 0xC2F1),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, a, r, inputs| {
+                characters::enter(g, a.sprites(), r.get(Reg::A), &mut inputs.random);
+                r
+            },
+        },
+        Routine {
+            name: "move and draw one of the four (A8D6)",
+            bank: None,
+            entry: 0xA8D6,
+            code: (0xA8D6, 0xAAB7),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, a, r, inputs| {
+                characters::move_one(g, a.sprites(), &mut inputs.random);
+                r
+            },
+        },
+        Routine {
+            name: "anything in a character's way (0:DD3D)",
+            bank: Some(0),
+            entry: 0xDD3D,
+            code: (0xDD3D, 0xDD48),
+            outputs: &[Reg::A, Reg::F, Reg::B],
+            exits: &[],
+            preserves: &[Reg::C, Reg::D, Reg::E, Reg::H, Reg::L, Reg::Ixh, Reg::Ixl],
+            rewrite: |g, _, r, _| {
+                let at = u16::from_be_bytes([r.get(Reg::H), r.get(Reg::L)]);
+                let found = characters::in_the_way(g, at);
+                let mut r = answer(r, found.map(|(_, b)| b));
+                r.set(Reg::B, found.map_or(0, |(n, _)| 3 - n));
+                r
+            },
+        },
     ]
 }
 
