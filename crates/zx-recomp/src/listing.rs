@@ -127,8 +127,15 @@ pub fn listing(analysis: &Analysis, trace: &Trace) -> String {
                         .map_or(String::new(), |r| format!("  ; from {}", refs(r)));
                     let _ = writeln!(out, "\n{}:{from}", label(at, analysis));
                 }
-                let bytes: Vec<String> = (0..usize::from(d.len))
-                    .map(|k| format!("{:02x}", byte(k)))
+                // Read as the decode reads them: an instruction can run on
+                // past its page into whatever the next slot holds.
+                let bytes: Vec<String> = (0..d.len)
+                    .map(|k| {
+                        format!(
+                            "{:02x}",
+                            analysis.byte(at, at.addr.wrapping_add(u16::from(k)))
+                        )
+                    })
                     .collect();
                 let traced = if trace.executed[base + o].is_some() {
                     '*'
