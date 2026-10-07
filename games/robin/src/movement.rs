@@ -36,8 +36,8 @@ impl Carry {
 }
 
 /// Whether the key named by `code` is pressed (`0:D053`): its half-row in
-/// the low three bits, its place in it in the rest. Returns the carry as the
-/// original leaves it: clear when pressed.
+/// the low three bits, its place in it in the rest. The answer is left in
+/// `carry`, as the original leaves it: clear when pressed.
 fn key_up(controls: &Controls, code: u8, carry: &mut Carry) {
     let rotations = (code & 7) + 1;
     let shift = 5u8.wrapping_sub(code >> 3);
