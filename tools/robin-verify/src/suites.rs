@@ -1,7 +1,7 @@
 //! The routines of the original that have been rewritten, and how each
 //! rewrite takes the original's registers (`docs/re/robin.md`).
 
-use robin::{map, print, screen, sprites};
+use robin::{map, movement, print, screen, sprites};
 
 use crate::capture::{Reg, Routine};
 
@@ -388,6 +388,34 @@ pub fn all() -> Vec<Routine> {
                     a.sprites(),
                     u16::from_be_bytes([r.get(Reg::Ixh), r.get(Reg::Ixl)]),
                 );
+                r
+            },
+        },
+        Routine {
+            name: "read the controls (0:D0C6)",
+            bank: Some(0),
+            entry: 0xD0C6,
+            code: (0xD0C6, 0xD0E7),
+            outputs: &[Reg::A, Reg::E],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, mut r, c| {
+                let e = movement::read_controls(g, c);
+                r.set(Reg::A, e);
+                r.set(Reg::E, e);
+                r
+            },
+        },
+        Routine {
+            name: "read the redefined keys (0:D06E)",
+            bank: Some(0),
+            entry: 0xD06E,
+            code: (0xD053, 0xD07E),
+            outputs: &[Reg::E],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, mut r, c| {
+                r.set(Reg::E, movement::read_keys(g, c));
                 r
             },
         },
