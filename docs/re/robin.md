@@ -388,7 +388,13 @@ menus.
 ## Sprites
 
 Found by reading the code that draws into the back buffer every frame
-(#32). **read**, unless marked.
+(#32).
+
+**The engine is rewritten (`games/robin/src/sprites.rs`) and confirmed**
+against the original by `tools/robin-verify`, in play and on the tour,
+which now lets each location's characters move for half a second. The
+exceptions are the calls in which the original reads the ROM (*When a
+sprite reads the ROM*, below). Those are counted, not compared.
 
 ### A sprite
 
@@ -454,6 +460,34 @@ Found by reading the code that draws into the back buffer every frame
      puts the byte back afterwards.
    - The routine's other choices are patched into its own code too: which
      frame table, the mirroring path, and the colour pattern's steps.
+
+Quirks the rewrite copies:
+- A pixel frame at a horizontal position below 8 is drawn one pixel row
+  higher. The subtraction that finds its column borrows, and the borrow is
+  taken off the row.
+- A character figure's drawing doesn't return to `0:C5CE`. It drops
+  `0:C5CE`'s return address and returns straight to its caller.
+- The shift chain's last stop starts out as a `RET`, and stays `0xCB` once
+  any sprite has been shifted by 6 pixels.
+- An animation counter is reset when its top bit is set after counting
+  down, not only at zero.
+
+### When a sprite reads the ROM
+
+**confirmed**, on the tour.
+- A character tied to one of the three special locations (`0xD291`, *The
+  map*) has its record at `0xBB1B`. On the tape, its animation pointer is
+  `0x0000`.
+- That pointer is set only by a timer in `0xBA83`, which first fires about
+  18 seconds into a game.
+- Until then, the original takes the character's animation from the ROM:
+  ROM bytes become its frame numbers, and so its frame data.
+
+So if Robin reaches that location early enough, the original draws it from
+the ROM. Play never got there, but the tour did. The rewrite has no ROM,
+so it can't match those calls. `robin-verify` counts them as skipped, with
+the first such read named. What the rewrite should do there is #21's
+question, along with the random numbers.
 
 ## Sound
 
