@@ -237,12 +237,65 @@ parts!(MapState {
     mirror_right: u8 = 0xC0F1 => "map.mirror_right",
 });
 
+/// The sprite engine's state (`docs/re/robin.md`, *Sprites*): all of it
+/// kept in its own code, as the bytes it rewrites.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct SpriteState {
+    /// The frame table being drawn from.
+    pub table: u16,
+    /// A character figure's codes, being drawn.
+    pub figure: u16,
+    /// The figure drawing's three choices of path, as jump offsets (0 for
+    /// the mirrored path), and its attribute step (`XOR A`, `0xAF`, or none).
+    pub figure_columns: u8,
+    pub figure_bytes: u8,
+    pub figure_attrs: u8,
+    pub figure_attr_step: u8,
+    /// The last figure byte looked up in the mirror table.
+    pub figure_mirror: u8,
+    /// The four places in the shift chain, 16 bytes apart, where a `RET` is
+    /// planted to cut it short, and put back after: `0xCB` while not.
+    pub chain_0: u8,
+    pub chain_1: u8,
+    pub chain_2: u8,
+    pub chain_3: u8,
+    /// Marking a frame's cells: whether its colour pattern steps along a
+    /// row and down a column (`INC BC`, `0x03`, or none).
+    pub mark_row_step: u8,
+    pub mark_column_step: u8,
+    /// The last three frame bytes looked up when mirroring one: the third,
+    /// the first and the second of a row.
+    pub mirror_third: u8,
+    pub mirror_first: u8,
+    pub mirror_second: u8,
+}
+
+parts!(SpriteState {
+    table: u16 = 0xC5D0 => "sprites.table",
+    figure: u16 = 0xC598 => "sprites.figure",
+    figure_columns: u8 = 0xC4DB => "sprites.figure_columns",
+    figure_bytes: u8 = 0xC4FB => "sprites.figure_bytes",
+    figure_attrs: u8 = 0xC53F => "sprites.figure_attrs",
+    figure_attr_step: u8 = 0xC549 => "sprites.figure_attr_step",
+    figure_mirror: u8 = 0xC500 => "sprites.figure_mirror",
+    chain_0: u8 = 0xC647 => "sprites.chain_0",
+    chain_1: u8 = 0xC657 => "sprites.chain_1",
+    chain_2: u8 = 0xC667 => "sprites.chain_2",
+    chain_3: u8 = 0xC677 => "sprites.chain_3",
+    mark_row_step: u8 = 0xC6E8 => "sprites.mark_row_step",
+    mark_column_step: u8 = 0xC6F3 => "sprites.mark_column_step",
+    mirror_third: u8 = 0xC7CD => "sprites.mirror_third",
+    mirror_first: u8 = 0xC7D5 => "sprites.mirror_first",
+    mirror_second: u8 = 0xC7E0 => "sprites.mirror_second",
+});
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Game {
     pub display: Display,
     pub play: PlayArea,
     pub printer: Printer,
     pub map: MapState,
+    pub sprites: SpriteState,
     /// The rest of RAM, banks 0 to 7, as it was read: what the rewrite does
     /// not model yet, and the blocks' bytes, which the game mirrors in place.
     rest: Box<[[u8; BANK]; 8]>,
@@ -279,6 +332,7 @@ impl Game {
             .or_else(|| PlayArea::name_of(addr))
             .or_else(|| Printer::name_of(addr))
             .or_else(|| MapState::name_of(addr))
+            .or_else(|| SpriteState::name_of(addr))
             .unwrap_or("the rest of RAM")
     }
 
@@ -296,6 +350,7 @@ impl Game {
             .or_else(|| self.play.get_part(addr))
             .or_else(|| self.printer.get_part(addr))
             .or_else(|| self.map.get_part(addr))
+            .or_else(|| self.sprites.get_part(addr))
             .unwrap_or(self.rest[bank][offset])
     }
 
@@ -308,7 +363,8 @@ impl Game {
         if !(self.display.set_part(addr, v)
             || self.play.set_part(addr, v)
             || self.printer.set_part(addr, v)
-            || self.map.set_part(addr, v))
+            || self.map.set_part(addr, v)
+            || self.sprites.set_part(addr, v))
         {
             let (bank, offset) = place(addr);
             self.rest[bank][offset] = v;
@@ -327,12 +383,14 @@ impl Game {
             play: PlayArea::zeroed(),
             printer: Printer::zeroed(),
             map: MapState::zeroed(),
+            sprites: SpriteState::zeroed(),
             rest: Box::new(*banks),
         };
         g.display.read_parts(&read);
         g.play.read_parts(&read);
         g.printer.read_parts(&read);
         g.map.read_parts(&read);
+        g.sprites.read_parts(&read);
         g
     }
 
@@ -349,6 +407,7 @@ impl Game {
         self.play.write_parts(&mut write);
         self.printer.write_parts(&mut write);
         self.map.write_parts(&mut write);
+        self.sprites.write_parts(&mut write);
         banks
     }
 }

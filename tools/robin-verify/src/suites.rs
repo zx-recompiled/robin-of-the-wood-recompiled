@@ -1,7 +1,7 @@
 //! The routines of the original that have been rewritten, and how each
 //! rewrite takes the original's registers (`docs/re/robin.md`).
 
-use robin::{map, print, screen};
+use robin::{map, print, screen, sprites};
 
 use crate::capture::{Reg, Routine};
 
@@ -290,6 +290,22 @@ pub fn all() -> Vec<Routine> {
             preserves: &[],
             rewrite: |g, a, r| {
                 map::draw_special(g, a.map());
+                r
+            },
+        },
+        Routine {
+            name: "mirror a frame in place (0:C7AF)",
+            bank: Some(0),
+            entry: 0xC7AF,
+            code: (0xC7AF, 0xC7EE),
+            outputs: &[],
+            preserves: &[Reg::A, Reg::F, Reg::B, Reg::C, Reg::H, Reg::L],
+            rewrite: |g, _, r| {
+                sprites::mirror_frame(
+                    g,
+                    u16::from_be_bytes([r.get(Reg::H), r.get(Reg::L)]),
+                    r.get(Reg::A),
+                );
                 r
             },
         },
