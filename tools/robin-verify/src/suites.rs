@@ -399,8 +399,8 @@ pub fn all() -> Vec<Routine> {
             outputs: &[Reg::A, Reg::E],
             exits: &[],
             preserves: &[],
-            rewrite: |g, _, mut r, c| {
-                let e = movement::read_controls(g, c);
+            rewrite: |g, _, mut r, i| {
+                let e = movement::read_controls(g, &i.controls);
                 r.set(Reg::A, e);
                 r.set(Reg::E, e);
                 r
@@ -414,8 +414,8 @@ pub fn all() -> Vec<Routine> {
             outputs: &[Reg::E],
             exits: &[],
             preserves: &[],
-            rewrite: |_, _, mut r, c| {
-                r.set(Reg::E, movement::read_kempston(c));
+            rewrite: |_, _, mut r, i| {
+                r.set(Reg::E, movement::read_kempston(&i.controls));
                 r
             },
         },
@@ -427,8 +427,8 @@ pub fn all() -> Vec<Routine> {
             outputs: &[Reg::E],
             exits: &[],
             preserves: &[],
-            rewrite: |_, _, mut r, c| {
-                r.set(Reg::E, movement::read_sinclair(c));
+            rewrite: |_, _, mut r, i| {
+                r.set(Reg::E, movement::read_sinclair(&i.controls));
                 r
             },
         },
@@ -440,8 +440,8 @@ pub fn all() -> Vec<Routine> {
             outputs: &[Reg::E],
             exits: &[],
             preserves: &[],
-            rewrite: |g, _, mut r, c| {
-                r.set(Reg::E, movement::read_keys(g, c));
+            rewrite: |g, _, mut r, i| {
+                r.set(Reg::E, movement::read_keys(g, &i.controls));
                 r
             },
         },
@@ -453,8 +453,8 @@ pub fn all() -> Vec<Routine> {
             outputs: &[],
             exits: &[],
             preserves: &[],
-            rewrite: |g, _, r, c| {
-                movement::walk(g, c);
+            rewrite: |g, _, r, i| {
+                movement::walk(g, &i.controls);
                 r
             },
         },
@@ -502,7 +502,7 @@ fn wall(name: &'static str, entry: u16, code: (u16, u16)) -> Routine {
         &mut robin::Game,
         &robin::assets::Assets,
         Regs,
-        &robin::controls::Controls,
+        &mut robin::inputs::Inputs,
     ) -> Regs = match entry {
         0xDC6C => |g, _, r, _| answer(r, movement::wall_right(g, r.get(Reg::L), r.get(Reg::H))),
         0xDC5B => |g, _, r, _| answer(r, movement::wall_left(g, r.get(Reg::L), r.get(Reg::H))),
