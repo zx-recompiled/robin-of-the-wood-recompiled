@@ -91,8 +91,13 @@ impl Zx {
         }
         if self.int_pending && self.iff1 && !self.ei_delay {
             self.int_pending = false;
-            if let Some(trace) = &mut self.trace {
-                trace.on_interrupt();
+            if self.trace.is_some() {
+                // A halted processor returns past its HALT.
+                let back = self.pc.wrapping_add(u16::from(self.halted));
+                let (slots, sp) = (self.memory.slots(), self.sp);
+                if let Some(trace) = &mut self.trace {
+                    trace.on_interrupt(&slots, back, sp);
+                }
             }
             self.accept_interrupt();
         }
