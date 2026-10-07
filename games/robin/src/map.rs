@@ -198,6 +198,99 @@ pub fn find_record(g: &crate::Game, table: u16, n: u8) -> u16 {
     at
 }
 
+/// A count the original keeps in an 8-bit register and counts down to zero
+/// after the first time round: 0 means 256.
+fn times(n: u8) -> u16 {
+    if n == 0 { 256 } else { u16::from(n) }
+}
+
+/// Mirrors the block whose header is at `at` in place (`0:C0CE`): flips the
+/// way it faces in its header, then swaps each pixel row's four bytes end
+/// for end, each through the mirror table, and each attribute row's four
+/// bytes end for end, unless one attribute colours it all.
+pub fn mirror_block(g: &mut crate::Game, at: u16) {
+    let header = g.read(at) ^ 0x80;
+    g.write(at, header);
+    let mut row = at.wrapping_add(1);
+    for _ in 0..times((header & 7) << 3) {
+        // In the original's order: the outer pair, then the inner pair from
+        // the right, which is the order the last lookups are kept in.
+        for (l, r) in [(0, 3), (2, 1)] {
+            let (left, right) = (row.wrapping_add(l), row.wrapping_add(r));
+            let (a, b) = (g.read(left), g.read(right));
+            g.map.mirror_left = a;
+            g.map.mirror_right = b;
+            let (ma, mb) = (g.read(0xFD00 | u16::from(a)), g.read(0xFD00 | u16::from(b)));
+            g.write(right, ma);
+            g.write(left, mb);
+        }
+        row = row.wrapping_add(4);
+    }
+    if header & 0x40 != 0 {
+        return;
+    }
+    for _ in 0..times(header & 7) {
+        for (l, r) in [(0, 3), (1, 2)] {
+            let (left, right) = (row.wrapping_add(l), row.wrapping_add(r));
+            let (a, b) = (g.read(left), g.read(right));
+            g.write(right, a);
+            g.write(left, b);
+        }
+        row = row.wrapping_add(4);
+    }
+}
+
+/// Draws block `block` (bit 7: mirrored) at character `row` and `column`
+/// (in steps of 4 characters) into the play area's buffers (`0xBFC9`, then
+/// `0:C002`). The block is first mirrored in place if it faces the other
+/// way from how it is wanted: its own bit 7, XOR the location's.
+pub fn draw_block(g: &mut crate::Game, map: &Map, block: u8, row: u8, column: u8) {
+    let n = u16::from(block & 0x7F);
+    let at = map.blocks.get(usize::from(n)).map_or_else(
+        || {
+            let entry = BLOCK_TABLE.wrapping_add(2 * n);
+            u16::from_le_bytes([g.read(entry), g.read(entry.wrapping_add(1))])
+        },
+        |b| b.at,
+    );
+    let header = g.read(at);
+    if (header ^ block ^ g.map.location_byte) & 0x80 != 0 {
+        mirror_block(g, at);
+    }
+    g.map.attr_rows = g.read(at) & 7;
+
+    // The pixels, 4 bytes a row, 32 bytes apart in the back buffer.
+    let x = (column << 2) ^ g.map.column_xor;
+    let mut to = 0xEB00u16.wrapping_add(u16::from(row) << 8 | u16::from(x));
+    let mut from = at;
+    let lines = (g.read(from) << 3) & 0xF8;
+    from = from.wrapping_add(1);
+    for _ in 0..times(lines) {
+        for i in 0..4 {
+            let v = g.read(from);
+            g.write(to.wrapping_add(i), v);
+            from = from.wrapping_add(1);
+        }
+        to = to.wrapping_add(0x20);
+    }
+
+    // The attributes, 4 a character row, or one for all of it.
+    g.map.attr_step = if header & 0x40 != 0 { 0 } else { 0x13 };
+    let x = ((row & 7) << 5 | column << 2) ^ g.map.attr_column_xor;
+    let mut to = 0xE800u16.wrapping_add(u16::from(row >> 3) << 8 | u16::from(x));
+    for _ in 0..times(g.map.attr_rows) {
+        for _ in 0..4 {
+            let v = g.read(from);
+            g.write(to, v);
+            to = to.wrapping_add(1);
+            if g.map.attr_step != 0 {
+                from = from.wrapping_add(1);
+            }
+        }
+        to = to.wrapping_add(0x1C);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

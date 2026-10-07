@@ -216,6 +216,31 @@ pub fn all() -> Vec<Routine> {
                 r
             },
         },
+        Routine {
+            name: "draw a block (0xBFC9, 0:C002)",
+            // Its code starts in bank 2 and runs on into bank 0.
+            bank: Some(0),
+            entry: 0xBFC9,
+            code: (0xBFC9, 0xC055),
+            outputs: &[],
+            preserves: &[],
+            rewrite: |g, a, r| {
+                map::draw_block(g, a.map(), r.get(Reg::A), r.get(Reg::B), r.get(Reg::C));
+                r
+            },
+        },
+        Routine {
+            name: "mirror a block in place (0:C0CE)",
+            bank: Some(0),
+            entry: 0xC0CE,
+            code: (0xC0CE, 0xC11F),
+            outputs: &[],
+            preserves: &[],
+            rewrite: |g, _, r| {
+                map::mirror_block(g, u16::from_be_bytes([r.get(Reg::D), r.get(Reg::E)]));
+                r
+            },
+        },
     ]
 }
 
