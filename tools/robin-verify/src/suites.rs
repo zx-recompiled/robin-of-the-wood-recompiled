@@ -482,7 +482,11 @@ fn wall(name: &'static str, entry: u16, code: (u16, u16)) -> Routine {
 /// attribute after `OR (HL)`, or 0 after `XOR A`.
 fn answer(mut r: Regs, wall: Option<u8>) -> Regs {
     let a = wall.unwrap_or(0);
-    let parity = if a.count_ones() % 2 == 0 { 0x04 } else { 0 };
+    let parity = if a.count_ones().is_multiple_of(2) {
+        0x04
+    } else {
+        0
+    };
     let zero = if a == 0 { 0x40 } else { 0 };
     r.set(Reg::A, a);
     r.set(Reg::F, (a & 0xA8) | zero | parity);
