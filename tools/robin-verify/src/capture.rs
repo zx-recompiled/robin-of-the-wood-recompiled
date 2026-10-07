@@ -381,7 +381,22 @@ impl Routine {
     fn compare(&self, entry: &Zx, run: &Run, play: &Play) -> Vec<String> {
         let before = Regs::of(entry);
         let mut g = Game::from_memory(&banks(entry));
-        let out = (self.rewrite)(&mut g, play.assets, before);
+        // A rewrite that panics where the original carries on is a
+        // difference like any other: reported, not the end of the run.
+        let rewrite = self.rewrite;
+        let out = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            rewrite(&mut g, play.assets, before)
+        })) {
+            Ok(out) => out,
+            Err(e) => {
+                let why = e
+                    .downcast_ref::<String>()
+                    .map(String::as_str)
+                    .or_else(|| e.downcast_ref::<&str>().copied())
+                    .unwrap_or("a panic");
+                return vec![format!("the rewrite panicked: {why}")];
+            }
+        };
         let after = Regs::of(&run.after);
         let mut differ = Vec::new();
 
@@ -742,6 +757,13 @@ mod tests {
             &z,
         );
         assert!(f.is_empty(), "{f:?}");
+    }
+
+    #[test]
+    fn a_rewrite_that_panics_is_a_failure_not_the_end() {
+        let z = machine(RETURNS_A, STORES_A);
+        let f = failures(&routine(&[], |_, _, _| panic!("planted")), &z);
+        assert!(f.iter().any(|e| e.contains("panicked: planted")), "{f:?}");
     }
 
     #[test]

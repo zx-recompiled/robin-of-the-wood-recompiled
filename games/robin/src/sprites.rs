@@ -283,6 +283,71 @@ pub fn draw_frame(g: &mut crate::Game, sprites: &Sprites, frame: u8, x: u8, y: u
     g.write(stop, 0xCB);
 }
 
+/// A sprite record's fields, as offsets from its start (`docs/re/robin.md`,
+/// *A sprite*).
+mod record {
+    pub const COUNTER: u16 = 0;
+    pub const RELOAD: u16 = 1;
+    pub const SEQUENCE: u16 = 2;
+    pub const FLAGS: u16 = 4;
+    pub const DRAWN: u16 = 5;
+    pub const NEXT: u16 = 8;
+}
+
+/// Flags: active, drawn, to be drawn.
+const ACTIVE: u8 = 1;
+const DRAWN: u8 = 2;
+const TO_DRAW: u8 = 4;
+
+/// Animates the sprite whose record is at `at` and redraws it (`0:C7EF`):
+/// when its counter runs out (its top bit set), resets it and takes the next
+/// frame of its sequence; erases it where it was drawn; and draws it anew
+/// if it is to be drawn.
+pub fn animate(g: &mut crate::Game, sprites: &Sprites, at: u16) {
+    let field = |f: u16| at.wrapping_add(f);
+    if g.read(field(record::FLAGS)) & ACTIVE == 0 {
+        return;
+    }
+    let counter = g.read(field(record::COUNTER)).wrapping_sub(1);
+    g.write(field(record::COUNTER), counter);
+    if counter & 0x80 != 0 {
+        let reload = g.read(field(record::RELOAD));
+        g.write(field(record::COUNTER), reload);
+        let mut next = word(g, field(record::SEQUENCE));
+        let mut frame = g.read(next);
+        next = next.wrapping_add(1);
+        if frame == 0xFF {
+            next = word(g, next);
+            frame = g.read(next);
+            next = next.wrapping_add(1);
+        }
+        for (i, b) in next.to_le_bytes().into_iter().enumerate() {
+            g.write(field(record::SEQUENCE + i as u16), b);
+        }
+        g.write(field(record::NEXT), frame);
+    }
+    let flags = g.read(field(record::FLAGS));
+    if flags & DRAWN != 0 {
+        g.write(field(record::FLAGS), flags & !DRAWN);
+        let (frame, x, y) = (
+            g.read(field(record::DRAWN)),
+            g.read(field(record::DRAWN + 1)),
+            g.read(field(record::DRAWN + 2)),
+        );
+        draw_frame(g, sprites, frame, x, y);
+    }
+    let flags = g.read(field(record::FLAGS));
+    if flags & TO_DRAW != 0 {
+        g.write(field(record::FLAGS), (flags & !TO_DRAW) | DRAWN);
+        let next: [u8; 3] = std::array::from_fn(|i| g.read(field(record::NEXT + i as u16)));
+        // Copied from the last byte down, as the original's LDDR does.
+        for i in (0..3).rev() {
+            g.write(field(record::DRAWN + i as u16), next[i]);
+        }
+        draw_frame(g, sprites, next[0], next[1], next[2]);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

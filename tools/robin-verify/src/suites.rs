@@ -347,6 +347,24 @@ pub fn all() -> Vec<Routine> {
                 r
             },
         },
+        Routine {
+            name: "animate and redraw a sprite (0:C7EF)",
+            bank: Some(0),
+            entry: 0xC7EF,
+            code: (0xC7EF, 0xC851),
+            outputs: &[],
+            // Its callers go on using the record (0:DBDA clears a flag
+            // through IX), and it leaves IX as it was.
+            preserves: &[Reg::Ixh, Reg::Ixl],
+            rewrite: |g, a, r| {
+                sprites::animate(
+                    g,
+                    a.sprites(),
+                    u16::from_be_bytes([r.get(Reg::Ixh), r.get(Reg::Ixl)]),
+                );
+                r
+            },
+        },
     ]
 }
 
