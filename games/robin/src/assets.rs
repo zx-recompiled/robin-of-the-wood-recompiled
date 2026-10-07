@@ -11,6 +11,7 @@ use std::path::Path;
 use zx_core::sha1::sha1_hex;
 
 use crate::layout::{self, GAME_BLOCKS, LOADER_BLOCKS};
+pub use crate::map::Map;
 
 /// SHA-1 of the one dump this project supports: the 128K release as a TZX
 /// file (`docs/re/robin.md`, *The tape*). Any other file is refused.
@@ -30,6 +31,7 @@ pub fn is_the_tape(bytes: &[u8]) -> bool {
 pub struct Assets {
     banks: Box<[[u8; BANK]; 8]>,
     loading_screen: Box<[u8; 6912]>,
+    map: Map,
 }
 
 impl Assets {
@@ -68,6 +70,12 @@ impl Assets {
     #[must_use]
     pub fn loading_screen(&self) -> &[u8; 6912] {
         &self.loading_screen
+    }
+
+    /// The map, parsed from the tape.
+    #[must_use]
+    pub fn map(&self) -> &Map {
+        &self.map
     }
 }
 
@@ -128,10 +136,19 @@ fn parse(bytes: &[u8]) -> Result<Assets, String> {
     }
     let mut loading_screen = Box::new([0u8; 6912]);
     loading_screen.copy_from_slice(&banks[7][..6912]);
-    Ok(Assets {
+    let mut assets = Assets {
         banks,
         loading_screen,
-    })
+        map: Map {
+            locations: Vec::new(),
+            layouts: Vec::new(),
+            extras: Vec::new(),
+            specials: [Vec::new(), Vec::new(), Vec::new()],
+            blocks: Vec::new(),
+        },
+    };
+    assets.map = Map::parse(|a| if a < 0x4000 { 0 } else { assets.read(a, 0) });
+    Ok(assets)
 }
 
 #[cfg(test)]
@@ -316,6 +333,33 @@ mod tests {
                 .any(|p| std::fs::read(p).is_ok_and(|b| is_the_tape(&b))),
             "assets/ has a tape, but not the supported dump (SHA-1 {TAPE_SHA1}): {tapes:?}"
         );
+    }
+
+    /// The real tape's map is the shape `docs/re/robin.md` (*The map*) gives.
+    #[test]
+    fn the_local_tapes_map() {
+        let Some(tape) = local_tape() else {
+            println!("skipped: no supported tape in assets/");
+            return;
+        };
+        let map = read_tape(&tape).expect("reads").map().clone();
+        let count = |lists: &[Vec<crate::map::Item>]| lists.iter().map(Vec::len).sum::<usize>();
+        assert_eq!(map.locations.len(), 320);
+        assert_eq!(map.locations.iter().filter(|l| l.mirrored).count(), 116);
+        assert_eq!((map.layouts.len(), count(&map.layouts)), (128, 1129));
+        assert_eq!((map.extras.len(), count(&map.extras)), (256, 531));
+        assert_eq!(map.extras.iter().filter(|e| !e.is_empty()).count(), 134);
+        assert_eq!(map.blocks.len(), 84);
+        assert!(map.specials.iter().all(|s| s.len() == 4));
+        let a = read_tape(&tape).expect("reads");
+        for (n, b) in map.blocks.iter().enumerate() {
+            let header = a.read(b.at, 0);
+            assert_eq!(
+                header & 0xB8,
+                0,
+                "block {n}: bits 3-5 clear, and unmirrored as the tape stores it"
+            );
+        }
     }
 
     /// The real tape reads, and its loading picture is its first game block.
