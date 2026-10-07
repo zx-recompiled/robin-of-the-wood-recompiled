@@ -491,8 +491,14 @@ question, along with the random numbers.
 
 ## Robin's movement
 
-Found by reading Robin's update and the code it calls (#34). **read**,
-unless marked.
+Found by reading Robin's update and the code it calls (#34).
+
+**The controls, walking, the wall tests and the edge are rewritten
+(`games/robin/src/movement.rs`) and confirmed** against the original by
+`tools/robin-verify`. That covers play, the tour (which now walks Robin off
+the screen), and a short game with each control method chosen through the
+menu. Robin's update (`0:C59A`) also runs his actions, which go with the
+characters, so it is not rewritten yet. **read**, unless marked.
 
 ### Robin
 
@@ -500,7 +506,7 @@ unless marked.
   position is its next position, `0xCB7F` horizontally and `0xCB80`
   vertically. Next to it are his direction (`0xCB85`) and a state byte
   (`0xCB81`).
-- **His update**, `0:C59A`, called from the main loop:
+- **His update**, `0:C59A`, called from the main loop (**read**):
   - it counts down a counter kept in its own code, and acts when it runs
     out;
   - it then resets the counter to 1, so it acts on every call, or to 3,
