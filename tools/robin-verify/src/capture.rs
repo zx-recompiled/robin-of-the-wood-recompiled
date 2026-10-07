@@ -11,6 +11,9 @@
 //! caller, the registers and flags that are neither outputs nor preserved
 //! are scrambled after the return, and the original must go on exactly as
 //! before, which shows no caller reads them.
+//!
+//! The calls are checked on every core, and tallied as if one by one, in
+//! the order they were made (`checker`, #45).
 
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -111,6 +114,7 @@ impl Regs {
 }
 
 /// One routine of the original and its rewrite.
+#[derive(Clone)]
 pub struct Routine {
     pub name: &'static str,
     /// Where it is: the bank paged at `0xC000` for code there.
@@ -151,8 +155,8 @@ pub struct Tally {
     /// the rewrite has none of (#21), and the first such: where, and what.
     pub rom_reads: u64,
     pub first_rom_read: Option<String>,
-    seen: HashSet<u64>,
-    scrambled_by_caller: BTreeMap<u16, u32>,
+    pub(crate) seen: HashSet<u64>,
+    pub(crate) scrambled_by_caller: BTreeMap<u16, u32>,
     pub executed: BTreeSet<u16>,
     pub failures: Vec<String>,
 }
@@ -167,7 +171,7 @@ const VARIED: [&str; 4] = [
 ];
 
 /// How many distinct calls from each caller get the scrambling check.
-const SCRAMBLE_PER_CALLER: u32 = 20;
+pub(crate) const SCRAMBLE_PER_CALLER: u32 = 20;
 /// How far the original runs before a call is taken as hung.
 const STEP_LIMIT: u64 = 10_000_000;
 /// How far the scrambled copy and the original are followed after a return.
@@ -213,46 +217,25 @@ impl Routine {
                     .is_none_or(|b| z.memory.slot(3) == Memory::bank(b)))
     }
 
-    /// Takes the call `z` is about to make.
-    pub fn capture(&self, z: &Zx, play: &Play, t: &mut Tally) {
-        t.calls += 1;
-        let entry = z.clone();
-        let run = match self.run_original(&entry) {
-            Ok(run) => run,
-            Err(e) => {
-                fail(t, e);
-                return;
-            }
-        };
-        if !t.seen.insert(run.key) {
-            t.repeats += 1;
-            return;
-        }
-        if let Some(read) = run.rom_read {
-            t.rom_reads += 1;
-            t.first_rom_read.get_or_insert(format!(
-                "the instruction at {:04x} read {:04x}, in a call from {:04x}",
-                read.0,
-                read.1,
-                run.ret.wrapping_sub(3)
-            ));
-            return;
-        }
-        t.compared += 1;
-        t.executed.extend(run.executed.iter().copied());
-        let at = if self.exits.is_empty() {
-            format!(
-                "call from {:04x} (case {})",
-                run.ret.wrapping_sub(3),
-                t.compared
-            )
+    /// Where a call is from, for its messages, numbered as the `case`th
+    /// compared.
+    pub(crate) fn at(&self, run: &Run, case: u64) -> String {
+        if self.exits.is_empty() {
+            format!("call from {:04x} (case {case})", run.ret.wrapping_sub(3))
         } else {
-            format!("run from {:04x} (case {})", self.entry, t.compared)
-        };
-        let differ = self.compare(&entry, &run, play);
+            format!("run from {:04x} (case {case})", self.entry)
+        }
+    }
+
+    /// The rewrite against a new call `run` from `entry`, then the same call
+    /// with the bytes it only writes poisoned, then with the data it read
+    /// varied; the first that differs ends it.
+    pub(crate) fn compare_all(&self, entry: &Zx, run: &Run, play: &Play, at: &str) -> Compared {
+        let mut c = Compared::default();
+        let differ = self.compare(entry, run, play);
         if !differ.is_empty() {
-            fail(t, format!("{}: {at}: {}", self.name, differ.join("; ")));
-            return;
+            c.failure = Some(format!("{}: {at}: {}", self.name, differ.join("; ")));
+            return c;
         }
 
         // The same call with every byte it writes before reading set to
@@ -266,25 +249,22 @@ impl Routine {
                 poke(&mut poisoned, n, i, !v);
             }
             match self.run_original(&poisoned) {
-                Ok(run2) if run2.rom_read.is_some() => t.rom_reads += 1,
+                Ok(run2) if run2.rom_read.is_some() => c.rom_reads += 1,
                 Ok(run2) => {
                     let differ = self.compare(&poisoned, &run2, play);
                     if !differ.is_empty() {
-                        fail(
-                            t,
-                            format!(
-                                "{}: {at}, with the {} byte(s) it only writes set to other values first: {}",
-                                self.name,
-                                run.blind.len(),
-                                differ.join("; ")
-                            ),
-                        );
-                        return;
+                        c.failure = Some(format!(
+                            "{}: {at}, with the {} byte(s) it only writes set to other values first: {}",
+                            self.name,
+                            run.blind.len(),
+                            differ.join("; ")
+                        ));
+                        return c;
                     }
                 }
                 Err(e) => {
-                    fail(t, e);
-                    return;
+                    c.failure = Some(e);
+                    return c;
                 }
             }
         }
@@ -311,54 +291,48 @@ impl Routine {
                 poke(&mut varied, n, i, v ^ flip);
             }
             match self.run_original(&varied) {
-                Ok(run3) if run3.rom_read.is_some() => t.rom_reads += 1,
+                Ok(run3) if run3.rom_read.is_some() => c.rom_reads += 1,
                 Ok(run3) => {
-                    t.varied += 1;
+                    c.varied += 1;
                     let differ = self.compare(&varied, &run3, play);
                     if !differ.is_empty() {
-                        fail(
-                            t,
-                            format!(
-                                "{}: {at}, with the {} byte(s) of data it read changed: {}",
-                                self.name,
-                                vary.len(),
-                                differ.join("; ")
-                            ),
-                        );
-                        return;
+                        c.failure = Some(format!(
+                            "{}: {at}, with the {} byte(s) of data it read changed: {}",
+                            self.name,
+                            vary.len(),
+                            differ.join("; ")
+                        ));
+                        return c;
                     }
                 }
-                Err(_) => t.varied_hung += 1,
+                Err(_) => c.varied_hung += 1,
             }
         }
+        c
+    }
 
-        let caller = if self.exits.is_empty() {
+    /// The stack level a call leaves: a stretch leaves the stack as it found
+    /// it, not one return address above.
+    pub(crate) fn level(&self, run: &Run) -> u16 {
+        if self.exits.is_empty() {
+            run.entry_sp.wrapping_add(2)
+        } else {
+            run.entry_sp
+        }
+    }
+
+    /// Who a call returns to, which the scrambling check is shared out by.
+    pub(crate) fn caller(&self, run: &Run) -> u16 {
+        if self.exits.is_empty() {
             run.ret
         } else {
             self.entry
-        };
-        let n = t.scrambled_by_caller.entry(caller).or_default();
-        if *n < SCRAMBLE_PER_CALLER {
-            *n += 1;
-            t.scrambled += 1;
-            // A stretch leaves the stack as it found it: its level is where
-            // the stack was, not one return address above.
-            let level = if self.exits.is_empty() {
-                run.entry_sp.wrapping_add(2)
-            } else {
-                run.entry_sp
-            };
-            match self.scramble(&run.after, level, play) {
-                Scrambled::Reads(e) => fail(t, format!("{}: {at}: {e}", self.name)),
-                Scrambled::UnreadStackLeftOut => t.stack_left_out += 1,
-                Scrambled::Unread => {}
-            }
         }
     }
 
     /// Runs the original routine alone from `entry` to its return, with no
     /// interrupts, recording what the call reads and writes.
-    fn run_original(&self, entry: &Zx) -> Result<Run, String> {
+    pub(crate) fn run_original(&self, entry: &Zx) -> Result<Run, String> {
         let mut c = entry.clone();
         let entry_sp = c.sp;
         let ret = c.read16(entry_sp);
@@ -555,7 +529,7 @@ impl Routine {
     /// then until the stack is back at the caller's level; then all of
     /// memory but the dead stack. Any difference means a caller reads one of
     /// those registers.
-    fn scramble(&self, returned: &Zx, level: u16, play: &Play) -> Scrambled {
+    pub(crate) fn scramble(&self, returned: &Zx, level: u16, play: &Play) -> Scrambled {
         let mut same = returned.clone();
         let mut odd = returned.clone();
         let mut regs = Regs::of(&odd);
@@ -674,7 +648,7 @@ pub struct Play<'a> {
 }
 
 /// What the scrambling check found.
-enum Scrambled {
+pub(crate) enum Scrambled {
     /// No difference: the caller does not read those registers.
     Unread,
     /// No difference, but the stack never came back to the caller's level,
@@ -685,23 +659,23 @@ enum Scrambled {
 }
 
 /// One run of the original routine.
-struct Run {
-    key: u64,
-    ret: u16,
+pub(crate) struct Run {
+    pub(crate) key: u64,
+    pub(crate) ret: u16,
     entry_sp: u16,
     min_sp: u16,
     ports: Vec<(u16, u16)>,
-    executed: Vec<u16>,
+    pub(crate) executed: Vec<u16>,
     /// The places it wrote before reading, other than the dead stack.
     blind: BTreeSet<(usize, usize)>,
     /// Every place it read.
     read: BTreeSet<(usize, usize)>,
     /// The first read of the ROM, if it made one: where, and what.
-    rom_read: Option<(u16, u16)>,
+    pub(crate) rom_read: Option<(u16, u16)>,
     /// What R gave each `LD A,R`, in order.
     random: Vec<u8>,
     banks: Box<[[u8; BANK]; 8]>,
-    after: Zx,
+    pub(crate) after: Zx,
 }
 
 impl Run {
@@ -725,7 +699,16 @@ fn poke(z: &mut Zx, n: usize, i: usize, v: u8) {
     }
 }
 
-fn fail(t: &mut Tally, e: String) {
+/// What comparing a new call found, before the scrambling check.
+#[derive(Default)]
+pub(crate) struct Compared {
+    pub rom_reads: u64,
+    pub varied: u64,
+    pub varied_hung: u64,
+    pub failure: Option<String>,
+}
+
+pub(crate) fn fail(t: &mut Tally, e: String) {
     if t.failures.len() < KEEP {
         t.failures.push(e);
     } else if t.failures.len() == KEEP {
@@ -738,6 +721,8 @@ mod tests {
     //! The checks checked, on a made-up program, with no tape (#6,
     //! Decision 3): each must fail when what it watches for is wrong.
     use super::*;
+    use crate::checker::{Checker, Job};
+    use std::sync::Arc;
 
     /// A 128K with no ROM, about to call a routine at `0x8100` from
     /// `0x8000`. The routine is `routine`; after it returns, the caller runs
@@ -786,19 +771,23 @@ mod tests {
         Script::new(&cfg.trace).expect("a script")
     }
 
-    fn failures(r: &Routine, z: &Zx) -> Vec<String> {
-        let mut t = Tally::default();
-        let script = quiet();
-        let assets = no_assets();
-        r.capture(
-            z,
-            &Play {
-                script: &script,
+    /// `r`'s tally after checking `calls` in order, as the verifier checks
+    /// them.
+    fn check_calls(r: &Routine, calls: &[Zx]) -> Tally {
+        let mut checker = Checker::new(Arc::from(vec![r.clone()]), &Arc::new(no_assets()));
+        for z in calls {
+            checker.take(Job {
+                routine: 0,
+                entry: z.clone(),
+                script: quiet(),
                 frame: 0,
-                assets: &assets,
-            },
-            &mut t,
-        );
+            });
+        }
+        checker.finish().remove(0)
+    }
+
+    fn failures(r: &Routine, z: &Zx) -> Vec<String> {
+        let t = check_calls(r, std::slice::from_ref(z));
         assert_eq!(t.compared, 1);
         t.failures
     }
@@ -869,18 +858,7 @@ mod tests {
         // `LD A,(0x1000) : RET`: the rewrite has no ROM to match it with.
         let z = machine(&[0x3A, 0x00, 0x10, 0xC9], &[]);
         let r = routine(&[], |_, _, _, _| panic!("never run: the call is skipped"));
-        let mut t = Tally::default();
-        let script = quiet();
-        let assets = no_assets();
-        r.capture(
-            &z,
-            &Play {
-                script: &script,
-                frame: 0,
-                assets: &assets,
-            },
-            &mut t,
-        );
+        let t = check_calls(&r, &[z]);
         assert_eq!((t.calls, t.compared, t.rom_reads), (1, 0, 1));
         assert!(t.failures.is_empty(), "{:?}", t.failures);
         assert!(
@@ -899,22 +877,50 @@ mod tests {
     }
 
     #[test]
+    fn many_calls_checked_at_once_tally_as_one_by_one_in_order() {
+        // `RET`, called with B from 0 to 59, each twice; the rewrite gets A
+        // wrong where B is a multiple of 7. The earlier the call, the longer
+        // its rewrite takes, so the workers finish them out of order.
+        let z = machine(&[0xC9], STORES_A);
+        let r = routine(&[Reg::A], |_, _, mut r, _| {
+            let b = r.get(Reg::B);
+            std::thread::sleep(std::time::Duration::from_millis(u64::from(60 - b)));
+            if b % 7 == 0 {
+                r.set(Reg::A, !r.get(Reg::A));
+            }
+            r
+        });
+        let calls: Vec<Zx> = (0..60u8)
+            .flat_map(|b| [b, b / 2])
+            .map(|b| {
+                let mut z = z.clone();
+                z.b = b;
+                z
+            })
+            .collect();
+        let t = check_calls(&r, &calls);
+        assert_eq!((t.calls, t.compared, t.repeats), (120, 60, 60));
+        // B is case B + 1, in the order the calls were made.
+        let cases: Vec<String> = (0..60)
+            .step_by(7)
+            .map(|b| format!("(case {})", b + 1))
+            .collect();
+        assert_eq!(t.failures.len(), cases.len());
+        for (f, case) in t.failures.iter().zip(&cases) {
+            assert!(f.contains(case) && f.contains("output A"), "{f}");
+        }
+        // The first calls from the caller that compared clean.
+        assert_eq!(t.scrambled, u64::from(SCRAMBLE_PER_CALLER));
+    }
+
+    #[test]
     fn a_repeat_is_skipped_and_counted() {
         let z = machine(RETURNS_A, STORES_A);
         let r = routine(&[Reg::A], |_, _, mut r, _| {
             r.set(Reg::A, 0x42);
             r
         });
-        let mut t = Tally::default();
-        let script = quiet();
-        let assets = no_assets();
-        let play = Play {
-            script: &script,
-            frame: 0,
-            assets: &assets,
-        };
-        r.capture(&z, &play, &mut t);
-        r.capture(&z, &play, &mut t);
+        let t = check_calls(&r, &[z.clone(), z]);
         assert_eq!((t.calls, t.compared, t.repeats), (2, 1, 1));
     }
 
@@ -927,19 +933,10 @@ mod tests {
             r.set(Reg::A, i.controls.read(0x7FFE));
             r
         });
-        let mut t = Tally::default();
-        let script = quiet();
-        let assets = no_assets();
-        let play = Play {
-            script: &script,
-            frame: 0,
-            assets: &assets,
-        };
-        let mut z = machine(READS_KEYS, STORES_A);
-        r.capture(&z, &play, &mut t);
-        z.keys[7] = 0x1E; // Space.
-        r.capture(&z, &play, &mut t);
-        r.capture(&z, &play, &mut t);
+        let z = machine(READS_KEYS, STORES_A);
+        let mut space = z.clone();
+        space.keys[7] = 0x1E;
+        let t = check_calls(&r, &[z, space.clone(), space]);
         assert_eq!((t.calls, t.compared, t.repeats), (3, 2, 1));
         assert!(
             t.failures.is_empty(),
