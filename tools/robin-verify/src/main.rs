@@ -65,6 +65,7 @@ fn run() -> Result<bool, String> {
                             &Play {
                                 script: &script,
                                 frame,
+                                assets: &assets,
                             },
                             t,
                         );
@@ -149,7 +150,8 @@ fn run() -> Result<bool, String> {
         *b = *z.memory.page(zx_runtime::memory::Memory::bank(n));
     }
     let played = Game::from_memory(&now);
-    let tables_match = g.mirror == played.mirror && g.rows == played.rows;
+    let tables_match =
+        g.display.mirror == played.display.mirror && g.display.rows == played.display.rows;
     println!(
         "  the start-up tables, built from the tape alone: {}",
         if tables_match {

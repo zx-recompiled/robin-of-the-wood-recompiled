@@ -72,6 +72,22 @@ impl Assets {
         &self.loading_screen
     }
 
+    /// Assets from banks already built, for the checks' own made-up states.
+    /// The game reads its tape with [`read_game`].
+    #[doc(hidden)]
+    #[must_use]
+    pub fn from_banks(banks: Box<[[u8; BANK]; 8]>) -> Assets {
+        let mut loading_screen = Box::new([0u8; 6912]);
+        loading_screen.copy_from_slice(&banks[7][..6912]);
+        let mut assets = Assets {
+            banks,
+            loading_screen,
+            map: Map::parse(|_| 0),
+        };
+        assets.map = Map::parse(|a| if a < 0x4000 { 0 } else { assets.read(a, 0) });
+        assets
+    }
+
     /// The map, parsed from the tape.
     #[must_use]
     pub fn map(&self) -> &Map {

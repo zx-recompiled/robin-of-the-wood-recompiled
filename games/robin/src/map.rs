@@ -156,27 +156,46 @@ impl Map {
 }
 
 /// The location one step from `at` by the bits of `direction` (`0:C127`):
-/// bit 0 right, bit 1 left, bit 2 down, bit 3 up, each wrapping round.
+/// bit 0 right, bit 1 left, bit 2 down, bit 3 up, each wrapping round. As
+/// the original does it for any word, not only the grid's: the row is the
+/// byte above the column's four bits, and going up wraps to the last row
+/// when the row taken from it has its top bit set.
 #[must_use]
 pub fn step(at: u16, direction: u8) -> u16 {
-    let mut column = at & 0xF;
-    let mut row = (at >> 4) & 0xFF;
+    let mut column = (at & 0xF) as u8;
+    let mut row = (at >> 4) as u8;
     if direction & 1 != 0 {
-        column = (column + 1) & 0xF;
+        column = column.wrapping_add(1);
     }
     if direction & 2 != 0 {
-        column = column.wrapping_sub(1) & 0xF;
+        column = column.wrapping_sub(1);
     }
+    column &= 0xF;
     if direction & 4 != 0 {
-        row += 1;
-        if row >= ROWS {
+        row = row.wrapping_add(1);
+        if u16::from(row) >= ROWS {
             row = 0;
         }
     }
     if direction & 8 != 0 {
-        row = if row == 0 { ROWS - 1 } else { row - 1 };
+        row = row.wrapping_sub(1);
+        if row & 0x80 != 0 {
+            row = (ROWS - 1) as u8;
+        }
     }
-    row << 4 | column
+    u16::from(row) << 4 | u16::from(column)
+}
+
+/// The address of record `n` of the run of records at `table` (`0:C0B9`):
+/// each a count and two bytes an item, stepped over one by one.
+#[must_use]
+pub fn find_record(g: &crate::Game, table: u16, n: u8) -> u16 {
+    let mut at = table;
+    for _ in 0..n {
+        let skip = (g.read(at) << 1).wrapping_add(1);
+        at = at.wrapping_add(u16::from(skip));
+    }
+    at
 }
 
 #[cfg(test)]
@@ -269,5 +288,10 @@ mod tests {
         assert_eq!(step(at(5, 5), 0), at(5, 5));
         assert_eq!(step(at(19, 15), 5), at(0, 0), "right and down at once");
         assert_eq!(step(0x13F, 1), 0x130);
+        assert_eq!(
+            step(0x900, 8),
+            at(0x13, 0),
+            "a row with its top bit set wraps up too"
+        );
     }
 }

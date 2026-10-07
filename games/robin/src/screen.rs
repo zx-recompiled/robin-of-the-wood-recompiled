@@ -6,7 +6,7 @@ use crate::game::Game;
 /// Builds the mirror table: each byte with its bits in reverse order, so
 /// looking a glyph or sprite byte up flips it left to right.
 pub fn build_mirror(g: &mut Game) {
-    for (n, m) in g.mirror.iter_mut().enumerate() {
+    for (n, m) in g.display.mirror.iter_mut().enumerate() {
         *m = (n as u8).reverse_bits();
     }
 }
@@ -14,7 +14,7 @@ pub fn build_mirror(g: &mut Game) {
 /// Builds the row table: the screen address of each pixel row, in the
 /// Spectrum's interleaved layout.
 pub fn build_rows(g: &mut Game) {
-    for (y, r) in g.rows.iter_mut().enumerate() {
+    for (y, r) in g.display.rows.iter_mut().enumerate() {
         *r = row_address(y as u8);
     }
 }
@@ -29,12 +29,12 @@ pub const fn row_address(y: u8) -> u16 {
 
 /// Clears the screen's pixels.
 pub fn clear_screen(g: &mut Game) {
-    g.screen[..6144].fill(0);
+    g.display.screen[..6144].fill(0);
 }
 
 /// Sets every attribute on the screen to `attr`.
 pub fn fill_attrs(g: &mut Game, attr: u8) {
-    g.screen[6144..].fill(attr);
+    g.display.screen[6144..].fill(attr);
 }
 
 /// Clears the play area: every cell of the attribute buffer to `attr`, and
@@ -53,8 +53,8 @@ pub fn clear_changed(g: &mut Game) {
 /// table.
 pub fn clear_lower_panel(g: &mut Game) {
     for y in 160..192 {
-        let at = usize::from(g.rows[y].wrapping_sub(0x4000));
-        for b in &mut g.screen[at..at + 32] {
+        let at = usize::from(g.display.rows[y].wrapping_sub(0x4000));
+        for b in &mut g.display.screen[at..at + 32] {
             *b = 0;
         }
     }
@@ -88,9 +88,10 @@ pub fn flush(g: &mut Game) {
                 0 => mark,
                 a => a,
             };
-            g.screen[6144 + cell] = attr & 0x7F;
+            g.display.screen[6144 + cell] = attr & 0x7F;
             for p in 0..8 {
-                g.screen[cell_pixel(row, p, column)] = g.play.pixels[row * 256 + p * 32 + column];
+                g.display.screen[cell_pixel(row, p, column)] =
+                    g.play.pixels[row * 256 + p * 32 + column];
             }
         }
     }
@@ -100,10 +101,10 @@ pub fn flush(g: &mut Game) {
 /// row by row through the row table.
 pub fn copy_pixels(g: &mut Game) {
     for y in 0..PLAY_ROWS * 8 {
-        let to = usize::from(g.rows[y].wrapping_sub(0x4000)) + PLAY_COLUMNS.start;
+        let to = usize::from(g.display.rows[y].wrapping_sub(0x4000)) + PLAY_COLUMNS.start;
         let from = y * 32 + PLAY_COLUMNS.start;
         let n = PLAY_COLUMNS.len();
-        g.screen[to..to + n].copy_from_slice(&g.play.pixels[from..from + n]);
+        g.display.screen[to..to + n].copy_from_slice(&g.play.pixels[from..from + n]);
     }
 }
 
@@ -113,7 +114,7 @@ pub fn copy_attrs(g: &mut Game) {
     for row in 0..PLAY_ROWS {
         for column in PLAY_COLUMNS {
             let cell = row * 32 + column;
-            g.screen[6144 + cell] = g.play.attrs[cell] & 0x7F;
+            g.display.screen[6144 + cell] = g.play.attrs[cell] & 0x7F;
         }
     }
 }
