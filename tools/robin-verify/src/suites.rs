@@ -407,6 +407,32 @@ pub fn all() -> Vec<Routine> {
             },
         },
         Routine {
+            name: "read the Kempston joystick (0:D07F)",
+            bank: Some(0),
+            entry: 0xD07F,
+            code: (0xD07F, 0xD087),
+            outputs: &[Reg::E],
+            exits: &[],
+            preserves: &[],
+            rewrite: |_, _, mut r, c| {
+                r.set(Reg::E, movement::read_kempston(c));
+                r
+            },
+        },
+        Routine {
+            name: "read the Sinclair joystick (0:D088)",
+            bank: Some(0),
+            entry: 0xD088,
+            code: (0xD088, 0xD0A0),
+            outputs: &[Reg::E],
+            exits: &[],
+            preserves: &[],
+            rewrite: |_, _, mut r, c| {
+                r.set(Reg::E, movement::read_sinclair(c));
+                r
+            },
+        },
+        Routine {
             name: "read the redefined keys (0:D06E)",
             bank: Some(0),
             entry: 0xD06E,

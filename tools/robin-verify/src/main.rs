@@ -10,6 +10,7 @@
 //! memory, which is never written to a file.
 
 mod capture;
+mod methods;
 mod suites;
 mod tour;
 
@@ -140,6 +141,8 @@ fn run() -> Result<bool, String> {
             ""
         }
     );
+    let toured_counts: Vec<u64> = v.tallies.iter().map(|t| t.compared).collect();
+    let method_problems = methods::run(&rom, &tape, &assets, &mut v)?;
     let (tallies, routines, table_writes) = (&v.tallies, &v.routines, &v.table_writes);
 
     let mut ok = toured.problems.is_empty() && toured.drawn.len() == robin::map::LOCATIONS;
@@ -153,14 +156,24 @@ fn run() -> Result<bool, String> {
             robin::map::LOCATIONS
         );
     }
-    for ((r, t), &before) in routines.iter().zip(tallies).zip(&played) {
+    for p in &method_problems {
+        println!("  FAIL the control methods: {p}");
+    }
+    ok &= method_problems.is_empty();
+    for (((r, t), &before), &toured) in routines
+        .iter()
+        .zip(tallies)
+        .zip(&played)
+        .zip(&toured_counts)
+    {
         let unreached = r.unreached(&z, t);
         println!(
-            "  {}: {} calls, {} compared ({} from the tour), {} repeats skipped, {} scrambling checks ({} with the stack left out), {} varied runs ({} did not return); {} instruction(s) never reached{}",
+            "  {}: {} calls, {} compared ({} from the tour, {} with the other control methods), {} repeats skipped, {} scrambling checks ({} with the stack left out), {} varied runs ({} did not return); {} instruction(s) never reached{}",
             r.name,
             t.calls,
             t.compared,
-            t.compared - before,
+            toured - before,
+            t.compared - toured,
             t.repeats,
             t.scrambled,
             t.stack_left_out,
