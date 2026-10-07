@@ -560,6 +560,77 @@ against the play area's edges:
 Then it takes the step (`0:C127`) and enters the new location (`0xBF0E`,
 *The map*). Otherwise it starts the loop again.
 
+## The characters
+
+Found by reading the main loop's character routines (#37, #38). **read**,
+unless marked.
+
+### Who they are
+
+In 20,000 frames of play, three main-loop routines drew characters:
+
+- **four characters who walk the forest's rows**, run by `0xA8D6` (this
+  section);
+- **the wanderer**, the character at `0xBB1B` (`0xBA83`), #39;
+- **Robin** (`0:C59A`, *Robin's movement*).
+
+Others are drawn in situations play never reached (#42). Randomness: the
+game reads the refresh register R in 19 places. The rewrite is given the
+values the original read (#37).
+
+### The four on each row
+
+- **Each row of the map has four characters.** Their list is one of four at
+  `0x8B02`, 12 bytes each, chosen by the row number modulo 4 (`0:C2F2`), so
+  rows 0, 4, 8 and so on share theirs. `0xC444` points at the current row's.
+  Each character is three bytes:
+  - the column of the map it's in;
+  - its position within that screen;
+  - a state byte: bit 7 the way it faces, bit 6 a copy of it, bits 4 and 5
+    two more flags.
+- **The floors they walk.** A screen's floor is row 12 of its attribute
+  buffer, across the play area. Three are kept: the screen to the left
+  (`0xDD9B`), the current one (`0xDDB7`) and the one to the right
+  (`0xDDD3`), 28 bytes each.
+  - On entering a location sideways, the old screen's floor becomes the
+    neighbour on the side Robin came from, and the other neighbour is
+    cleared.
+  - Entering up or down clears both neighbours.
+  - Either way, the new screen's floor is copied in (`0:DD49`–`0:DD8F`).
+- **Entering a location** (`0:C16E`, called from the entry, `0xBF0E`):
+  1. The columns of the four characters two rows above are shuffled, each
+     XORed with R.
+  2. The current row's list is taken.
+  3. If the location is the special one at `0xD295`, a scripted scene is
+     set up instead. Robin is walked in automatically, through the controls'
+     override (*The controls*), and another character's record (`0xB7BD`)
+     is set up (#42).
+  4. The floors are updated.
+  5. Each character near Robin's location is put on solid ground (`0:DCDC`).
+  6. Their sprite records at `0xAAB8` (11 bytes apart) are given their
+     animation sequences (`0xAAF6`–`0xAB24`).
+  7. The four are moved once each (`0xA8D6`, four times).
+  8. Everything else that moves is reset: the objects in flight (#40), the
+     wanderer (#39), and a second group of four characters for the
+     locations from 256 up (records at `0xDBF1`, lists at `0xDC2B`, #42).
+  9. Robin's sprite is drawn.
+- **Moving them** (`0xA8D6`, from the main loop) takes one character a
+  frame, cycling through the four with a counter kept in its own code
+  (`0xA8D7`). A character acts only if it's within two columns of Robin's
+  location:
+  - it looks at the floor ahead, and turns if the way is blocked;
+  - one time in 16 it turns anyway: R decides (`0xA969`);
+  - it steps along its screen, and past an edge into the next column.
+- **Drawing them.** A character on Robin's screen, or just entering it from
+  the next, gets its position in its sprite record. Its animation sequence
+  is chosen by which way it faces and what it's doing, and it's redrawn
+  (`0:C7EF`, *Sprites*), from frame table `0x8C69`. One that isn't on the
+  screen is erased.
+- **Firing.** A character that faces Robin, within `0x30` pixels of him, may
+  fire. It always does while a flag at `0xD47B` is set; otherwise R decides,
+  one time in 2. The shot goes into the character's slot of the objects in
+  flight (`0xBE41`, two bytes each), if the slot is free (#40).
+
 ## Sound
 
 - **It uses the AY sound chip.** It selects registers through `0xFFFD` and
