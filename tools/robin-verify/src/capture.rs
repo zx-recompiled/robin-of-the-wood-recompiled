@@ -18,6 +18,7 @@ use std::hash::{Hash, Hasher};
 
 use robin::Game;
 use robin::assets::{Assets, BANK};
+use robin::controls::Controls;
 use zx_recomp::script::Script;
 use zx_runtime::memory::Memory;
 use zx_runtime::{Zx, bus, interp};
@@ -114,9 +115,14 @@ pub struct Routine {
     pub outputs: &'static [Reg],
     /// Registers the original leaves as they were, which callers rely on.
     pub preserves: &'static [Reg],
-    /// The rewrite: the state, the data parsed from the tape, and the
-    /// registers at entry; returns the registers with its outputs set.
-    pub rewrite: fn(&mut Game, &Assets, Regs) -> Regs,
+    /// Where it ends, for a stretch of code that is not a routine (the main
+    /// loop's): it runs from `entry` to the first of these. Empty for a
+    /// routine, which runs to its return.
+    pub exits: &'static [u16],
+    /// The rewrite: the state, the data parsed from the tape, the registers
+    /// at entry, and the controls as the original saw them; returns the
+    /// registers with its outputs set.
+    pub rewrite: fn(&mut Game, &Assets, Regs, &Controls) -> Regs,
 }
 
 /// What one routine's suite saw.
@@ -185,6 +191,12 @@ impl Routine {
                 .is_none_or(|b| z.memory.slot(3) == Memory::bank(b))
     }
 
+    /// Whether this routine's bank is paged, if it has one.
+    fn in_bank(&self, z: &Zx) -> bool {
+        self.bank
+            .is_none_or(|b| z.memory.slot(3) == Memory::bank(b))
+    }
+
     fn in_code(&self, z: &Zx, pc: u16) -> bool {
         (self.code.0..=self.code.1).contains(&pc)
             && (pc < 0xC000
@@ -220,11 +232,15 @@ impl Routine {
         }
         t.compared += 1;
         t.executed.extend(run.executed.iter().copied());
-        let at = format!(
-            "call from {:04x} (case {})",
-            run.ret.wrapping_sub(3),
-            t.compared
-        );
+        let at = if self.exits.is_empty() {
+            format!(
+                "call from {:04x} (case {})",
+                run.ret.wrapping_sub(3),
+                t.compared
+            )
+        } else {
+            format!("run from {:04x} (case {})", self.entry, t.compared)
+        };
         let differ = self.compare(&entry, &run, play);
         if !differ.is_empty() {
             fail(t, format!("{}: {at}: {}", self.name, differ.join("; ")));
@@ -308,11 +324,23 @@ impl Routine {
             }
         }
 
-        let n = t.scrambled_by_caller.entry(run.ret).or_default();
+        let caller = if self.exits.is_empty() {
+            run.ret
+        } else {
+            self.entry
+        };
+        let n = t.scrambled_by_caller.entry(caller).or_default();
         if *n < SCRAMBLE_PER_CALLER {
             *n += 1;
             t.scrambled += 1;
-            match self.scramble(&run.after, run.entry_sp, play) {
+            // A stretch leaves the stack as it found it: its level is where
+            // the stack was, not one return address above.
+            let level = if self.exits.is_empty() {
+                run.entry_sp.wrapping_add(2)
+            } else {
+                run.entry_sp
+            };
+            match self.scramble(&run.after, level, play) {
                 Scrambled::Reads(e) => fail(t, format!("{}: {at}: {e}", self.name)),
                 Scrambled::UnreadStackLeftOut => t.stack_left_out += 1,
                 Scrambled::Unread => {}
@@ -336,7 +364,14 @@ impl Routine {
         let mut rom_read = None;
         let mut blind: BTreeSet<(usize, usize)> = BTreeSet::new();
         let mut steps = 0u64;
-        while !(c.pc == ret && c.sp == entry_sp.wrapping_add(2)) {
+        let done = |c: &Zx| {
+            if self.exits.is_empty() {
+                c.pc == ret && c.sp == entry_sp.wrapping_add(2)
+            } else {
+                self.exits.contains(&c.pc) && self.in_bank(c)
+            }
+        };
+        while !done(&c) {
             steps += 1;
             if steps > STEP_LIMIT {
                 return Err(format!(
@@ -368,6 +403,10 @@ impl Routine {
                         }
                     }
                     bus::Kind::PortWrite => ports.push((pc, cy.at)),
+                    // What a port answers is an input like memory's bytes:
+                    // two calls with different keys held are different
+                    // calls.
+                    bus::Kind::PortRead => (cy.at, c.port_in(cy.at)).hash(&mut key),
                     _ => {}
                 }
             }
@@ -405,8 +444,13 @@ impl Routine {
         // A rewrite that panics where the original carries on is a
         // difference like any other: reported, not the end of the run.
         let rewrite = self.rewrite;
+        let controls = Controls {
+            keys: entry.keys,
+            kempston: entry.kempston,
+            ear: entry.ear,
+        };
         let out = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            rewrite(&mut g, play.assets, before)
+            rewrite(&mut g, play.assets, before, &controls)
         })) {
             Ok(out) => out,
             Err(e) => {
@@ -485,7 +529,7 @@ impl Routine {
     /// then until the stack is back at the caller's level; then all of
     /// memory but the dead stack. Any difference means a caller reads one of
     /// those registers.
-    fn scramble(&self, returned: &Zx, entry_sp: u16, play: &Play) -> Scrambled {
+    fn scramble(&self, returned: &Zx, level: u16, play: &Play) -> Scrambled {
         let mut same = returned.clone();
         let mut odd = returned.clone();
         let mut regs = Regs::of(&odd);
@@ -500,7 +544,6 @@ impl Routine {
         regs.put(&mut odd);
         let (mut keys_same, mut keys_odd) = (play.script.clone(), play.script.clone());
         let start = same.frame;
-        let level = entry_sp.wrapping_add(2);
         let mut low = same.sp;
         let mut step = |same: &mut Zx, odd: &mut Zx| {
             // A frame is over: the next step begins another, so its keys go
@@ -687,7 +730,10 @@ mod tests {
         z
     }
 
-    fn routine(outputs: &'static [Reg], rewrite: fn(&mut Game, &Assets, Regs) -> Regs) -> Routine {
+    fn routine(
+        outputs: &'static [Reg],
+        rewrite: fn(&mut Game, &Assets, Regs, &Controls) -> Regs,
+    ) -> Routine {
         Routine {
             name: "made up",
             bank: None,
@@ -695,6 +741,7 @@ mod tests {
             code: (0x8100, 0x810F),
             outputs,
             preserves: &[],
+            exits: &[],
             rewrite,
         }
     }
@@ -735,10 +782,10 @@ mod tests {
     #[test]
     fn a_caller_reading_an_undeclared_register_is_caught() {
         let z = machine(RETURNS_A, STORES_A);
-        let f = failures(&routine(&[], |_, _, r| r), &z);
+        let f = failures(&routine(&[], |_, _, r, _| r), &z);
         assert!(f.iter().any(|e| e.contains("scrambled")), "{f:?}");
         let f = failures(
-            &routine(&[Reg::A], |_, _, mut r| {
+            &routine(&[Reg::A], |_, _, mut r, _| {
                 r.set(Reg::A, 0x42);
                 r
             }),
@@ -751,7 +798,7 @@ mod tests {
     fn a_wrong_output_is_caught() {
         let z = machine(RETURNS_A, STORES_A);
         let f = failures(
-            &routine(&[Reg::A], |_, _, mut r| {
+            &routine(&[Reg::A], |_, _, mut r, _| {
                 r.set(Reg::A, 0x43);
                 r
             }),
@@ -766,14 +813,14 @@ mod tests {
     #[test]
     fn a_write_left_out_is_caught_even_where_the_value_was_already_right() {
         let z = machine(CLEARS_9100, &[]);
-        let f = failures(&routine(&[], |_, _, r| r), &z);
+        let f = failures(&routine(&[], |_, _, r, _| r), &z);
         assert!(
             f.iter()
                 .any(|e| e.contains("only writes set to other values")),
             "{f:?}"
         );
         let f = failures(
-            &routine(&[], |g, _, r| {
+            &routine(&[], |g, _, r, _| {
                 g.write(0x9100, 0);
                 r
             }),
@@ -785,7 +832,7 @@ mod tests {
     #[test]
     fn a_rewrite_that_panics_is_a_failure_not_the_end() {
         let z = machine(RETURNS_A, STORES_A);
-        let f = failures(&routine(&[], |_, _, _| panic!("planted")), &z);
+        let f = failures(&routine(&[], |_, _, _, _| panic!("planted")), &z);
         assert!(f.iter().any(|e| e.contains("panicked: planted")), "{f:?}");
     }
 
@@ -793,7 +840,7 @@ mod tests {
     fn a_call_that_reads_the_rom_is_skipped_and_counted_not_compared() {
         // `LD A,(0x1000) : RET`: the rewrite has no ROM to match it with.
         let z = machine(&[0x3A, 0x00, 0x10, 0xC9], &[]);
-        let r = routine(&[], |_, _, _| panic!("never run: the call is skipped"));
+        let r = routine(&[], |_, _, _, _| panic!("never run: the call is skipped"));
         let mut t = Tally::default();
         let script = quiet();
         let assets = no_assets();
@@ -819,14 +866,14 @@ mod tests {
     fn a_port_write_is_caught() {
         // `OUT (0xFE),A : RET`.
         let z = machine(&[0xD3, 0xFE, 0xC9], &[]);
-        let f = failures(&routine(&[], |_, _, r| r), &z);
+        let f = failures(&routine(&[], |_, _, r, _| r), &z);
         assert!(f.iter().any(|e| e.contains("writes port")), "{f:?}");
     }
 
     #[test]
     fn a_repeat_is_skipped_and_counted() {
         let z = machine(RETURNS_A, STORES_A);
-        let r = routine(&[Reg::A], |_, _, mut r| {
+        let r = routine(&[Reg::A], |_, _, mut r, _| {
             r.set(Reg::A, 0x42);
             r
         });
@@ -841,5 +888,58 @@ mod tests {
         r.capture(&z, &play, &mut t);
         r.capture(&z, &play, &mut t);
         assert_eq!((t.calls, t.compared, t.repeats), (2, 1, 1));
+    }
+
+    /// `IN A,(0xFE) : RET` reading the top half-row, and the caller stores A.
+    const READS_KEYS: &[u8] = &[0x3E, 0x7F, 0xDB, 0xFE, 0xC9];
+
+    #[test]
+    fn calls_with_different_keys_held_are_different_calls() {
+        let r = routine(&[Reg::A], |_, _, mut r, c| {
+            r.set(Reg::A, c.read(0x7FFE));
+            r
+        });
+        let mut t = Tally::default();
+        let script = quiet();
+        let assets = no_assets();
+        let play = Play {
+            script: &script,
+            frame: 0,
+            assets: &assets,
+        };
+        let mut z = machine(READS_KEYS, STORES_A);
+        r.capture(&z, &play, &mut t);
+        z.keys[7] = 0x1E; // Space.
+        r.capture(&z, &play, &mut t);
+        r.capture(&z, &play, &mut t);
+        assert_eq!((t.calls, t.compared, t.repeats), (3, 2, 1));
+        assert!(
+            t.failures.is_empty(),
+            "the controls reach the rewrite: {:?}",
+            t.failures
+        );
+    }
+
+    #[test]
+    fn a_stretch_runs_from_its_entry_to_an_exit() {
+        // `LD A,0x42 : JP 0x8110`, a stretch that never returns; its exit
+        // is 0x8110, where `LD (0x9000),A` follows.
+        let mut z = machine(&[0x3E, 0x42, 0xC3, 0x10, 0x81], &[]);
+        for (i, &b) in [0x32, 0x00, 0x90, 0x76].iter().enumerate() {
+            z.memory.poke(0x8110 + i as u16, b);
+        }
+        let mut r = routine(&[Reg::A], |_, _, mut r, _| {
+            r.set(Reg::A, 0x42);
+            r
+        });
+        r.exits = &[0x8110];
+        let f = failures(&r, &z);
+        assert!(f.is_empty(), "{f:?}");
+        let mut wrong = routine(&[Reg::A], |_, _, mut r, _| {
+            r.set(Reg::A, 0x41);
+            r
+        });
+        wrong.exits = &[0x8110];
+        assert!(failures(&wrong, &z).iter().any(|e| e.contains("output A")));
     }
 }
