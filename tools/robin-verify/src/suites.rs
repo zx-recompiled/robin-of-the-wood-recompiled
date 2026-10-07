@@ -1,7 +1,7 @@
 //! The routines of the original that have been rewritten, and how each
 //! rewrite takes the original's registers (`docs/re/robin.md`).
 
-use robin::{map, print, screen};
+use robin::{map, print, screen, sprites};
 
 use crate::capture::{Reg, Routine};
 
@@ -290,6 +290,78 @@ pub fn all() -> Vec<Routine> {
             preserves: &[],
             rewrite: |g, a, r| {
                 map::draw_special(g, a.map());
+                r
+            },
+        },
+        Routine {
+            name: "mirror a frame in place (0:C7AF)",
+            bank: Some(0),
+            entry: 0xC7AF,
+            code: (0xC7AF, 0xC7EE),
+            outputs: &[],
+            preserves: &[Reg::A, Reg::F, Reg::B, Reg::C, Reg::H, Reg::L],
+            rewrite: |g, _, r| {
+                sprites::mirror_frame(
+                    g,
+                    u16::from_be_bytes([r.get(Reg::H), r.get(Reg::L)]),
+                    r.get(Reg::A),
+                );
+                r
+            },
+        },
+        Routine {
+            name: "draw a frame (0:C5CE, with 0:C47D and 0:C645)",
+            bank: Some(0),
+            entry: 0xC5CE,
+            code: (0xC5CE, 0xC687),
+            outputs: &[],
+            preserves: &[Reg::H, Reg::L],
+            rewrite: |g, a, r| {
+                sprites::draw_frame(g, a.sprites(), r.get(Reg::A), r.get(Reg::C), r.get(Reg::B));
+                r
+            },
+        },
+        Routine {
+            name: "mark a frame's cells (0:C688)",
+            bank: Some(0),
+            entry: 0xC688,
+            code: (0xC688, 0xC6FD),
+            outputs: &[],
+            preserves: &[
+                Reg::A,
+                Reg::F,
+                Reg::B,
+                Reg::C,
+                Reg::D,
+                Reg::E,
+                Reg::H,
+                Reg::L,
+            ],
+            rewrite: |g, _, r| {
+                sprites::mark_cells(
+                    g,
+                    u16::from_be_bytes([r.get(Reg::H), r.get(Reg::L)]),
+                    r.get(Reg::C),
+                    r.get(Reg::B),
+                );
+                r
+            },
+        },
+        Routine {
+            name: "animate and redraw a sprite (0:C7EF)",
+            bank: Some(0),
+            entry: 0xC7EF,
+            code: (0xC7EF, 0xC851),
+            outputs: &[],
+            // Its callers go on using the record (0:DBDA clears a flag
+            // through IX), and it leaves IX as it was.
+            preserves: &[Reg::Ixh, Reg::Ixl],
+            rewrite: |g, a, r| {
+                sprites::animate(
+                    g,
+                    a.sprites(),
+                    u16::from_be_bytes([r.get(Reg::Ixh), r.get(Reg::Ixl)]),
+                );
                 r
             },
         },

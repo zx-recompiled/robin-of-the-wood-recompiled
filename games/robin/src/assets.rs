@@ -12,6 +12,7 @@ use zx_core::sha1::sha1_hex;
 
 use crate::layout::{self, GAME_BLOCKS, LOADER_BLOCKS};
 pub use crate::map::Map;
+pub use crate::sprites::Sprites;
 
 /// SHA-1 of the one dump this project supports: the 128K release as a TZX
 /// file (`docs/re/robin.md`, *The tape*). Any other file is refused.
@@ -32,6 +33,7 @@ pub struct Assets {
     banks: Box<[[u8; BANK]; 8]>,
     loading_screen: Box<[u8; 6912]>,
     map: Map,
+    sprites: Sprites,
 }
 
 impl Assets {
@@ -83,9 +85,17 @@ impl Assets {
             banks,
             loading_screen,
             map: Map::parse(|_| 0),
+            sprites: Sprites::parse(|_| 0),
         };
         assets.map = Map::parse(|a| if a < 0x4000 { 0 } else { assets.read(a, 0) });
+        assets.sprites = Sprites::parse(|a| if a < 0x4000 { 0 } else { assets.read(a, 0) });
         assets
+    }
+
+    /// The sprites' frame tables, parsed from the tape.
+    #[must_use]
+    pub fn sprites(&self) -> &Sprites {
+        &self.sprites
     }
 
     /// The map, parsed from the tape.
@@ -156,8 +166,10 @@ fn parse(bytes: &[u8]) -> Result<Assets, String> {
         banks,
         loading_screen,
         map: Map::parse(|_| 0),
+        sprites: Sprites::parse(|_| 0),
     };
     assets.map = Map::parse(|a| if a < 0x4000 { 0 } else { assets.read(a, 0) });
+    assets.sprites = Sprites::parse(|a| if a < 0x4000 { 0 } else { assets.read(a, 0) });
     Ok(assets)
 }
 
@@ -370,6 +382,35 @@ mod tests {
                 "block {n}: bits 3-5 clear, and unmirrored as the tape stores it"
             );
         }
+    }
+
+    /// The real tape's frame tables are the shape `docs/re/robin.md`
+    /// (*Sprites*) gives.
+    #[test]
+    fn the_local_tapes_frames() {
+        let Some(tape) = local_tape() else {
+            println!("skipped: no supported tape in assets/");
+            return;
+        };
+        let a = read_tape(&tape).expect("reads");
+        let s = a.sprites();
+        let lens: Vec<usize> = s.tables.iter().map(|(_, f)| f.len()).collect();
+        assert_eq!(lens, [34, 19, 20]);
+        let frames: Vec<_> = s.tables.iter().flat_map(|(_, f)| f).collect();
+        assert_eq!(frames.iter().filter(|f| f.figure).count(), 20);
+        assert!(
+            frames
+                .iter()
+                .filter(|f| !f.figure)
+                .all(|f| f.height == 32 || f.height == 16)
+        );
+        let mirrored = frames
+            .iter()
+            .filter(|f| a.read(f.at, 0) & 0x80 != 0)
+            .count();
+        assert_eq!(mirrored, 15, "frames stored facing the other way");
+        assert!(frames.iter().all(|f| a.read(f.at, 0) & 0x70 == 0));
+        assert_eq!(s.patterns.len(), 5, "the pixel frames name patterns 0 to 4");
     }
 
     /// The real tape reads, and its loading picture is its first game block.

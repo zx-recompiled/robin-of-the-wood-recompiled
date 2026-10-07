@@ -20,7 +20,7 @@ will start from (#3; `games/robin/tests/boot.rs`). The facts it needs are in
 (`robin::assets::read_game`, #5): the SHA-1 checked, then the eight banks
 built from the tape alone, with no ROM. Rewritten and checked by the
 differential suites (`tools/robin-verify`): the screen and printing (#24),
-and the map, drawn at all 320 locations by a tour (#28). The plan, in
+the map, drawn at all 320 locations by a tour (#28), and the sprites (#32). The plan, in
 order, is the board's Backlog.
 
 ## Commands
@@ -30,9 +30,9 @@ order, is the board's Backlog.
   (`robin-verify`), which **fail the gate without the tape and `128.rom` in
   `assets/`**. **Gate on the exit code, never on grepped output.**
 - `cargo run --release -p robin-verify -- assets` runs the differential
-  suites alone, about a minute and a half: every rewritten routine against
-  the original's real calls over 20,000 frames of play, then a tour of all
-  320 locations. It prints each routine's
+  suites alone, about two and a half minutes: every rewritten routine
+  against the original's real calls over 20,000 frames of play, then a tour
+  of all 320 locations, half a second at each. It prints each routine's
   cases and the instructions no call reached.
 - `cargo test -p zx-runtime --test z80test --test fuse -- --nocapture` checks
   the interpreter against z80test (measured on a real Spectrum) and the Fuse

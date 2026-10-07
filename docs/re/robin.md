@@ -286,10 +286,8 @@ How it prints:
 
 ### Not covered here
 
-Drawn into the back buffer every frame, and their own subsystem:
-
-- the sprite code, `0:C5CE` and `0:C47D`;
-- the code that marks the cells it drew, `0:C688`.
+Drawn into the back buffer every frame, and their own subsystem: the
+sprites (*Sprites*).
 
 The scenery is drawn by `0xBF6A` (*The map*). `0:CD73` with `0:CE27`, first
 taken for the scenery renderer, is a transition effect that goes with the
@@ -386,6 +384,110 @@ words at `0xD28F`, `0xD291` and `0xD293`. Those are set when a game starts
 screen from the screen itself and the row table, as a transition: it ran
 3 times in 20,000 frames, at the menu and twice in play. It goes with the
 menus.
+
+## Sprites
+
+Found by reading the code that draws into the back buffer every frame
+(#32).
+
+**The engine is rewritten (`games/robin/src/sprites.rs`) and confirmed**
+against the original by `tools/robin-verify`, in play and on the tour,
+which now lets each location's characters move for half a second. The
+exceptions are the calls in which the original reads the ROM (*When a
+sprite reads the ROM*, below). Those are counted, not compared.
+
+### A sprite
+
+- **A sprite is a record** (in `IX`; Robin's is at `0xCB76`). It holds:
+  - an animation counter, and the value it's reset to;
+  - a pointer into an animation sequence;
+  - flags: active, drawn, and to be drawn;
+  - the frame and position it was last drawn at;
+  - the frame and position to draw it at next.
+
+  The records belong to the characters, whose subsystems come later.
+- **An animation sequence** is a list of frame numbers. `0xFF`, followed by an
+  address, goes on from there instead, so a sequence can loop.
+- **Animating and redrawing a record**, `0:C7EF`, called from 9 places, one
+  per kind of character:
+  1. If the record is active, it counts the animation down. When the counter
+     runs out, it resets it and takes the next frame number from the
+     sequence, following a loop where there is one.
+  2. If the sprite is drawn, it draws the old frame at the old position
+     again. Drawing is XOR, so that erases it.
+  3. If the sprite is to be drawn, it copies the new frame and position over
+     the old ones, marks the sprite drawn, and draws it.
+
+### Frames
+
+- **Three frame tables**, each a list of addresses: `0x8C25` (Robin's, 34
+  frames), `0x8C69` (19) and `0x8C8F` (20). Which one a sprite uses is
+  patched into the drawing code by its caller (`0:C5CF`).
+- **A frame starts with a header byte.** Bit 7 is the way it faces now: the
+  frames are mirrored in place, like the map's blocks. 15 of the tape's
+  frames start out mirrored. Bits 0–3 are its kind: 2 or 3 for a frame
+  drawn as pixels, and 6 for a figure drawn from character cells.
+- **A pixel frame** follows its header with its height in pixel rows (32 or
+  16 on the tape), a colour byte, then 3 bytes, 24 pixels, a row.
+- **A character figure** follows its header with 30 character codes (6
+  wide, 5 high; 0 for none), then their 30 attributes. Its characters are
+  8 bytes each, at `0x9958` + 8 × code.
+- **The colour byte** picks an attribute pattern from a table of addresses
+  at `0x8CB7`. Bits 7 and 6 say whether the pattern steps along each row of
+  cells and down each column, or repeats one attribute.
+
+### Drawing a frame
+
+`0:C5CE` draws frame A at pixel position C, B, the horizontal position in
+2-pixel units, into the back buffer:
+
+1. **A character figure** (`0:C47D`) is drawn whole and returns. Each cell
+   is XORed into the back buffer, mirrored if the figure faces the other way:
+   the columns in reverse order (a table at `0xC57A`), and each byte through
+   the mirror table. Each of its non-zero attributes then goes into the
+   changed-cell map, where that cell isn't already marked.
+2. **For a pixel frame**, it first marks the cells the frame covers changed
+   (`0:C688`), with the attributes of its colour pattern. That is 4 cells
+   wide, and as many rows as the height covers, one more if the position
+   isn't on a character row.
+3. If the frame faces the other way from how it is wanted, it is mirrored in
+   place (`0:C7AF`). That flips the header's bit 7, then for each row swaps
+   the outer two bytes and mirrors all three through the mirror table.
+4. It draws each row: the 3 bytes are shifted right by the position's low
+   bits, 2 pixels a step, into 4 bytes, and XORed into the back buffer.
+   - The shift is an unrolled chain of shift instructions (`0:C645`). The
+     routine cuts it at the right length by writing a `RET` into it, and
+     puts the byte back afterwards.
+   - The routine's other choices are patched into its own code too: which
+     frame table, the mirroring path, and the colour pattern's steps.
+
+Quirks the rewrite copies:
+- A pixel frame at a horizontal position below 8 is drawn one pixel row
+  higher. The subtraction that finds its column borrows, and the borrow is
+  taken off the row.
+- A character figure's drawing doesn't return to `0:C5CE`. It drops
+  `0:C5CE`'s return address and returns straight to its caller.
+- The shift chain's last stop starts out as a `RET`, and stays `0xCB` once
+  any sprite has been shifted by 6 pixels.
+- An animation counter is reset when its top bit is set after counting
+  down, not only at zero.
+
+### When a sprite reads the ROM
+
+**confirmed**, on the tour.
+- A character tied to one of the three special locations (`0xD291`, *The
+  map*) has its record at `0xBB1B`. On the tape, its animation pointer is
+  `0x0000`.
+- That pointer is set only by a timer in `0xBA83`, which first fires about
+  18 seconds into a game.
+- Until then, the original takes the character's animation from the ROM:
+  ROM bytes become its frame numbers, and so its frame data.
+
+So if Robin reaches that location early enough, the original draws it from
+the ROM. Play never got there, but the tour did. The rewrite has no ROM,
+so it can't match those calls. `robin-verify` counts them as skipped, with
+the first such read named. What the rewrite should do there is #21's
+question, along with the random numbers.
 
 ## Sound
 

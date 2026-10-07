@@ -1,9 +1,12 @@
 //! The tour of every location (#6, Decision 8; #28, Decision 2). From the
 //! original in play at its main loop, it walks the 16 × 20 grid row by row:
 //! each move puts the original at its own leave-the-screen path with the
-//! direction, so the original's own step and entry draw the next location;
-//! then it lets the original play on a little, with no keys pressed. Every
-//! call to a rewritten routine on the way is a case, as in play.
+//! direction, so the original's own step and entry draw the next location,
+//! and it runs until the original is back at its main loop. Then a copy of
+//! it plays on for half a second, with no keys pressed, and is thrown away:
+//! whatever happens there (Robin walking on, or dying) never disturbs the
+//! walk. Every call to a rewritten routine, in the walk and in the copies,
+//! is a case, as in play.
 
 use std::collections::BTreeSet;
 
@@ -33,9 +36,10 @@ const STEP: u16 = 0xC127;
 const DRAW_LOCATION: u16 = 0xBF6A;
 /// The location, as the original keeps it.
 const LOCATION: u16 = 0xC440;
-/// How many frames the original plays at each location before the next move.
-const FRAMES_AT_EACH: u64 = 4;
-/// How many frames it may take to come back to the main loop after that.
+/// How many frames the original plays at each location before the next move:
+/// half a second, so the characters there animate and move (#32).
+const FRAMES_AT_EACH: u64 = 25;
+/// How many frames entering a location may take, back to the main loop.
 const BACK_WITHIN: u64 = 200;
 
 /// Whether `z` is at the start of the original's main loop.
@@ -67,7 +71,27 @@ fn step(z: &mut Zx, v: &mut Verifier, script: &mut Script, start: (u64, u32), as
     z.step_in_frame();
 }
 
-/// Runs `z` until the main loop begins again, at least `frames` frames on.
+/// Runs `z` until the main loop begins again, after the move just made.
+fn enter(
+    z: &mut Zx,
+    v: &mut Verifier,
+    script: &mut Script,
+    start: (u64, u32),
+    assets: &Assets,
+) -> bool {
+    let give_up = z.frame + BACK_WITHIN;
+    loop {
+        step(z, v, script, start, assets);
+        if at_main_loop(z) {
+            return true;
+        }
+        if z.frame >= give_up {
+            return false;
+        }
+    }
+}
+
+/// Plays `z` on for `frames` frames, every call taken as a case.
 fn play_on(
     z: &mut Zx,
     v: &mut Verifier,
@@ -75,17 +99,10 @@ fn play_on(
     start: (u64, u32),
     assets: &Assets,
     frames: u64,
-) -> bool {
+) {
     let until = z.frame + frames;
-    let give_up = until + BACK_WITHIN;
-    loop {
+    while z.frame < until {
         step(z, v, script, start, assets);
-        if z.frame >= until && at_main_loop(z) {
-            return true;
-        }
-        if z.frame >= give_up {
-            return false;
-        }
     }
 }
 
@@ -121,12 +138,15 @@ pub fn run(mut z: Zx, frame: u32, quiet: &Script, assets: &Assets, v: &mut Verif
             z.e = direction;
             z.pc = LEAVE;
         }
-        if !play_on(&mut z, v, &mut script, start, assets, FRAMES_AT_EACH) {
+        if !enter(&mut z, v, &mut script, start, assets) {
             toured.problems.push(format!(
                 "after moving from {from:#05x} to {to:#05x}, the original did not come back to its main loop"
             ));
             break;
         }
+        // A copy plays on, and is thrown away.
+        let (mut copy, mut keys) = (z.clone(), script.clone());
+        play_on(&mut copy, v, &mut keys, start, assets, FRAMES_AT_EACH);
         let now = z.read16(LOCATION);
         if now != to {
             toured.problems.push(format!(

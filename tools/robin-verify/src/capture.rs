@@ -133,6 +133,10 @@ pub struct Tally {
     /// Scrambling checks whose stack never came back to the caller's level,
     /// so that stretch of it was left out of the comparison.
     pub stack_left_out: u64,
+    /// Calls skipped because the original read the ROM during them, which
+    /// the rewrite has none of (#21), and the first such: where, and what.
+    pub rom_reads: u64,
+    pub first_rom_read: Option<String>,
     seen: HashSet<u64>,
     scrambled_by_caller: BTreeMap<u16, u32>,
     pub executed: BTreeSet<u16>,
@@ -204,6 +208,16 @@ impl Routine {
             t.repeats += 1;
             return;
         }
+        if let Some(read) = run.rom_read {
+            t.rom_reads += 1;
+            t.first_rom_read.get_or_insert(format!(
+                "the instruction at {:04x} read {:04x}, in a call from {:04x}",
+                read.0,
+                read.1,
+                run.ret.wrapping_sub(3)
+            ));
+            return;
+        }
         t.compared += 1;
         t.executed.extend(run.executed.iter().copied());
         let at = format!(
@@ -228,6 +242,7 @@ impl Routine {
                 poke(&mut poisoned, n, i, !v);
             }
             match self.run_original(&poisoned) {
+                Ok(run2) if run2.rom_read.is_some() => t.rom_reads += 1,
                 Ok(run2) => {
                     let differ = self.compare(&poisoned, &run2, play);
                     if !differ.is_empty() {
@@ -272,6 +287,7 @@ impl Routine {
                 poke(&mut varied, n, i, v ^ flip);
             }
             match self.run_original(&varied) {
+                Ok(run3) if run3.rom_read.is_some() => t.rom_reads += 1,
                 Ok(run3) => {
                     t.varied += 1;
                     let differ = self.compare(&varied, &run3, play);
@@ -317,6 +333,7 @@ impl Routine {
         let mut ports = Vec::new();
         let mut executed = Vec::new();
         let mut read: BTreeSet<(usize, usize)> = BTreeSet::new();
+        let mut rom_read = None;
         let mut blind: BTreeSet<(usize, usize)> = BTreeSet::new();
         let mut steps = 0u64;
         while !(c.pc == ret && c.sp == entry_sp.wrapping_add(2)) {
@@ -336,6 +353,9 @@ impl Routine {
                 match cy.kind {
                     bus::Kind::Read => {
                         (cy.at, c.read(cy.at)).hash(&mut key);
+                        if cy.at < 0x4000 && rom_read.is_none() {
+                            rom_read = Some((pc, cy.at));
+                        }
                         if let Some(p) = ram_place(&c, cy.at) {
                             read.insert(p);
                         }
@@ -371,6 +391,7 @@ impl Routine {
             executed,
             blind,
             read,
+            rom_read,
             banks: banks(&c),
             after: c,
         })
@@ -381,7 +402,22 @@ impl Routine {
     fn compare(&self, entry: &Zx, run: &Run, play: &Play) -> Vec<String> {
         let before = Regs::of(entry);
         let mut g = Game::from_memory(&banks(entry));
-        let out = (self.rewrite)(&mut g, play.assets, before);
+        // A rewrite that panics where the original carries on is a
+        // difference like any other: reported, not the end of the run.
+        let rewrite = self.rewrite;
+        let out = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            rewrite(&mut g, play.assets, before)
+        })) {
+            Ok(out) => out,
+            Err(e) => {
+                let why = e
+                    .downcast_ref::<String>()
+                    .map(String::as_str)
+                    .or_else(|| e.downcast_ref::<&str>().copied())
+                    .unwrap_or("a panic");
+                return vec![format!("the rewrite panicked: {why}")];
+            }
+        };
         let after = Regs::of(&run.after);
         let mut differ = Vec::new();
 
@@ -591,6 +627,8 @@ struct Run {
     blind: BTreeSet<(usize, usize)>,
     /// Every place it read.
     read: BTreeSet<(usize, usize)>,
+    /// The first read of the ROM, if it made one: where, and what.
+    rom_read: Option<(u16, u16)>,
     banks: Box<[[u8; BANK]; 8]>,
     after: Zx,
 }
@@ -742,6 +780,39 @@ mod tests {
             &z,
         );
         assert!(f.is_empty(), "{f:?}");
+    }
+
+    #[test]
+    fn a_rewrite_that_panics_is_a_failure_not_the_end() {
+        let z = machine(RETURNS_A, STORES_A);
+        let f = failures(&routine(&[], |_, _, _| panic!("planted")), &z);
+        assert!(f.iter().any(|e| e.contains("panicked: planted")), "{f:?}");
+    }
+
+    #[test]
+    fn a_call_that_reads_the_rom_is_skipped_and_counted_not_compared() {
+        // `LD A,(0x1000) : RET`: the rewrite has no ROM to match it with.
+        let z = machine(&[0x3A, 0x00, 0x10, 0xC9], &[]);
+        let r = routine(&[], |_, _, _| panic!("never run: the call is skipped"));
+        let mut t = Tally::default();
+        let script = quiet();
+        let assets = no_assets();
+        r.capture(
+            &z,
+            &Play {
+                script: &script,
+                frame: 0,
+                assets: &assets,
+            },
+            &mut t,
+        );
+        assert_eq!((t.calls, t.compared, t.rom_reads), (1, 0, 1));
+        assert!(t.failures.is_empty(), "{:?}", t.failures);
+        assert!(
+            t.first_rom_read
+                .as_deref()
+                .is_some_and(|r| r.contains("read 1000"))
+        );
     }
 
     #[test]
