@@ -10,6 +10,7 @@
 pub mod assets;
 pub mod game;
 pub mod layout;
+pub mod map;
 pub mod print;
 pub mod screen;
 

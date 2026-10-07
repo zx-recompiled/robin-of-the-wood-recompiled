@@ -1,7 +1,7 @@
 //! The routines of the original that have been rewritten, and how each
 //! rewrite takes the original's registers (`docs/re/robin.md`).
 
-use robin::{print, screen};
+use robin::{map, print, screen};
 
 use crate::capture::{Reg, Routine};
 
@@ -20,7 +20,7 @@ pub fn all() -> Vec<Routine> {
             code: (0xCEC8, 0xCEDD),
             outputs: &[],
             preserves: &[],
-            rewrite: |g, r| {
+            rewrite: |g, _, r| {
                 screen::build_mirror(g);
                 r
             },
@@ -32,7 +32,7 @@ pub fn all() -> Vec<Routine> {
             code: (0xCEDE, 0xCEFD),
             outputs: &[],
             preserves: &[],
-            rewrite: |g, r| {
+            rewrite: |g, _, r| {
                 screen::build_rows(g);
                 r
             },
@@ -44,7 +44,7 @@ pub fn all() -> Vec<Routine> {
             code: (0xCEFE, 0xCF0B),
             outputs: &[],
             preserves: &[],
-            rewrite: |g, r| {
+            rewrite: |g, _, r| {
                 screen::clear_screen(g);
                 r
             },
@@ -56,7 +56,7 @@ pub fn all() -> Vec<Routine> {
             code: (0xCF0C, 0xCF18),
             outputs: &[],
             preserves: &[],
-            rewrite: |g, r| {
+            rewrite: |g, _, r| {
                 screen::fill_attrs(g, r.get(Reg::A));
                 r
             },
@@ -68,7 +68,7 @@ pub fn all() -> Vec<Routine> {
             code: (0xCF19, 0xCF32),
             outputs: &[],
             preserves: &[],
-            rewrite: |g, r| {
+            rewrite: |g, _, r| {
                 screen::clear_play_area(g, r.get(Reg::A));
                 r
             },
@@ -80,7 +80,7 @@ pub fn all() -> Vec<Routine> {
             code: (0xCF33, 0xCF40),
             outputs: &[],
             preserves: &[],
-            rewrite: |g, r| {
+            rewrite: |g, _, r| {
                 screen::clear_changed(g);
                 r
             },
@@ -92,7 +92,7 @@ pub fn all() -> Vec<Routine> {
             code: (0xCF41, 0xCF5E),
             outputs: &[],
             preserves: &[],
-            rewrite: |g, r| {
+            rewrite: |g, _, r| {
                 screen::clear_lower_panel(g);
                 r
             },
@@ -104,7 +104,7 @@ pub fn all() -> Vec<Routine> {
             code: (0xC754, 0xC7AE),
             outputs: &[],
             preserves: &[],
-            rewrite: |g, r| {
+            rewrite: |g, _, r| {
                 screen::flush(g);
                 r
             },
@@ -116,7 +116,7 @@ pub fn all() -> Vec<Routine> {
             code: (0xC6FE, 0xC753),
             outputs: &[],
             preserves: &[],
-            rewrite: |g, r| {
+            rewrite: |g, _, r| {
                 screen::copy_pixels(g);
                 r
             },
@@ -128,7 +128,7 @@ pub fn all() -> Vec<Routine> {
             code: (0xC086, 0xC0A3),
             outputs: &[],
             preserves: &[],
-            rewrite: |g, r| {
+            rewrite: |g, _, r| {
                 screen::copy_attrs(g);
                 r
             },
@@ -140,7 +140,7 @@ pub fn all() -> Vec<Routine> {
             code: PRINTER,
             outputs: &[],
             preserves: &[],
-            rewrite: |g, r| {
+            rewrite: |g, _, r| {
                 print::print_at(
                     g,
                     r.get(Reg::A),
@@ -156,7 +156,7 @@ pub fn all() -> Vec<Routine> {
             code: PRINTER,
             outputs: &[],
             preserves: &[],
-            rewrite: |g, r| {
+            rewrite: |g, _, r| {
                 print::print_from(
                     g,
                     r.get(Reg::D),
@@ -173,7 +173,7 @@ pub fn all() -> Vec<Routine> {
             code: PRINTER,
             outputs: &[],
             preserves: &[],
-            rewrite: |g, r| {
+            rewrite: |g, _, r| {
                 print::print_message(g, r.get(Reg::A), r.get(Reg::D), r.get(Reg::E));
                 r
             },
@@ -185,8 +185,111 @@ pub fn all() -> Vec<Routine> {
             code: (0xCEBB, 0xCEC7),
             outputs: &[],
             preserves: &[],
-            rewrite: |g, r| {
+            rewrite: |g, _, r| {
                 print::print_replacing(g, u16::from_be_bytes([r.get(Reg::H), r.get(Reg::L)]));
+                r
+            },
+        },
+        Routine {
+            name: "step to the next location (0:C127)",
+            bank: Some(0),
+            entry: 0xC127,
+            code: (0xC127, 0xC16D),
+            outputs: &[],
+            preserves: &[],
+            rewrite: |g, _, r| {
+                g.map.location = map::step(g.map.location, r.get(Reg::A));
+                r
+            },
+        },
+        Routine {
+            name: "find a record (0:C0B9)",
+            bank: Some(0),
+            entry: 0xC0B9,
+            code: (0xC0B9, 0xC0CD),
+            outputs: &[Reg::H, Reg::L],
+            preserves: &[],
+            rewrite: |g, _, mut r| {
+                let at = map::find_record(g, g.map.table, g.map.record);
+                r.set(Reg::H, (at >> 8) as u8);
+                r.set(Reg::L, at as u8);
+                r
+            },
+        },
+        Routine {
+            name: "draw a block (0xBFC9, 0:C002)",
+            // Its code starts in bank 2 and runs on into bank 0.
+            bank: Some(0),
+            entry: 0xBFC9,
+            code: (0xBFC9, 0xC055),
+            outputs: &[],
+            preserves: &[],
+            rewrite: |g, a, r| {
+                map::draw_block(g, a.map(), r.get(Reg::A), r.get(Reg::B), r.get(Reg::C));
+                r
+            },
+        },
+        Routine {
+            name: "mirror a block in place (0:C0CE)",
+            bank: Some(0),
+            entry: 0xC0CE,
+            code: (0xC0CE, 0xC11F),
+            outputs: &[],
+            preserves: &[],
+            rewrite: |g, _, r| {
+                map::mirror_block(g, u16::from_be_bytes([r.get(Reg::D), r.get(Reg::E)]));
+                r
+            },
+        },
+        Routine {
+            name: "draw a list of blocks (0xBFAA)",
+            bank: Some(0),
+            entry: 0xBFAA,
+            code: (0xBFAA, 0xBFC8),
+            outputs: &[],
+            preserves: &[],
+            rewrite: |g, a, r| {
+                map::draw_list(
+                    g,
+                    a.map(),
+                    u16::from_be_bytes([r.get(Reg::H), r.get(Reg::L)]),
+                );
+                r
+            },
+        },
+        Routine {
+            name: "draw a record (0xBFA7)",
+            bank: Some(0),
+            entry: 0xBFA7,
+            code: (0xBFA7, 0xBFA9),
+            outputs: &[],
+            preserves: &[],
+            rewrite: |g, a, r| {
+                map::draw_record(g, a.map());
+                r
+            },
+        },
+        Routine {
+            name: "draw a location (0xBF6A)",
+            bank: Some(0),
+            entry: 0xBF6A,
+            code: (0xBF6A, 0xBFA6),
+            outputs: &[],
+            preserves: &[],
+            rewrite: |g, a, r| {
+                map::draw_location(g, a.map());
+                r
+            },
+        },
+        Routine {
+            name: "draw a special location's extras (0:C056)",
+            bank: Some(0),
+            entry: 0xC056,
+            code: (0xC056, 0xC085),
+            outputs: &[],
+            preserves: &[],
+            rewrite: |g, a, r| {
+                map::draw_special(g, a.map());
                 r
             },
         },
