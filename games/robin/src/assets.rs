@@ -155,13 +155,7 @@ fn parse(bytes: &[u8]) -> Result<Assets, String> {
     let mut assets = Assets {
         banks,
         loading_screen,
-        map: Map {
-            locations: Vec::new(),
-            layouts: Vec::new(),
-            extras: Vec::new(),
-            specials: [Vec::new(), Vec::new(), Vec::new()],
-            blocks: Vec::new(),
-        },
+        map: Map::parse(|_| 0),
     };
     assets.map = Map::parse(|a| if a < 0x4000 { 0 } else { assets.read(a, 0) });
     Ok(assets)

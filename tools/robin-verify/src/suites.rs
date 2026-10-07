@@ -241,6 +241,58 @@ pub fn all() -> Vec<Routine> {
                 r
             },
         },
+        Routine {
+            name: "draw a list of blocks (0xBFAA)",
+            bank: Some(0),
+            entry: 0xBFAA,
+            code: (0xBFAA, 0xBFC8),
+            outputs: &[],
+            preserves: &[],
+            rewrite: |g, a, r| {
+                map::draw_list(
+                    g,
+                    a.map(),
+                    u16::from_be_bytes([r.get(Reg::H), r.get(Reg::L)]),
+                );
+                r
+            },
+        },
+        Routine {
+            name: "draw a record (0xBFA7)",
+            bank: Some(0),
+            entry: 0xBFA7,
+            code: (0xBFA7, 0xBFA9),
+            outputs: &[],
+            preserves: &[],
+            rewrite: |g, a, r| {
+                map::draw_record(g, a.map());
+                r
+            },
+        },
+        Routine {
+            name: "draw a location (0xBF6A)",
+            bank: Some(0),
+            entry: 0xBF6A,
+            code: (0xBF6A, 0xBFA6),
+            outputs: &[],
+            preserves: &[],
+            rewrite: |g, a, r| {
+                map::draw_location(g, a.map());
+                r
+            },
+        },
+        Routine {
+            name: "draw a special location's extras (0:C056)",
+            bank: Some(0),
+            entry: 0xC056,
+            code: (0xC056, 0xC085),
+            outputs: &[],
+            preserves: &[],
+            rewrite: |g, a, r| {
+                map::draw_special(g, a.map());
+                r
+            },
+        },
     ]
 }
 

@@ -64,6 +64,9 @@ impl Block {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Map {
     pub locations: Vec<Location>,
+    /// Where each list of items starts: the layouts', the extras' and the
+    /// specials', by address, as the drawing code is handed them.
+    pub lists: std::collections::BTreeMap<u16, Vec<Item>>,
     pub layouts: Vec<Vec<Item>>,
     /// For each location below 256, the blocks drawn on top of its layout.
     pub extras: Vec<Vec<Item>>,
@@ -108,10 +111,12 @@ impl Map {
             })
             .collect();
         let count = usize::from(locations.iter().map(|l| l.layout).max().unwrap_or(0)) + 1;
+        let mut lists = std::collections::BTreeMap::new();
         let mut at = LAYOUT_TABLE;
         let layouts = (0..count)
             .map(|_| {
                 let (items, next) = record(&read, at);
+                lists.insert(at, items.clone());
                 at = next;
                 items
             })
@@ -120,11 +125,16 @@ impl Map {
         let extras = (0..EXTRAS)
             .map(|_| {
                 let (items, next) = record(&read, at);
+                lists.insert(at, items.clone());
                 at = next;
                 items
             })
             .collect::<Vec<_>>();
-        let specials = SPECIAL_LISTS.map(|a| record(&read, a).0);
+        let specials = SPECIAL_LISTS.map(|a| {
+            let items = record(&read, a).0;
+            lists.insert(a, items.clone());
+            items
+        });
         let used = layouts
             .iter()
             .chain(&extras)
@@ -147,6 +157,7 @@ impl Map {
             .collect();
         Map {
             locations,
+            lists,
             layouts,
             extras,
             specials,
@@ -196,6 +207,60 @@ pub fn find_record(g: &crate::Game, table: u16, n: u8) -> u16 {
         at = at.wrapping_add(u16::from(skip));
     }
     at
+}
+
+/// The items of the list at `at`: from the map where it is one of the
+/// map's lists, as it always is in play, else read from memory as the
+/// original would.
+fn items_at(g: &crate::Game, map: &Map, at: u16) -> Vec<Item> {
+    match map.lists.get(&at) {
+        Some(items) => items.clone(),
+        None => record(&|a| g.read(a), at).0,
+    }
+}
+
+/// Draws the list of blocks at `at` (`0xBFAA`).
+pub fn draw_list(g: &mut crate::Game, map: &Map, at: u16) {
+    for item in items_at(g, map, at) {
+        let block = item.block | if item.mirrored { 0x80 } else { 0 };
+        draw_block(g, map, block, item.row, item.column);
+    }
+}
+
+/// Draws record `g.map.record` of the run at `g.map.table` (`0xBFA7`).
+pub fn draw_record(g: &mut crate::Game, map: &Map) {
+    let at = find_record(g, g.map.table, g.map.record);
+    draw_list(g, map, at);
+}
+
+/// Draws the current location's scenery (`0xBF6A`): its layout, mirrored
+/// if the location says so, then, below location 256, its extras.
+pub fn draw_location(g: &mut crate::Game, map: &Map) {
+    let location = g.map.location;
+    g.map.table = LAYOUT_TABLE;
+    let byte = match map.locations.get(usize::from(location)) {
+        Some(l) => l.layout | if l.mirrored { 0x80 } else { 0 },
+        None => g.read(LOCATION_TABLE.wrapping_add(location)),
+    };
+    g.map.location_byte = byte;
+    g.map.record = byte & 0x7F;
+    let xor = if byte & 0x80 != 0 { 0x1C } else { 0 };
+    g.map.column_xor = xor;
+    g.map.attr_column_xor = xor;
+    draw_record(g, map);
+    if location >> 8 == 0 {
+        g.map.record = location as u8;
+        g.map.table = EXTRAS_TABLE;
+        draw_record(g, map);
+    }
+}
+
+/// Draws the extras of whichever of the three special locations the
+/// current one is, if any (`0:C056`).
+pub fn draw_special(g: &mut crate::Game, map: &Map) {
+    if let Some(i) = g.map.specials.iter().position(|&s| s == g.map.location) {
+        draw_list(g, map, SPECIAL_LISTS[i]);
+    }
 }
 
 /// A count the original keeps in an 8-bit register and counts down to zero
