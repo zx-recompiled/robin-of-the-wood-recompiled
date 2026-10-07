@@ -8,20 +8,29 @@ The original is by Steve Wetheril, Paul Salmon and Fred Gray, as credited in the
 
 ## Status
 
-Nothing to play yet. The original now boots from its tape in the 128K reference machine, through the real ROM and its own loader, to the state the checks will start from. A census of 20,000 frames of play found it running no ROM code, and reading the ROM in three places, one of which feeds its random numbers (#21). The game can read its tape: it refuses anything but the one supported dump, and builds the 128K's memory banks from the tape alone, with no ROM. A second census found the game reading only one byte the tape didn't load, which is zero both in the original and in what the game builds (`docs/re/robin.md`).
+Nothing to play yet. The original now boots from its tape in the 128K reference machine, through the real ROM and its own loader, to the state the checks will start from. A census of 20,000 frames of play found it running no ROM code, and reading the ROM in three places, one of which feeds its random numbers (#21). The game can read its tape: it refuses anything but the one supported dump, and builds the 128K's memory banks from the tape alone, with no ROM. A second census found the game reading only one byte the tape didn't load, which is zero both in the original and in what the game builds (`docs/re/robin.md`). The first subsystem is rewritten and checked against the original: the screen and the play area's buffers, the tables built at start-up, and the text printer (#24).
 
 What exists is the groundwork copied from [starquake-recompiled](https://github.com/zx-recompiled/starquake-recompiled), where the same approach produced a complete rewrite of Starquake (`REUSED.md` lists what came from there):
 
 - `crates/zx-runtime`: a reference Z80 interpreter, which runs the original for comparison, as a 48K Spectrum or a 128K one: two ROMs and eight memory banks paged through port `0x7FFD`, the shadow screen, contention by bank, and the AY sound chip's registers. The 128K's timing is the grey +2's; its frame and interrupt lengths were measured on real machines, and the rest is from the written references until hardware-checked timing tests confirm it (#12).
 - `crates/zx-recomp`: traces the original as it runs and disassembles it into listings to read.
 - `crates/zx-core`: the Z80 decoder, `.tap` loading, screen layout, PNG and SHA-1.
-- `games/robin`: the game, so far only reading the player's tape (`robin::assets`).
+- `games/robin`: the game. So far it reads the player's tape (`robin::assets`) and draws the screen and prints text (`robin::Game`, `screen`, `print`).
+- `tools/robin-verify`: the differential checks, each rewritten routine against the original's own calls.
 
 The work ahead, in order, is on the project board: establish the facts about the tape, build the 128K reference machine, load and boot the original in it, trace it, read its assets from the tape, rewrite it subsystem by subsystem with a differential check for each, then the window, sound and input, and long runs comparing every frame.
 
-## How it will be checked
+## How it is checked
 
-Each rewritten routine will be run beside the original's, which runs in the reference interpreter, from the same starting states taken from the original's own play, and the screen and game state compared byte for byte. Long runs will compare every frame of random play the same way. Where the rewrite cannot match the original exactly, this README will say so and why.
+Each rewritten routine is run beside the original's, which runs in the reference interpreter (`tools/robin-verify`).
+- **Real calls.** The original boots from the tape and plays 20,000 frames of scripted and random input. Every call it makes to a rewritten routine is caught at the routine's entry. The original routine runs alone to its return, and the rewrite runs from the same state. All of memory is compared, with the routine's outputs and any port it writes. Calls whose registers and every byte read were seen before are counted and skipped.
+- **Each distinct call runs twice more.** Once with the bytes it only writes changed first, so a write the rewrite leaves out shows even where the old value happened to be right. Once with the screen and play-area data it read changed, for values play never shows.
+- **Registers.** After a return, every register and flag that isn't a declared output is scrambled. The original plays on, interrupts and input included, until the caller's stack is back where it was, and must go the same way and write the same memory as without the scrambling. That shows no caller reads them.
+- **The report** lists every instruction of a routine that no call reached: code play never ran, checked only by reading.
+
+Each part of this was shown to fail on a planted bug, and the verifier's own tests check it on a made-up program in CI.
+
+Long runs will compare every frame of random play too. Where the rewrite cannot match the original exactly, this README will say so and why.
 
 Those checks can only be as good as the interpreter, so it is checked against outside references rather than against this project's own work:
 

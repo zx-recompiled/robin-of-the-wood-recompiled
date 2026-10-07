@@ -1,0 +1,16 @@
+[package]
+name = "robin-verify"
+description = "Differential checks: the original's routines beside the rewrite, byte for byte"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+robin = { path = "../../games/robin" }
+zx-core.workspace = true
+zx-runtime.workspace = true
+zx-recomp.workspace = true
+
+[lints]
+workspace = true

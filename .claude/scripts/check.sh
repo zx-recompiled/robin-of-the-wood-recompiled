@@ -47,12 +47,17 @@ else
   echo "!!! cargo-about not installed; THIRD-PARTY.md was NOT checked."
 fi
 
-# The differential suites: the rewrite against the original, byte for byte.
-# They need the player's own tape and the 128K ROM, which CI has not got, so
-# this script is the only place they run. There are none yet: the first
-# arrives with the first rewritten subsystem (step 7 of the plan). Said
-# loudly rather than passed quietly, because a silent skip is how a gate rots.
-echo "!!! differential suites: none yet, so the fidelity gate did NOT run."
+# The differential suites: the rewrite against the original, byte for byte
+# (tools/robin-verify, #24). They need the player's own tape and the 128K ROM,
+# which CI has not got, so this script is the only place they run. Without
+# them the gate FAILS rather than passing quietly: a check that didn't run
+# must not look like one that passed (#6, Decision 9).
+echo "=== differential suites (robin-verify)"
+if cargo run --release -q -p robin-verify -- assets; then
+  :
+else
+  failed+=("differential suites (robin-verify): see above; they need the tape and 128.rom in assets/")
+fi
 
 # The machines' timing against test programs measured on real machines
 # (crates/zx-runtime/tests/hardware.rs, #12). They run in `cargo test` above,

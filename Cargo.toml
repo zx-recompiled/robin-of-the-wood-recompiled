@@ -5,6 +5,7 @@ members = [
     "crates/zx-runtime",
     "crates/zx-recomp",
     "games/robin",
+    "tools/robin-verify",
 ]
 
 [workspace.package]
