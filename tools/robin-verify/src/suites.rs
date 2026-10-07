@@ -1,7 +1,7 @@
 //! The routines of the original that have been rewritten, and how each
 //! rewrite takes the original's registers (`docs/re/robin.md`).
 
-use robin::{map, movement, print, screen, sprites};
+use robin::{characters, map, movement, print, screen, sprites};
 
 use crate::capture::{Reg, Regs, Routine};
 
@@ -492,7 +492,85 @@ pub fn all() -> Vec<Routine> {
                 r
             },
         },
+        floor("save the floor (0:DD49)", 0xDD49, (0xDD49, 0xDD54)),
+        floor("the floor to the right (0:DD55)", 0xDD55, (0xDD55, 0xDD59)),
+        floor("the floor to the left (0:DD5A)", 0xDD5A, (0xDD5A, 0xDD65)),
+        floor("forget the left floor (0:DD66)", 0xDD66, (0xDD66, 0xDD6A)),
+        floor("forget the right floor (0:DD6B)", 0xDD6B, (0xDD6B, 0xDD78)),
+        floor(
+            "the floors going up or down (0:DD79)",
+            0xDD79,
+            (0xDD79, 0xDD82),
+        ),
+        floor("the floors going left (0:DD83)", 0xDD83, (0xDD83, 0xDD8C)),
+        floor("the floors going right (0:DD8D)", 0xDD8D, (0xDD8D, 0xDD96)),
+        Routine {
+            name: "find a row's characters (0:C2F2)",
+            bank: Some(0),
+            entry: 0xC2F2,
+            code: (0xC2F2, 0xC305),
+            outputs: &[Reg::H, Reg::L],
+            exits: &[],
+            preserves: &[],
+            rewrite: |_, _, mut r, _| {
+                r.set_pair(Reg::H, Reg::L, characters::row_list(r.get(Reg::A)));
+                r
+            },
+        },
     ]
+}
+
+/// A floor routine: no registers in or out.
+fn floor(name: &'static str, entry: u16, code: (u16, u16)) -> Routine {
+    let rewrite: fn(
+        &mut robin::Game,
+        &robin::assets::Assets,
+        Regs,
+        &mut robin::inputs::Inputs,
+    ) -> Regs = match entry {
+        0xDD49 => |g, _, r, _| {
+            characters::save_floor(g);
+            r
+        },
+        0xDD55 => |g, _, r, _| {
+            characters::current_to_right(g);
+            r
+        },
+        0xDD5A => |g, _, r, _| {
+            characters::current_to_left(g);
+            r
+        },
+        0xDD66 => |g, _, r, _| {
+            characters::clear_left(g);
+            r
+        },
+        0xDD6B => |g, _, r, _| {
+            characters::clear_right(g);
+            r
+        },
+        0xDD79 => |g, _, r, _| {
+            characters::floors_vertically(g);
+            r
+        },
+        0xDD83 => |g, _, r, _| {
+            characters::floors_going_left(g);
+            r
+        },
+        _ => |g, _, r, _| {
+            characters::floors_going_right(g);
+            r
+        },
+    };
+    Routine {
+        name,
+        bank: Some(0),
+        entry,
+        code,
+        outputs: &[],
+        exits: &[],
+        preserves: &[],
+        rewrite,
+    }
 }
 
 /// A wall test: it takes Robin's position in HL, and answers in A and the

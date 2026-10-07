@@ -11,10 +11,6 @@ const MESSAGES: u16 = 0xD6AB;
 /// The list of recorded messages: mode, then position, three bytes each,
 /// `0xFF` where free.
 const RECORDED: u16 = 0xD457;
-/// Where a message printed with mode bit 7 saves row 12 of the attribute
-/// buffer, across the play area.
-const SAVED_ROW: u16 = 0xDDB7;
-const SAVED_FROM: u16 = 0xE982;
 
 /// Mode bit 5: straight to the screen, not into the play area.
 const TO_SCREEN: u8 = 0x20;
@@ -156,10 +152,7 @@ fn print(g: &mut Game, x: u8, y: u8, before: u16) {
         let attr = g.read(s);
         if attr == 0 {
             if !to_screen && mode & BIT7 != 0 {
-                for i in 0..28 {
-                    let v = g.read(SAVED_FROM + i);
-                    g.write(SAVED_ROW + i, v);
-                }
+                crate::characters::save_floor(g);
             }
             return;
         }
