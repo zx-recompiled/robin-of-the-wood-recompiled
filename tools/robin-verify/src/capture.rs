@@ -93,6 +93,12 @@ impl Regs {
         self.0[r as usize] = v;
     }
 
+    pub fn set_pair(&mut self, hi: Reg, lo: Reg, v: u16) {
+        let [h, l] = v.to_be_bytes();
+        self.set(hi, h);
+        self.set(lo, l);
+    }
+
     fn put(&self, z: &mut Zx) {
         let r = &self.0;
         (z.a, z.f, z.b, z.c, z.d, z.e, z.h, z.l) = (r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7]);

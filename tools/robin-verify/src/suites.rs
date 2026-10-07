@@ -3,7 +3,7 @@
 
 use robin::{map, movement, print, screen, sprites};
 
-use crate::capture::{Reg, Routine};
+use crate::capture::{Reg, Regs, Routine};
 
 /// The tables the start-up code builds, and must never be rewritten after.
 pub const TABLES: [(&str, u16, u16); 2] = [
@@ -419,7 +419,74 @@ pub fn all() -> Vec<Routine> {
                 r
             },
         },
+        Routine {
+            name: "walk Robin a step (0:C852)",
+            bank: Some(0),
+            entry: 0xC852,
+            code: (0xC852, 0xC8DE),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, c| {
+                movement::walk(g, c);
+                r
+            },
+        },
+        wall("a wall to the right (0:DC6C)", 0xDC6C, (0xDC6C, 0xDC7E)),
+        wall("a wall to the left (0:DC5B)", 0xDC5B, (0xDC5B, 0xDC6B)),
+        wall("a wall above (0:DC7F)", 0xDC7F, (0xDC7F, 0xDC8A)),
+        wall("a wall below (0:DC8B)", 0xDC8B, (0xDC8B, 0xDC9A)),
+        Routine {
+            name: "find Robin's cell (0:DCC2)",
+            bank: Some(0),
+            entry: 0xDCC2,
+            code: (0xDCC2, 0xDCDB),
+            outputs: &[Reg::H, Reg::L],
+            exits: &[],
+            preserves: &[],
+            rewrite: |_, _, mut r, _| {
+                r.set_pair(Reg::H, Reg::L, movement::cell(r.get(Reg::L), r.get(Reg::H)));
+                r
+            },
+        },
     ]
+}
+
+/// A wall test: it takes Robin's position in HL, and answers in A and the
+/// flags, as `OR (HL)` leaves them on a wall and `XOR A` does otherwise.
+fn wall(name: &'static str, entry: u16, code: (u16, u16)) -> Routine {
+    let rewrite: fn(
+        &mut robin::Game,
+        &robin::assets::Assets,
+        Regs,
+        &robin::controls::Controls,
+    ) -> Regs = match entry {
+        0xDC6C => |g, _, r, _| answer(r, movement::wall_right(g, r.get(Reg::L), r.get(Reg::H))),
+        0xDC5B => |g, _, r, _| answer(r, movement::wall_left(g, r.get(Reg::L), r.get(Reg::H))),
+        0xDC7F => |g, _, r, _| answer(r, movement::wall_up(g, r.get(Reg::L), r.get(Reg::H))),
+        _ => |g, _, r, _| answer(r, movement::wall_down(g, r.get(Reg::L), r.get(Reg::H))),
+    };
+    Routine {
+        name,
+        bank: Some(0),
+        entry,
+        code,
+        outputs: &[Reg::A, Reg::F],
+        exits: &[],
+        preserves: &[Reg::D, Reg::E, Reg::H, Reg::L],
+        rewrite,
+    }
+}
+
+/// A and the flags as the original's wall tests leave them: the wall's
+/// attribute after `OR (HL)`, or 0 after `XOR A`.
+fn answer(mut r: Regs, wall: Option<u8>) -> Regs {
+    let a = wall.unwrap_or(0);
+    let parity = if a.count_ones() % 2 == 0 { 0x04 } else { 0 };
+    let zero = if a == 0 { 0x40 } else { 0 };
+    r.set(Reg::A, a);
+    r.set(Reg::F, (a & 0xA8) | zero | parity);
+    r
 }
 
 /// The text printer's code, shared by its three ways in.
