@@ -116,3 +116,40 @@ fn the_listing_has_a_section_per_bank_and_names_places_by_bank() {
     assert!(at("bank 2, at 8000") < at("bank 0, at c000"));
     assert!(at("bank 0, at c000") < at("bank 6, at c000"));
 }
+
+/// An instruction at `0xBFFF`, the last byte of bank 2, whose operand is the
+/// first two bytes of the bank at `0xC000` (#29). Its bytes in the listing
+/// are those its decode reads, not the start of its own page's.
+#[test]
+fn an_instruction_across_into_the_next_slot_lists_the_bytes_it_decodes() {
+    let mut ram = vec![0u8; RAM_128];
+    let mut put = |bank: usize, at: u16, bytes: &[u8]| {
+        let off = bank * 0x4000 + usize::from(at) % 0x4000;
+        ram[off..off + bytes.len()].copy_from_slice(bytes);
+    };
+    // Bank 2: `JP 0xBFFF`, and at 0xBFFF the `LD DE,` of `LD DE,0x0020`.
+    put(2, 0x8000, &[0xC3, 0xFF, 0xBF]);
+    put(2, 0xBFFF, &[0x11]);
+    // Bank 0: the operand, then `RET`.
+    put(0, 0xC000, &[0x20, 0x00, 0xC9]);
+    let tape = zx_core::tape::Tape {
+        ram: vec![0; 0xC000],
+        loading_screen: None,
+    };
+    let state = MachineState {
+        model: Model::Spectrum128,
+        port_7ffd: 0x10,
+        ram,
+        ..MachineState::from_tape(&tape, 0x8000, 0x7F00)
+    };
+    let z = Zx::new(&state, None);
+    let t = Trace::new(z.memory.pages());
+    let a = analyze(&config(), &z, &t, &[]);
+    let text = listing(&a, &t);
+    let line = text
+        .lines()
+        .find(|l| l.starts_with("bfff "))
+        .unwrap_or_else(|| panic!("no line for bfff in\n{text}"));
+    assert!(line.contains("ld de,$0020"), "{line}");
+    assert!(line.contains("11 20 00"), "the bytes it decodes: {line}");
+}
