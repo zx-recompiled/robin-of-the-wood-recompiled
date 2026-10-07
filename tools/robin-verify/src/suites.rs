@@ -309,6 +309,44 @@ pub fn all() -> Vec<Routine> {
                 r
             },
         },
+        Routine {
+            name: "draw a frame (0:C5CE, with 0:C47D and 0:C645)",
+            bank: Some(0),
+            entry: 0xC5CE,
+            code: (0xC5CE, 0xC687),
+            outputs: &[],
+            preserves: &[Reg::H, Reg::L],
+            rewrite: |g, a, r| {
+                sprites::draw_frame(g, a.sprites(), r.get(Reg::A), r.get(Reg::C), r.get(Reg::B));
+                r
+            },
+        },
+        Routine {
+            name: "mark a frame's cells (0:C688)",
+            bank: Some(0),
+            entry: 0xC688,
+            code: (0xC688, 0xC6FD),
+            outputs: &[],
+            preserves: &[
+                Reg::A,
+                Reg::F,
+                Reg::B,
+                Reg::C,
+                Reg::D,
+                Reg::E,
+                Reg::H,
+                Reg::L,
+            ],
+            rewrite: |g, _, r| {
+                sprites::mark_cells(
+                    g,
+                    u16::from_be_bytes([r.get(Reg::H), r.get(Reg::L)]),
+                    r.get(Reg::C),
+                    r.get(Reg::B),
+                );
+                r
+            },
+        },
     ]
 }
 
