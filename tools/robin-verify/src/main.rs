@@ -12,6 +12,7 @@
 mod armed;
 mod capture;
 mod checker;
+mod collector;
 mod methods;
 mod suites;
 mod tour;
@@ -184,6 +185,10 @@ fn run() -> Result<bool, String> {
     println!(
         "robin-verify: played a game with Robin armed (a supplement): his actions ran in states {:?}",
         armed.states
+    );
+    let picked = collector::run(&rom, &tape, &assets, &mut v)?;
+    println!(
+        "robin-verify: played a game with things to pick up where Robin starts (a supplement): he took {picked}"
     );
     let Verifier {
         routines,
