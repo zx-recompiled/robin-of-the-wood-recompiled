@@ -166,21 +166,9 @@ fn play_on(
     }
 }
 
-/// Walking every move takes about a minute and a half more (#34, Decision 5;
-/// ten minutes before #45 checked calls on every core), so the gate
-/// walks one move in this many and enters the rest directly; `--full` walks
-/// them all.
-pub const WALK_ONE_IN: usize = 4;
-
-/// Tours every location from `z`, walking one move in `walk_one_in`.
-pub fn run(
-    mut z: Zx,
-    frame: u32,
-    quiet: &Script,
-    assets: &Assets,
-    v: &mut Verifier,
-    walk_one_in: usize,
-) -> Toured {
+/// Tours every location from `z`, walking Robin off the screen at every
+/// move he can make (#46).
+pub fn run(mut z: Zx, frame: u32, quiet: &Script, assets: &Assets, v: &mut Verifier) -> Toured {
     let mut script = quiet.clone();
     let start = (z.frame, frame);
     let mut toured = Toured {
@@ -203,7 +191,7 @@ pub fn run(
             .flat_map(|_| (0..map::COLUMNS - 1).map(|_| 1u8).chain([4]))
             .chain((0..map::ROWS).map(|_| 8)),
     );
-    for (n, direction) in moves.enumerate() {
+    for direction in moves {
         let from = location(&z);
         let to = map::step(from, direction);
         if to == THROUGH_ITS_DRAWING {
@@ -220,8 +208,7 @@ pub fn run(
             // stops him, back to before the walk, and in at the next
             // location directly, as the original's step and entry do it.
             let before = (z.clone(), script.clone());
-            let walking = tape_keys && n % walk_one_in == 0;
-            if walking && walk(&mut z, v, &mut script, start, assets, direction, to) {
+            if tape_keys && walk(&mut z, v, &mut script, start, assets, direction, to) {
                 toured.walked += 1;
                 let (mut copy, mut keys) = (z.clone(), script.clone());
                 play_on(&mut copy, v, &mut keys, start, assets, FRAMES_AT_EACH);
@@ -229,7 +216,7 @@ pub fn run(
                 continue;
             }
             (z, script) = before;
-            if walking {
+            if tape_keys {
                 toured.fell_back += 1;
             }
             z.e = direction;
