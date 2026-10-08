@@ -1,7 +1,7 @@
 //! The routines of the original that have been rewritten, and how each
 //! rewrite takes the original's registers (`docs/re/robin.md`).
 
-use robin::{characters, map, movement, print, screen, sprites};
+use robin::{actions, characters, map, movement, print, screen, sound, sprites};
 
 use crate::capture::{Reg, Regs, Routine};
 
@@ -554,6 +554,108 @@ pub fn all() -> Vec<Routine> {
             preserves: &[],
             rewrite: |g, a, r, inputs| {
                 characters::move_one(g, a.sprites(), &mut inputs.random);
+                r
+            },
+        },
+        Routine {
+            name: "Robin's energy after a knock-down (0:D7F7)",
+            bank: Some(0),
+            entry: 0xD7F7,
+            code: (0xD7F7, 0xD820),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, _| {
+                actions::energy(g);
+                r
+            },
+        },
+        Routine {
+            name: "the lower panel's colours (0xBE0F)",
+            bank: None,
+            entry: 0xBE0F,
+            code: (0xBE0F, 0xBE2B),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, _| {
+                actions::panel_colours(g);
+                r
+            },
+        },
+        Routine {
+            name: "a twang (0xBE2C)",
+            bank: None,
+            entry: 0xBE2C,
+            code: (0xBE2C, 0xBE3E),
+            outputs: &[],
+            exits: &[],
+            // Its caller keeps the arrow's slot in HL across it.
+            preserves: &[
+                Reg::A,
+                Reg::F,
+                Reg::B,
+                Reg::C,
+                Reg::D,
+                Reg::E,
+                Reg::H,
+                Reg::L,
+                Reg::Ixh,
+                Reg::Ixl,
+                Reg::Iyh,
+                Reg::Iyl,
+            ],
+            rewrite: |_, _, r, io| {
+                sound::twang(io, r.get(Reg::B));
+                r
+            },
+        },
+        Routine {
+            name: "fire an arrow (0xBB43)",
+            bank: None,
+            entry: 0xBB43,
+            code: (0xBB43, 0xBB83),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                actions::launch_arrow(g, io);
+                r
+            },
+        },
+        Routine {
+            name: "play a sample, by its delay, length, amplitudes and bytes (4:C090)",
+            bank: Some(4),
+            entry: 0xC090,
+            code: (0xC090, 0xC0DA),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                let pair = |hi, lo| u16::from_be_bytes([r.get(hi), r.get(lo)]);
+                sound::play(
+                    g,
+                    io,
+                    r.get(Reg::A),
+                    pair(Reg::D, Reg::E),
+                    pair(Reg::H, Reg::L),
+                    pair(Reg::Ixh, Reg::Ixl),
+                );
+                r
+            },
+        },
+        Routine {
+            name: "pick a sample by R, and play it (4:C012)",
+            bank: Some(4),
+            entry: 0xC012,
+            // Its jump to the picker, then the picker; the next entry and the
+            // table between are not code it runs.
+            code: (0xC020, 0xC02F),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                sound::sample(g, io);
                 r
             },
         },

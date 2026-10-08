@@ -603,11 +603,11 @@ The attack's way is the direction held, or the way he faces. With a
 direction held, its sequence starts a frame earlier. Its counter, `0xCB74`,
 starts at 16, and which attack it is depends on what he carries:
 
-1. **The bow**, if a flag at `0xD47B` is set and arrows are left
-   (`0xD47D`), and no character on the screen is within `0x32` of him. Each
-   shot uses an arrow; when the last goes, a message is printed (`0xB423`).
-   The same flag makes the characters always fire (*The four on each row*),
-   so it probably means he has the bow. **guess**
+1. **The bow**, if he has it (`0xD47B`) and arrows are left (`0xD47D`),
+   and no character on the screen is within `0x32` of him. The game sets
+   the flag when it gives him the bow, with ten arrows. While it's set, the
+   characters always fire (*The four on each row*). Each shot uses an
+   arrow; when the last goes, a message is printed (`0xB423`).
 2. **The sword**, if a flag at `0xD47A` is set: states 6 and 7, or 12 and
    13 if he's holding down (which can only be so when he attacks again
    without letting go of fire).
@@ -755,14 +755,16 @@ every call play and the tour make (#38), unless marked.
     three bytes after its call. It pages that bank in at `0xC000`, keeping
     the one it replaces at `0x5BC8` (and the current one at `0x5BC7`), and
     pages it back afterwards. It leaves interrupts off.
-  - **The player** turns interrupts off and saves the AY's 14 registers by
-    reading them back, then sets the AY up for playing. It plays a sample of
-    so many bytes, a bit at a time, from its highest bit. Each bit is
+  - **The player** turns interrupts off and saves the AY's registers 14
+    down to 1 by reading them back, then sets them all to one value (the
+    byte at `0xC1A2`; the table's pointer never moves on), leaving register
+    1 selected. It plays a sample of its length plus one bytes, a bit at a
+    time, from its highest bit, rotating each byte in place. Each bit is
     masked with an amplitude, which changes every 64 bytes from a second
     table, and the result is written twice: to port `0xFE`, as EAR and MIC
-    (bits 4 and 3), and to `0xBFFD`, as the AY's volume. A delay between
-    bits sets the rate. Then it restores the registers and turns interrupts
-    back on.
+    (bits 4 and 3), and its low four bits to `0xBFFD`, the register left
+    selected (1, a tone's coarse period). A delay between bits sets the
+    rate. Then it restores the registers and turns interrupts back on.
   - **When Robin is knocked down**, `4:C012` picks one of four samples by R
     (#37), of 1,000 to 2,100 bytes: tens of thousands of writes,
     with the game standing still while they play.
