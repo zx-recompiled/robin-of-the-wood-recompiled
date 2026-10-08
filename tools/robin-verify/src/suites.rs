@@ -558,6 +558,32 @@ pub fn all() -> Vec<Routine> {
             },
         },
         Routine {
+            name: "Robin's actions (0:C8DF)",
+            bank: Some(0),
+            entry: 0xC8DF,
+            code: (0xC8DF, 0xCB73),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                actions::act(g, io);
+                r
+            },
+        },
+        Routine {
+            name: "Robin's update (0:C59A)",
+            bank: Some(0),
+            entry: 0xC59A,
+            code: (0xC59A, 0xC5CD),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, a, r, io| {
+                actions::update(g, a.sprites(), io);
+                r
+            },
+        },
+        Routine {
             name: "Robin's energy after a knock-down (0:D7F7)",
             bank: Some(0),
             entry: 0xD7F7,
