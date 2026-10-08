@@ -813,7 +813,13 @@ instruction of the meeting. **confirmed**, unless marked.
 ## Fighting
 
 Found by reading the main loop's `0xBB84`, `0xBC0B`, `0xBC6C`, `0xBCAA` and
-`0xBD19`, and the code they reach (#40). **read**, unless marked.
+`0xBD19`, and the code they reach (#40).
+
+**Rewritten (`games/robin/src/fighting.rs`) and confirmed** against the
+original by `tools/robin-verify`. Play and the tour reach shots flying and
+hitting Robin, his fists and sword striking, and the second group touching
+him. The armed game (*Robin's actions*) lands his arrows on a character.
+**confirmed**, unless marked.
 
 ### The objects in flight
 

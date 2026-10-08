@@ -22,8 +22,8 @@ built from the tape alone, with no ROM. Rewritten and checked by the
 differential suites (`tools/robin-verify`): the screen and printing (#24),
 the map, drawn at all 320 locations by a tour (#28), the sprites (#32),
 Robin's movement and controls (#34), the four characters on each row
-(#38), Robin's actions and sounds (#36), and the wanderer (#39). The plan,
-in order, is the board's Backlog.
+(#38), Robin's actions and sounds (#36), the wanderer (#39), and the
+fighting (#40). The plan, in order, is the board's Backlog.
 
 ## Commands
 
