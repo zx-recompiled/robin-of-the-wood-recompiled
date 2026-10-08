@@ -11,6 +11,7 @@ pub mod actions;
 pub mod assets;
 pub mod characters;
 pub mod controls;
+pub mod fighting;
 pub mod game;
 pub mod io;
 pub mod layout;

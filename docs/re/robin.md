@@ -637,8 +637,8 @@ starts at 16, and which attack it is depends on what he carries:
 
 ### Knocked down
 
-- **When `0xCB75` is `0x6E`** (set when something hits him, **guess**:
-  nothing read so far sets it, #40):
+- **When `0xCB75` is `0x6E`** (set when a hit leaves him at his lowest
+  health, *Fighting*):
   - his attack counter is cleared;
   - a sound plays (*Sound*);
   - his energy, `0xD481`, drops by 2;
@@ -809,6 +809,79 @@ instruction of the meeting. **confirmed**, unless marked.
   - the lower panel's colours are reset (`0xBE0F`, *Robin's actions*);
   - his energy goes up (`0:D7F7`, *Robin's actions*);
   - it's marked met, so it happens once a game.
+
+## Fighting
+
+Found by reading the main loop's `0xBB84`, `0xBC0B`, `0xBC6C`, `0xBCAA` and
+`0xBD19`, and the code they reach (#40).
+
+**Rewritten (`games/robin/src/fighting.rs`) and confirmed** against the
+original by `tools/robin-verify`. Play and the tour reach shots flying and
+hitting Robin, his fists and sword striking, and the second group touching
+him. The armed game (*Robin's actions*) lands his arrows on a character.
+**confirmed**, unless marked.
+
+### The objects in flight
+
+- **Four slots** at `0xBE3F`–`0xBE46`, two bytes each:
+  - the column, with the way it flies in bit 7 (set for left), or 0 while
+    the slot is free;
+  - the row, with two flags: bit 7 set when it's just been fired, bit 6
+    when it's hit something.
+
+  Slot 0 is Robin's arrow (*Robin's actions*); slots 1 to 3 are the four
+  characters' shots (*The four on each row*).
+- **Flight** (`0xBB84`, from the main loop) takes each slot in turn:
+  1. its two flags are read and cleared;
+  2. unless it's just been fired, it's erased;
+  3. it steps one column its way;
+  4. if it's hit something, the slot is freed;
+  5. otherwise it's drawn, and freed if it's now at the play area's edge
+     (column below 2, or from `0x1E`).
+
+  Which of these it does is decided by rewriting the offsets of two of its
+  own jumps (`0xBBB4`, `0xBBC5`) from the flags.
+- **Drawing one** (`0xBBEC`) XORs a byte of 8 pixels into the top pixel row
+  of its cell in the back buffer (`0xEB00` + row × 256 + column), and marks
+  the cell changed with `0x46` (*The screen*). Drawing it again erases it.
+
+### Hits
+
+- **A shot hitting Robin** (`0xBC6C`, while he isn't down): a shot whose
+  column, times 4 plus 8, is within 8 to the right of his position, and
+  whose row, times 8, is within `0x24` below his, is marked hit. He's hit
+  (below), and a sample plays (`4:C015`, *Sound*).
+- **Robin's arrow hitting a character** (`0xBC0B`): if it's in the rows the
+  characters walk (`0x0A`–`0x0D`), and one of five records from `0xAAB8`
+  is drawn, not stopped, and within 8 of it the same way, the arrow is
+  marked hit and that character struck (below). Then a tune starts for the
+  music driver (`6:C048`), and a zap plays there and then (`0xBC4C`): for
+  each count from `0x14` to `0x27`, that many writes to port `0xFE`, each
+  of R's bits 3 and 4, with a delay that shortens between them. That's 590
+  writes, and 590 reads of R.
+- **His sword and fists** (`0xBD19`): on the frames of his attack that
+  strike (frame `0x1A`, `0x1C` or `0x1F` of his sequence), a point ahead of
+  him that overlaps one of the five records (`0xBDB9`, *The wanderer*)
+  strikes that character, with the same tune and zap.
+- **The second group touching him** (`0xBCAA`, at the locations from 256
+  up, while he isn't down): unless a cooldown (`0xBE48`) is counting down,
+  one of their four records (`0xDBF1`) overlapping him hits him, plays a
+  sample (`4:C012`), and starts the cooldown at `0x1F`.
+
+### Robin hit
+
+`0xBCFB`, unless he's already down:
+- **His health is `0xBE47`**, which is also the lower panel's colour (`0xBE0F`,
+  *Robin's actions*): the panel shows how he is.
+- A hit takes 1 off it. When it's down to 2, he's knocked down instead
+  (`0xCB75` = `0x6E`, *Robin's actions*), and the wanderer can be met again
+  (*The wanderer*).
+
+### A character struck
+
+`0xBDF2`: the record struck gets bit 5 of its flags set. If it's one of the
+four row characters, bit 5 of its state is set too, so it stops (*The four
+on each row*).
 
 ## Sound
 

@@ -41,8 +41,18 @@ pub fn twang(io: &mut Io, mut b: u8) {
 /// AY (`4:C012`), with bank 4 paged in.
 pub fn sample(g: &mut Game, io: &mut Io) {
     let pick = usize::from(io.random.r() & 6) / 2;
-    let (delay, length, amplitudes, sample) = SAMPLES[pick];
+    play_sample(g, io, pick);
+}
+
+/// Plays the `n`th of the four samples (`4:C015` is the fourth's entry).
+pub fn play_sample(g: &mut Game, io: &mut Io, n: usize) {
+    let (delay, length, amplitudes, sample) = SAMPLES[n];
     play(g, io, delay, length, amplitudes, sample);
+}
+
+/// Plays the fourth sample (`4:C015`), as a shot hitting Robin does.
+pub fn shot_sample(g: &mut Game, io: &mut Io) {
+    play_sample(g, io, 3);
 }
 
 /// The AY's registers the player saves and sets, from 14 down to 1.
@@ -122,4 +132,49 @@ pub fn meeting(g: &mut Game, io: &mut Io) {
     g.write_in(bank, PLAYING, 0);
     ay(io, 7, 0x28);
     ay(io, 6, 0x1F);
+}
+
+/// Where the music driver keeps the tune it's playing: its start, the
+/// next notes' two pointers, and its settings.
+const TUNE_START: u16 = 0xCBD9;
+const TUNE_SPEED: u16 = 0xC0A1;
+const TUNE_COUNT: u16 = 0xC0A3;
+const TUNE_NOTES: u16 = 0xC9A2;
+const TUNE_OTHER: u16 = 0xC9A0;
+/// The values the AY's registers 0 to 13 are reset to.
+const AY_RESET: u16 = 0xC230;
+
+/// Starts the tune a hit plays, for the interrupt's music player
+/// (`6:C048`): its pointers and settings, then the AY's registers reset and
+/// the envelope period set.
+pub fn hit_tune(g: &mut Game, io: &mut Io) {
+    let bank = usize::from(MUSIC_BANK);
+    let word = |g: &mut Game, at: u16, v: u16| {
+        let [lo, hi] = v.to_le_bytes();
+        g.write_in(bank, at, lo);
+        g.write_in(bank, at + 1, hi);
+    };
+    word(g, TUNE_START, 0xC04B);
+    g.write_in(bank, TUNE_SPEED, 0x08);
+    g.write_in(bank, EFFECT, 0);
+    g.write_in(bank, PLAYING, 0);
+    g.write_in(bank, TUNE_COUNT, 1);
+    word(g, TUNE_NOTES, 0xC98C);
+    word(g, TUNE_OTHER, 0xC977);
+    for r in 0..14u8 {
+        let v = g.read_in(bank, AY_RESET + u16::from(r));
+        ay(io, r, v);
+    }
+    ay(io, 12, 0x20);
+}
+
+/// The zap a hit plays there and then (`0xBC4C`): for each count from
+/// `0x14` to `0x27`, that many writes to the beeper of R's bits 3 and 4.
+pub fn zap(io: &mut Io) {
+    for count in 0x14..0x28 {
+        for _ in 0..count {
+            let a = io.random.r() & 0x18;
+            io.out(u16::from(a) << 8 | 0xFE, a);
+        }
+    }
 }

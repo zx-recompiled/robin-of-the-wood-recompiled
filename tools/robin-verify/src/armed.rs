@@ -1,8 +1,10 @@
 //! A game with Robin armed from its start (#36, Decision 1): the sword, the
 //! bow and ten arrows, set as the game's own code sets them when he's given
 //! them, and energy 9. Play never gets that far, so this is how his
-//! attacks with them, and being knocked down and getting up again, are
-//! reached and checked: with no energy, a knock-down ends the game. It
+//! attacks with them, his arrows landing on a character (#40), and being
+//! knocked down and getting up again, are reached and checked: with no
+//! energy, a knock-down ends the game. Its seed is the first found that
+//! reaches all of those. It
 //! is a supplement: states the original can be in, reached sooner than play
 //! reaches them. The original boots again from the tape and is played with
 //! random presses of the tape's own keys; every call to a rewritten routine
@@ -55,7 +57,7 @@ keys = ["1", "a", "n"]
 start = 450
 every = 15
 keys = ["1", "q", "a", "n", "m"]
-seed = 30
+seed = 72
 "#;
 
 /// What he's given, and the value each takes (`docs/re/robin.md`, *Robin's
