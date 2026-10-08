@@ -308,7 +308,7 @@ fn lying(g: &mut Game, state: u8, sequence: u16) -> Next {
 
 /// A call into another bank through the trampoline at `0x5B8A`: the bank
 /// paged in for `f`, and the one before paged back after.
-fn banked_call(g: &mut Game, io: &mut Io, bank: u8, f: fn(&mut Game, &mut Io)) {
+pub(crate) fn banked_call(g: &mut Game, io: &mut Io, bank: u8, f: fn(&mut Game, &mut Io)) {
     g.banked.saved = g.banked.current;
     g.banked.current = bank;
     io.out(0x7FFD, bank | 0x10);

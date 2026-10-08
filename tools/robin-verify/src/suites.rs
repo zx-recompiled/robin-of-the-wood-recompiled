@@ -584,6 +584,46 @@ pub fn all() -> Vec<Routine> {
             },
         },
         Routine {
+            name: "Robin meets the wanderer (0xBD87)",
+            bank: None,
+            entry: 0xBD87,
+            code: (0xBD87, 0xBDB8),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                wanderer::meet(g, io);
+                r
+            },
+        },
+        Routine {
+            name: "the meeting's sound and flash (0xBDCD)",
+            bank: None,
+            entry: 0xBDCD,
+            // After the trampoline's call and the three bytes it takes.
+            code: (0xBDD3, 0xBDF1),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                wanderer::flash(g, io);
+                r
+            },
+        },
+        Routine {
+            name: "start the meeting's sound (6:C00C)",
+            bank: Some(6),
+            entry: 0xC00C,
+            code: (0xC13D, 0xC159),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                sound::meeting(g, io);
+                r
+            },
+        },
+        Routine {
             name: "do two things overlap (0xBDB9)",
             bank: None,
             entry: 0xBDB9,

@@ -1,7 +1,10 @@
 //! The wanderer: a friendly character who walks the forest's rows from
 //! location to location (`docs/re/robin.md`, *The wanderer*).
 
+use crate::actions;
 use crate::game::Game;
+use crate::io::Io;
+use crate::sound;
 use crate::sprites::{self, Sprites};
 
 /// Its sprite record, and the frame table it's drawn from.
@@ -93,4 +96,41 @@ pub fn walk(g: &mut Game, sprites: &Sprites) {
 #[must_use]
 pub fn overlap(a: (u8, u8), b: (u8, u8), down: u8, across: u8) -> bool {
     a.1.abs_diff(b.1) < down && a.0.abs_diff(b.0) < across
+}
+
+/// Its flags: set once Robin has met it.
+const MET: u8 = 0x40;
+/// The play area's attributes, which flash when they meet.
+const PLAY_ATTRIBUTES: u16 = 0x5800;
+const PLAY_CELLS: u16 = 0x240;
+
+/// Robin meeting it, once a game: if it's drawn and he overlaps it, a sound
+/// starts, the play area flashes, the lower panel's colours are reset, and
+/// his energy goes up (`0xBD87`).
+pub fn meet(g: &mut Game, io: &mut Io) {
+    let w = &g.wanderer;
+    if w.record[4] & 0x01 == 0 || w.flags & MET != 0 {
+        return;
+    }
+    let at = (w.record[9], w.record[10]);
+    if !overlap((g.robin.x, g.robin.y), at, 0x20, 0x0C) {
+        return;
+    }
+    flash(g, io);
+    g.write(0xBE47, 0x0F);
+    actions::panel_colours(g);
+    actions::energy(g);
+    g.wanderer.flags |= MET;
+}
+
+/// The meeting's sound, then the play area's ink moved on by one, 16 times
+/// over (`0xBDCD`).
+pub fn flash(g: &mut Game, io: &mut Io) {
+    actions::banked_call(g, io, sound::MUSIC_BANK, sound::meeting);
+    for _ in 0..16 {
+        for at in PLAY_ATTRIBUTES..PLAY_ATTRIBUTES + PLAY_CELLS {
+            let a = g.read(at);
+            g.write(at, a & 0xF8 | (a.wrapping_add(1) & 7));
+        }
+    }
 }
