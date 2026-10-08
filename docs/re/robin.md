@@ -668,7 +668,7 @@ In 20,000 frames of play, three main-loop routines drew characters:
 
 - **four characters who walk the forest's rows**, run by `0xA8D6` (this
   section);
-- **the wanderer**, the character at `0xBB1B` (`0xBA83`, *The wanderer*);
+- **the wanderer**, the character at `0xBB1B` (`0xBA83`, *The wanderer*), confirmed;
 - **Robin** (`0:C59A`, *Robin's movement*).
 
 Others are drawn in situations play never reached (#42). Randomness: the
@@ -760,7 +760,11 @@ every call play and the tour make (#38), unless marked.
 ### The wanderer
 
 Found by reading `0xBA83`, `0xBD87` and the code they reach (#39).
-**read**, unless marked.
+
+**Rewritten (`games/robin/src/wanderer.rs`) and confirmed** against the
+original by `tools/robin-verify`. Play and the control-method games walk it
+and erase it; the tour draws it, and once meets it, which reaches every
+instruction of the meeting. **confirmed**, unless marked.
 
 - **A friendly character** that walks the forest's rows from location to
   location. Meeting it restores some of Robin's energy.
