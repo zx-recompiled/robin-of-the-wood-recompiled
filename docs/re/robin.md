@@ -873,9 +873,9 @@ Found by reading the main loop's `0xBB84`, `0xBC0B`, `0xBC6C`, `0xBCAA` and
 
 ### A character struck
 
-`0xBDF2`: of the five records, one of the four row characters gets bit 5 of
-its state set, so it stops (*The four on each row*). The fifth gets bit 5 of
-its record's flags set instead.
+`0xBDF2`: the record struck gets bit 5 of its flags set. If it's one of the
+four row characters, bit 5 of its state is set too, so it stops (*The four
+on each row*).
 
 ## Sound
 

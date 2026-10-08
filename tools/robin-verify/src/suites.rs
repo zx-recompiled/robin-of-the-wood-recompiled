@@ -1,7 +1,9 @@
 //! The routines of the original that have been rewritten, and how each
 //! rewrite takes the original's registers (`docs/re/robin.md`).
 
-use robin::{actions, characters, map, movement, print, screen, sound, sprites, wanderer};
+use robin::{
+    actions, characters, fighting, map, movement, print, screen, sound, sprites, wanderer,
+};
 
 use crate::capture::{Reg, Regs, Routine};
 
@@ -554,6 +556,75 @@ pub fn all() -> Vec<Routine> {
             preserves: &[],
             rewrite: |g, a, r, inputs| {
                 characters::move_one(g, a.sprites(), &mut inputs.random);
+                r
+            },
+        },
+        Routine {
+            name: "the objects in flight (0xBB84)",
+            bank: None,
+            entry: 0xBB84,
+            code: (0xBB84, 0xBBEB),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, _| {
+                fighting::flight(g);
+                r
+            },
+        },
+        Routine {
+            name: "draw an object in flight (0xBBEC)",
+            bank: None,
+            entry: 0xBBEC,
+            code: (0xBBEC, 0xBC0A),
+            outputs: &[],
+            exits: &[],
+            preserves: &[
+                Reg::A,
+                Reg::F,
+                Reg::B,
+                Reg::C,
+                Reg::D,
+                Reg::E,
+                Reg::H,
+                Reg::L,
+                Reg::Ixh,
+                Reg::Ixl,
+                Reg::Iyh,
+                Reg::Iyl,
+            ],
+            rewrite: |g, _, r, _| {
+                // Where in the back buffer in HL; the row and column, for
+                // the changed-cell map, in B and C.
+                let at = u16::from_be_bytes([r.get(Reg::H), r.get(Reg::L)]);
+                fighting::draw(g, at, r.get(Reg::B), r.get(Reg::C));
+                r
+            },
+        },
+        Routine {
+            name: "Robin hit (0xBCFB)",
+            bank: None,
+            entry: 0xBCFB,
+            code: (0xBCFB, 0xBD18),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, _| {
+                fighting::robin_hit(g);
+                r
+            },
+        },
+        Routine {
+            name: "a character struck (0xBDF2)",
+            bank: None,
+            entry: 0xBDF2,
+            code: (0xBDF2, 0xBE0E),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, _| {
+                let record = u16::from_be_bytes([r.get(Reg::Ixh), r.get(Reg::Ixl)]);
+                fighting::struck(g, r.get(Reg::A), record);
                 r
             },
         },
