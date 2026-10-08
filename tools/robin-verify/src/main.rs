@@ -11,18 +11,21 @@
 //! memory, which is never written to a file.
 
 mod capture;
+mod checker;
 mod methods;
 mod suites;
 mod tour;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::sync::Arc;
 
 use robin::Game;
-use robin::assets::BANK;
+use robin::assets::{Assets, BANK};
 use zx_runtime::{Misses, Zx, bus, interp, loader::boot_128k};
 
-use capture::{Play, Tally};
+use capture::Play;
+use checker::{Checker, Job};
 
 fn main() -> ExitCode {
     match run() {
@@ -37,23 +40,53 @@ fn main() -> ExitCode {
 
 /// The suites, and what they have seen.
 pub struct Verifier {
-    pub routines: Vec<capture::Routine>,
-    pub tallies: Vec<Tally>,
+    pub routines: Arc<[capture::Routine]>,
     pub table_writes: Vec<String>,
+    /// Checks the calls caught, on every core, while play goes on (#45).
+    checker: Checker,
+    /// Which routines start at each address, so an instruction is looked up
+    /// once, not against every routine.
+    entries: Vec<Vec<usize>>,
+    /// The code allowed to write the start-up tables.
+    builders: Vec<(u16, u16)>,
 }
 
 impl Verifier {
+    fn new(routines: Vec<capture::Routine>, assets: &Arc<Assets>) -> Verifier {
+        let routines: Arc<[capture::Routine]> = routines.into();
+        let mut entries = vec![Vec::new(); 0x10000];
+        for (n, r) in routines.iter().enumerate() {
+            entries[usize::from(r.entry)].push(n);
+        }
+        Verifier {
+            builders: suites::table_builders(&routines),
+            checker: Checker::new(Arc::clone(&routines), assets),
+            routines,
+            table_writes: Vec::new(),
+            entries,
+        }
+    }
+
     /// Looks at the instruction `z` is about to run: a call to a rewritten
     /// routine is a case, and a write to the start-up tables after their
     /// builders is a failure.
     pub fn observe(&mut self, z: &Zx, play: &Play) {
-        for (r, t) in self.routines.iter().zip(self.tallies.iter_mut()) {
-            if r.is_entered(z) {
-                r.capture(z, play, t);
+        for &n in &self.entries[usize::from(z.pc)] {
+            if self.routines[n].is_entered(z) {
+                self.checker.take(Job {
+                    routine: n,
+                    entry: z.clone(),
+                    script: play.script.clone(),
+                    frame: play.frame,
+                });
             }
         }
         let pc = z.pc;
-        if !suites::may_write_tables(&self.routines, pc) {
+        if !self
+            .builders
+            .iter()
+            .any(|&(lo, hi)| (lo..=hi).contains(&pc))
+        {
             let d = interp::decode_at(z, pc);
             for c in bus::cycles(z, &d, pc).iter() {
                 if c.kind != bus::Kind::Write
@@ -75,7 +108,7 @@ impl Verifier {
 fn run() -> Result<bool, String> {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
     // `--full` walks Robin off the screen at every move of the tour, not
-    // one in four: about ten minutes more (#34, Decision 5).
+    // one in four: about a minute and a half more (#34, Decision 5).
     let full = args.iter().any(|a| a == "--full");
     args.retain(|a| a != "--full");
     let dir = PathBuf::from(args.first().cloned().unwrap_or_else(|| "assets".into()));
@@ -88,18 +121,14 @@ fn run() -> Result<bool, String> {
     let rom = std::fs::read(dir.join("128.rom"))
         .map_err(|e| format!("{}: {e} (assets/README.md)", dir.join("128.rom").display()))?;
 
-    let assets = robin::assets::read_tape(&tape)?;
+    let assets = Arc::new(robin::assets::read_tape(&tape)?);
     let blocks = zx_core::tape::load_tzx(&tape)?;
     let mut z = boot_128k(&rom, blocks, robin::layout::ENTRY_PC, 2000)?;
     let cfg = zx_recomp::Config::parse(include_str!("../../re/robin.toml"))?;
     let mut script = zx_recomp::script::Script::new(&cfg.trace)?;
 
     let routines = suites::all();
-    let mut v = Verifier {
-        tallies: routines.iter().map(|_| Tally::default()).collect(),
-        routines,
-        table_writes: Vec::new(),
-    };
+    let mut v = Verifier::new(routines, &assets);
     let mut misses = Misses::default();
     let start = std::time::Instant::now();
     // Where the tour starts: the first time the main loop begins once the
@@ -125,18 +154,20 @@ fn run() -> Result<bool, String> {
             &mut misses,
         );
     }
+    // Reading the tallies waits for every call caught to be checked.
+    let played: Vec<u64> = v.checker.tallies().iter().map(|t| t.compared).collect();
     println!(
         "robin-verify: {} frames of play from the tape in {:.1?}",
         cfg.trace.frames,
         start.elapsed()
     );
-    let played: Vec<u64> = v.tallies.iter().map(|t| t.compared).collect();
 
     let start = std::time::Instant::now();
     let (z0, frame) = tour_start.ok_or("the game never reached its main loop: no tour")?;
     let quiet = zx_recomp::script::Script::new(&zx_recomp::Config::parse(tour::QUIET)?.trace)?;
     let walk_one_in = if full { 1 } else { tour::WALK_ONE_IN };
     let toured = tour::run(z0, frame, &quiet, &assets, &mut v, walk_one_in);
+    let toured_counts: Vec<u64> = v.checker.tallies().iter().map(|t| t.compared).collect();
     println!(
         "robin-verify: the tour drew {} of {} locations in {:.1?}{}",
         toured.drawn.len(),
@@ -158,9 +189,14 @@ fn run() -> Result<bool, String> {
             "; --full walks every move"
         }
     );
-    let toured_counts: Vec<u64> = v.tallies.iter().map(|t| t.compared).collect();
     let method_problems = methods::run(&rom, &tape, &assets, &mut v)?;
-    let (tallies, routines, table_writes) = (&v.tallies, &v.routines, &v.table_writes);
+    let Verifier {
+        routines,
+        table_writes,
+        checker,
+        ..
+    } = &mut v;
+    let tallies = checker.tallies();
 
     let mut ok = toured.problems.is_empty() && toured.drawn.len() == robin::map::LOCATIONS;
     for p in &toured.problems {

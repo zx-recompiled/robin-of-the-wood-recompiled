@@ -676,10 +676,12 @@ const PRINTER: (u16, u16) = (0xD4F6, 0xD6AA);
 /// The routines allowed to write the start-up tables: their builders.
 const BUILDERS: [u16; 2] = [0xCEC8, 0xCEDE];
 
-/// Whether the instruction at `pc` is in one of the tables' builders.
-pub fn may_write_tables(routines: &[Routine], pc: u16) -> bool {
+/// The code of the tables' builders: only an instruction in it may write
+/// the tables.
+pub fn table_builders(routines: &[Routine]) -> Vec<(u16, u16)> {
     routines
         .iter()
         .filter(|r| BUILDERS.contains(&r.entry))
-        .any(|r| (r.code.0..=r.code.1).contains(&pc))
+        .map(|r| r.code)
+        .collect()
 }

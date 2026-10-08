@@ -166,7 +166,8 @@ fn play_on(
     }
 }
 
-/// Walking every move takes about ten minutes (#34, Decision 5), so the gate
+/// Walking every move takes about a minute and a half more (#34, Decision 5;
+/// ten minutes before #45 checked calls on every core), so the gate
 /// walks one move in this many and enters the rest directly; `--full` walks
 /// them all.
 pub const WALK_ONE_IN: usize = 4;
