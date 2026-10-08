@@ -934,6 +934,60 @@ name the location and the position to read, Robin's (`0xC440`, `0xCB7F`,
 `0xCB80`) unless the fifth character's code has set them to its own
 (*The fifth character*).
 
+## Trades and journeys
+
+Found by reading `0:DDEF`, `0:C3CA`, `0:D8EC` and the code they reach (#41).
+**read**, unless marked.
+
+### The trade
+
+`0:DDEF`, from the main loop, at the first special location (`0xD28F`,
+*The map*), once a visit (`0xDED2`, cleared on entering a location):
+- **if R is `0x13` and he carries three kind-2 items**, they're taken out of
+  his inventory (`0:DA6E`, the rest moving up), the inventory shown again
+  (`0:DA84`), and the robberies' count lowered by three (*The fifth
+  character*);
+- **he's given the sword**, or if he has it, **the bow and ten arrows**, or if
+  he has both, **one of three pieces** (`0xD47E`, shown in the panel); each
+  with its message;
+- **a cell beside the location flashes**: a colour kept in the code
+  (`0xDEB7`) is written to it, a busy wait, then a second.
+
+### Doorways and journeys
+
+- **Nine doorways** (`0xDAB9`). On entering one with anything in his
+  inventory (`0:D8EC`, from the entry), its attributes are drawn (`0xA2F4`),
+  the main loop's hook is set to its sparkle, he's walked in by the controls'
+  override (*The controls*), and a sound starts. Then its code runs on into
+  the sparkle's first frame.
+- **The main loop's hook** (`0:C3CA`) is a call whose operand the game sets:
+  to a plain return (`0:DA03`), or to the sparkle (`0:D97D`).
+- **The sparkle**, each frame: the doorway's 40 rows of pixels (`0xA204`)
+  masked with random bytes are combined with the screen's. That's 120 bytes,
+  each with two reads of R, one of them through `0:CD5F`, which reads the
+  byte at R × `0x101`, the ROM below `0x4000` (#21). It runs in two passes,
+  `XOR` then `OR`, and the code rewrites its own instructions to switch:
+  the combining one (`0:D9AA`, `XOR (HL)` or `OR (HL)`), and the one that
+  reads R (`0:D997`), which becomes `LD R,A` for the last frame.
+- **At the end** (`0:DA04`), the hook is taken out, and what he carries
+  decides:
+  - with three kind-5 items, they're taken and he's sent to location `0xCC`;
+  - with two, they're taken and his health is restored;
+  - with one, it's taken;
+  - with none, a kind-2 item is taken back, or if there isn't one, he's sent
+    to location `0x9C`.
+
+  Then he walks back out, the way he came, unless he's being sent.
+- **A journey** (`0:C3CA`, when `0xDAD6` says so) enters the new location
+  much as the entry does: the play area cleared, drawn, recoloured
+  (`0:C306`), then a diagonal wipe onto the screen (`0:C40F`). The third
+  item (`0xD47C`) is taken back if he has it (`0:C3AE`). Then the items,
+  the copy to the screen, and the characters' set-up. It ends by jumping
+  back to the main loop's start, not returning.
+- **Recolouring** (`0:C306`): at 26 locations of the first row (`0xC448`),
+  the attribute buffer's colours become white ink where there's paper, and
+  bright cyan where there's ink but not white.
+
 ## Fighting
 
 Found by reading the main loop's `0xBB84`, `0xBC0B`, `0xBC6C`, `0xBCAA` and

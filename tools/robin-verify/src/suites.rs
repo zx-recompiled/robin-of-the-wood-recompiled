@@ -2,8 +2,8 @@
 //! rewrite takes the original's registers (`docs/re/robin.md`).
 
 use robin::{
-    actions, characters, fifth, fighting, items, map, movement, print, screen, sound, sprites,
-    wanderer,
+    actions, characters, fifth, fighting, items, journeys, map, movement, print, screen, sound,
+    sprites, wanderer,
 };
 
 use crate::capture::{Reg, Regs, Routine};
@@ -570,6 +570,100 @@ pub fn all() -> Vec<Routine> {
             preserves: &[],
             rewrite: |g, a, r, inputs| {
                 characters::move_one(g, a.sprites(), &mut inputs.random);
+                r
+            },
+        },
+        Routine {
+            name: "the main loop's hook and journeys (0:C3CA)",
+            bank: Some(0),
+            entry: 0xC3CA,
+            code: (0xC3CA, 0xC40E),
+            outputs: &[],
+            exits: &[0xBE98, 0xBE62],
+            preserves: &[],
+            rewrite: |g, a, r, io| {
+                journeys::hook(g, a, io);
+                r
+            },
+        },
+        Routine {
+            name: "a doorway on entering (0:D8EC)",
+            bank: Some(0),
+            entry: 0xD8EC,
+            code: (0xD8EC, 0xD97C),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                journeys::doorway(g, io);
+                r
+            },
+        },
+        Routine {
+            name: "a doorway's sparkle (0:D97D)",
+            bank: Some(0),
+            entry: 0xD97D,
+            code: (0xD97D, 0xDA6D),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                journeys::sparkle(g, io);
+                r
+            },
+        },
+        Routine {
+            name: "the trade (0:DDEF)",
+            bank: Some(0),
+            entry: 0xDDEF,
+            code: (0xDDEF, 0xDED1),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                journeys::trade(g, io);
+                r
+            },
+        },
+        Routine {
+            name: "a location recoloured (0:C306)",
+            bank: Some(0),
+            entry: 0xC306,
+            code: (0xC306, 0xC33B),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, _| {
+                journeys::recolour(g);
+                r
+            },
+        },
+        Routine {
+            name: "the inventory shown (0:DA84)",
+            bank: Some(0),
+            entry: 0xDA84,
+            code: (0xDA84, 0xDAB8),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, _| {
+                journeys::show_inventory(g);
+                r
+            },
+        },
+        Routine {
+            name: "an item taken out of the inventory (0:DA6E)",
+            bank: Some(0),
+            entry: 0xDA6E,
+            code: (0xDA6E, 0xDA83),
+            // The slot before, to look at again; its caller counts in BC.
+            outputs: &[Reg::H, Reg::L],
+            exits: &[],
+            preserves: &[Reg::B, Reg::C],
+            rewrite: |g, _, mut r, _| {
+                let at = u16::from_be_bytes([r.get(Reg::H), r.get(Reg::L)]);
+                let back = journeys::remove(g, at, r.get(Reg::B));
+                r.set_pair(Reg::H, Reg::L, back);
                 r
             },
         },
