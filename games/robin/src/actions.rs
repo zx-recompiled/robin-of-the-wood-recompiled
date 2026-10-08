@@ -74,8 +74,9 @@ const NO_ARROWS: u16 = 0xB423;
 /// Robin's sprite record, and the frame table he's drawn from.
 const ROBIN: u16 = 0xCB76;
 const ROBIN_FRAMES: u16 = 0x8C25;
-/// The sample played when he's knocked down: its entry in bank 4.
-const KNOCKED_DOWN_SOUND: (u16, u8) = (0xC012, 4);
+/// The bank the sample played when he's knocked down is in: its entry,
+/// `4:C012`, is [`sound::sample`].
+const KNOCKED_DOWN_SOUND: u8 = sound::PLAYER_BANK as u8;
 
 /// His controls' bits (*The controls*).
 const RIGHT: u8 = 0x01;
@@ -307,7 +308,7 @@ fn lying(g: &mut Game, state: u8, sequence: u16) -> Next {
 
 /// A call into another bank through the trampoline at `0x5B8A`: the bank
 /// paged in for `f`, and the one before paged back after.
-fn banked_call(g: &mut Game, io: &mut Io, (_, bank): (u16, u8), f: fn(&mut Game, &mut Io)) {
+fn banked_call(g: &mut Game, io: &mut Io, bank: u8, f: fn(&mut Game, &mut Io)) {
     g.banked.saved = g.banked.current;
     g.banked.current = bank;
     io.out(0x7FFD, bank | 0x10);

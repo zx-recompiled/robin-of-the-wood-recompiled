@@ -180,15 +180,10 @@ fn run() -> Result<bool, String> {
     );
     let method_problems = methods::run(&rom, &tape, &assets, &mut v)?;
     let armed = armed::run(&rom, &tape, &assets, &mut v)?;
-    let unreached: Vec<u8> = (0..16).filter(|s| !armed.states.contains(s)).collect();
+    // What all the runs reached together is the actions' coverage report.
     println!(
-        "robin-verify: played a game with Robin armed (a supplement): his actions ran in states {:?}{}",
-        armed.states,
-        if unreached.is_empty() {
-            ", all 16".to_string()
-        } else {
-            format!(", never in {unreached:?}")
-        }
+        "robin-verify: played a game with Robin armed (a supplement): his actions ran in states {:?}",
+        armed.states
     );
     let Verifier {
         routines,
