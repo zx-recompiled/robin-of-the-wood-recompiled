@@ -178,3 +178,17 @@ pub fn zap(io: &mut Io) {
         }
     }
 }
+
+/// A beeper sound of `b` toggles of EAR and MIC, the delay between them
+/// shortening from `b` (`0:D8C6`): 256 for 0.
+pub fn beep(io: &mut Io, mut b: u8) {
+    let mut a = 0u8;
+    loop {
+        a ^= 0x18;
+        io.out(u16::from(a) << 8 | 0xFE, a);
+        b = b.wrapping_sub(1);
+        if b == 0 {
+            return;
+        }
+    }
+}

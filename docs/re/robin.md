@@ -833,6 +833,72 @@ instruction of the meeting. **confirmed**, unless marked.
   - his energy goes up (`0:D7F7`, *Robin's actions*);
   - it's marked met, so it happens once a game.
 
+## Items
+
+Found by reading `0:D484`, `0:D6D0` and the code they reach (#41). **read**,
+unless marked.
+
+### Where they are
+
+- **Items are messages printed on the screen.** An item's kind is the stock
+  message that draws it (*The text printer*), and the printer's list of
+  recorded messages (`0xD457`) is what's on the screen now.
+- **Thirty fixed places in the world** at `0xD38A`, five bytes each: the
+  location (a word), the position, and the kind, 0 once taken.
+- **Eleven more** at `0xD420`, the same five bytes, free while the location
+  is `0xFFFF`: items dropped, and two the game puts there when it starts.
+- **On entering a location** (`0:D484`, from the entry):
+  1. the world restocks (below);
+  2. the list of what's on the screen is cleared;
+  3. of the thirty, the first still there at this location is printed;
+  4. of the eleven, every one at this location is printed.
+
+  If the eleventh is one, the original takes one return address too many
+  off the stack, so it returns to its caller's caller. **read**, never seen.
+
+### Restocking
+
+`0:D2DF`, first in entering a location, if the last item taken was of kind
+5 or 7 (`0xD483`). Its test reads the Z flag after a load, which sets no
+flags, so whether it acts depends on the flags it's called with.
+- R picks a number: 6 to 10 for kind 5, 8 to 12 for kind 7.
+- While the world has fewer than that of the kind (counted at `0xD47F` and
+  `0xD480`), one of the thirty places, picked from R and the next free one
+  on (`0:D35A`), gets that kind.
+
+### Picking one up
+
+`0:D6D0`, from the main loop: the first item on the screen within reach of
+Robin is taken. Within reach is its first position byte from `0x08` to
+`0x17` less than his horizontal position (at least `0x18`), and its second
+from `0x0D` to `0x1C` more than his vertical one. The printer's positions
+and his aren't in the same units, so these are as the bytes compare.
+- **Arrows** (kind 7) only if he has none left; they give him ten, with a
+  beeper sound (`0:D8C6`).
+- **Kinds 0, 3, 6 and 7 print a message** first (`0xB351`, `0xB37D`, `0xB3E9`,
+  `0xB423`).
+- **It's printed again to take it off the screen**, and taken out of the
+  eleven, or else out of the thirty. From the thirty, a kind 5 or 7 lowers
+  its count and is remembered for restocking; an arrow stops there.
+- **What it gives**, by kind, each with a beeper sound:
+  - 0: the sword (`0xD47A`), 3: the bow (`0xD47B`), 6: a third (`0xD47C`);
+  - 1: energy (`0:D7F7`, *Robin's actions*);
+  - the rest go into his inventory.
+
+### His inventory
+
+Eight slots at `0xD472`, `0xFF` where empty. A new item goes in first,
+pushing the others along, and the panel shows them, in two rows of four from
+`0xD8D6`, as one of two messages (`0xB404` for kind 5). The one pushed off
+the end, if it's a kind 2, is dropped where he stands (`0:D874`): into the
+first free of the eleven, at his location and just above and behind his
+position, and printed if it's on the screen.
+
+`0:D874` takes where to drop from its own code. Its instructions' operands
+name the location and the position to read, Robin's (`0xC440`, `0xCB7F`,
+`0xCB80`) unless the fifth character's code has set them to its own
+(*The fifth character*).
+
 ## Fighting
 
 Found by reading the main loop's `0xBB84`, `0xBC0B`, `0xBC6C`, `0xBCAA` and

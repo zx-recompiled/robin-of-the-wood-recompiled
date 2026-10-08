@@ -2,7 +2,7 @@
 //! rewrite takes the original's registers (`docs/re/robin.md`).
 
 use robin::{
-    actions, characters, fighting, map, movement, print, screen, sound, sprites, wanderer,
+    actions, characters, fighting, items, map, movement, print, screen, sound, sprites, wanderer,
 };
 
 use crate::capture::{Reg, Regs, Routine};
@@ -569,6 +569,96 @@ pub fn all() -> Vec<Routine> {
             preserves: &[],
             rewrite: |g, a, r, inputs| {
                 characters::move_one(g, a.sprites(), &mut inputs.random);
+                r
+            },
+        },
+        Routine {
+            name: "a location's items placed (0:D484)",
+            bank: Some(0),
+            entry: 0xD484,
+            code: (0xD484, 0xD4F3),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            // Its restocking tests the Z flag it's called with.
+            rewrite: |g, _, r, io| {
+                items::place(g, &mut io.random, r.get(Reg::F) & 0x40 != 0);
+                r
+            },
+        },
+        Routine {
+            name: "the world restocked (0:D2DF)",
+            bank: Some(0),
+            entry: 0xD2DF,
+            code: (0xD2DF, 0xD330),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                items::restock(g, &mut io.random, r.get(Reg::F) & 0x40 != 0);
+                r
+            },
+        },
+        Routine {
+            name: "a free place for an item (0:D35A)",
+            bank: Some(0),
+            entry: 0xD35A,
+            code: (0xD35A, 0xD389),
+            // A is the free place's kind, 0: the new game's set-up stores
+            // it plus 1 (0:D2D0).
+            outputs: &[Reg::A, Reg::D, Reg::E],
+            exits: &[],
+            // Its callers keep the count they're filling to in B.
+            preserves: &[
+                Reg::B,
+                Reg::H,
+                Reg::L,
+                Reg::Ixh,
+                Reg::Ixl,
+                Reg::Iyh,
+                Reg::Iyl,
+            ],
+            rewrite: |g, _, mut r, io| {
+                let at = items::free_place(g, &mut io.random);
+                r.set_pair(Reg::D, Reg::E, at);
+                r.set(Reg::A, g.read(at));
+                r
+            },
+        },
+        Routine {
+            name: "an item picked up (0:D6D0)",
+            bank: Some(0),
+            entry: 0xD6D0,
+            // With what it gives, the inventory and dropping, which follow
+            // the energy's figure (0:D7F7) in the code.
+            code: (0xD6D0, 0xD8C5),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                items::pick_up(g, io);
+                r
+            },
+        },
+        Routine {
+            name: "a beep (0:D8C6)",
+            bank: Some(0),
+            entry: 0xD8C6,
+            code: (0xD8C6, 0xD8D1),
+            outputs: &[],
+            exits: &[],
+            preserves: &[
+                Reg::D,
+                Reg::E,
+                Reg::H,
+                Reg::L,
+                Reg::Ixh,
+                Reg::Ixl,
+                Reg::Iyh,
+                Reg::Iyl,
+            ],
+            rewrite: |_, _, r, io| {
+                sound::beep(io, r.get(Reg::B));
                 r
             },
         },

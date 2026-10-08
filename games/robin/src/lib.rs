@@ -14,6 +14,7 @@ pub mod controls;
 pub mod fighting;
 pub mod game;
 pub mod io;
+pub mod items;
 pub mod layout;
 pub mod map;
 pub mod movement;
