@@ -794,8 +794,9 @@ Found by reading `0xBA83`, `0xBD87` and the code they reach (#39).
   its steps into a game. Until then its sequence is 0, and drawing it reads
   the ROM (*When a sprite reads the ROM*, #21).
 - **Meeting it** (`0xBD87`, from the main loop): if it's drawn (bit 0 of
-  its record's flags) and not yet met, and overlaps Robin, within `0x20` across and `0x0C` up and down
-  (`0xBDB9`, a test the objects in flight share):
+  its record's flags) and not yet met, and overlaps Robin, within `0x0C`
+  across and `0x20` up and down (`0xBDB9`, a test the objects in flight
+  share):
   - a sound starts (`6:C00C`, through the trampoline, *Sound*): `6:C139`
     sets a flag (`0xC15A`) and two AY registers for the interrupt's music
     player, unless one is already playing (`0xC190`);

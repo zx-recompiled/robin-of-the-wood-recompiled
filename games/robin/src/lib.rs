@@ -20,6 +20,7 @@ pub mod print;
 pub mod screen;
 pub mod sound;
 pub mod sprites;
+pub mod wanderer;
 
 pub use assets::{TAPE_SHA1, is_the_tape};
 pub use game::Game;
