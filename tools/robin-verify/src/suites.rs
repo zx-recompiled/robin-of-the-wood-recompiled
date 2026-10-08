@@ -1,7 +1,7 @@
 //! The routines of the original that have been rewritten, and how each
 //! rewrite takes the original's registers (`docs/re/robin.md`).
 
-use robin::{characters, map, movement, print, screen, sprites};
+use robin::{actions, characters, map, movement, print, screen, sound, sprites};
 
 use crate::capture::{Reg, Regs, Routine};
 
@@ -558,6 +558,134 @@ pub fn all() -> Vec<Routine> {
             },
         },
         Routine {
+            name: "Robin's actions (0:C8DF)",
+            bank: Some(0),
+            entry: 0xC8DF,
+            code: (0xC8DF, 0xCB73),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                actions::act(g, io);
+                r
+            },
+        },
+        Routine {
+            name: "Robin's update (0:C59A)",
+            bank: Some(0),
+            entry: 0xC59A,
+            code: (0xC59A, 0xC5CD),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, a, r, io| {
+                actions::update(g, a.sprites(), io);
+                r
+            },
+        },
+        Routine {
+            name: "Robin's energy after a knock-down (0:D7F7)",
+            bank: Some(0),
+            entry: 0xD7F7,
+            code: (0xD7F7, 0xD820),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, _| {
+                actions::energy(g);
+                r
+            },
+        },
+        Routine {
+            name: "the lower panel's colours (0xBE0F)",
+            bank: None,
+            entry: 0xBE0F,
+            code: (0xBE0F, 0xBE2B),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, _| {
+                actions::panel_colours(g);
+                r
+            },
+        },
+        Routine {
+            name: "a twang (0xBE2C)",
+            bank: None,
+            entry: 0xBE2C,
+            code: (0xBE2C, 0xBE3E),
+            outputs: &[],
+            exits: &[],
+            // Its caller keeps the arrow's slot in HL across it.
+            preserves: &[
+                Reg::A,
+                Reg::F,
+                Reg::B,
+                Reg::C,
+                Reg::D,
+                Reg::E,
+                Reg::H,
+                Reg::L,
+                Reg::Ixh,
+                Reg::Ixl,
+                Reg::Iyh,
+                Reg::Iyl,
+            ],
+            rewrite: |_, _, r, io| {
+                sound::twang(io, r.get(Reg::B));
+                r
+            },
+        },
+        Routine {
+            name: "fire an arrow (0xBB43)",
+            bank: None,
+            entry: 0xBB43,
+            code: (0xBB43, 0xBB83),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                actions::launch_arrow(g, io);
+                r
+            },
+        },
+        Routine {
+            name: "play a sample, by its delay, length, amplitudes and bytes (4:C090)",
+            bank: Some(4),
+            entry: 0xC090,
+            code: (0xC090, 0xC0DA),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                let pair = |hi, lo| u16::from_be_bytes([r.get(hi), r.get(lo)]);
+                sound::play(
+                    g,
+                    io,
+                    r.get(Reg::A),
+                    pair(Reg::D, Reg::E),
+                    pair(Reg::H, Reg::L),
+                    pair(Reg::Ixh, Reg::Ixl),
+                );
+                r
+            },
+        },
+        Routine {
+            name: "pick a sample by R, and play it (4:C012)",
+            bank: Some(4),
+            entry: 0xC012,
+            // Its jump to the picker, then the picker; the next entry and the
+            // table between are not code it runs.
+            code: (0xC020, 0xC02F),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                sound::sample(g, io);
+                r
+            },
+        },
+        Routine {
             name: "anything in a character's way (0:DD3D)",
             bank: Some(0),
             entry: 0xDD3D,
@@ -578,45 +706,41 @@ pub fn all() -> Vec<Routine> {
 
 /// A floor routine: no registers in or out.
 fn floor(name: &'static str, entry: u16, code: (u16, u16)) -> Routine {
-    let rewrite: fn(
-        &mut robin::Game,
-        &robin::assets::Assets,
-        Regs,
-        &mut robin::inputs::Inputs,
-    ) -> Regs = match entry {
-        0xDD49 => |g, _, r, _| {
-            characters::save_floor(g);
-            r
-        },
-        0xDD55 => |g, _, r, _| {
-            characters::current_to_right(g);
-            r
-        },
-        0xDD5A => |g, _, r, _| {
-            characters::current_to_left(g);
-            r
-        },
-        0xDD66 => |g, _, r, _| {
-            characters::clear_left(g);
-            r
-        },
-        0xDD6B => |g, _, r, _| {
-            characters::clear_right(g);
-            r
-        },
-        0xDD79 => |g, _, r, _| {
-            characters::floors_vertically(g);
-            r
-        },
-        0xDD83 => |g, _, r, _| {
-            characters::floors_going_left(g);
-            r
-        },
-        _ => |g, _, r, _| {
-            characters::floors_going_right(g);
-            r
-        },
-    };
+    let rewrite: fn(&mut robin::Game, &robin::assets::Assets, Regs, &mut robin::io::Io) -> Regs =
+        match entry {
+            0xDD49 => |g, _, r, _| {
+                characters::save_floor(g);
+                r
+            },
+            0xDD55 => |g, _, r, _| {
+                characters::current_to_right(g);
+                r
+            },
+            0xDD5A => |g, _, r, _| {
+                characters::current_to_left(g);
+                r
+            },
+            0xDD66 => |g, _, r, _| {
+                characters::clear_left(g);
+                r
+            },
+            0xDD6B => |g, _, r, _| {
+                characters::clear_right(g);
+                r
+            },
+            0xDD79 => |g, _, r, _| {
+                characters::floors_vertically(g);
+                r
+            },
+            0xDD83 => |g, _, r, _| {
+                characters::floors_going_left(g);
+                r
+            },
+            _ => |g, _, r, _| {
+                characters::floors_going_right(g);
+                r
+            },
+        };
     Routine {
         name,
         bank: Some(0),
@@ -632,17 +756,13 @@ fn floor(name: &'static str, entry: u16, code: (u16, u16)) -> Routine {
 /// A wall test: it takes Robin's position in HL, and answers in A and the
 /// flags, as `OR (HL)` leaves them on a wall and `XOR A` does otherwise.
 fn wall(name: &'static str, entry: u16, code: (u16, u16)) -> Routine {
-    let rewrite: fn(
-        &mut robin::Game,
-        &robin::assets::Assets,
-        Regs,
-        &mut robin::inputs::Inputs,
-    ) -> Regs = match entry {
-        0xDC6C => |g, _, r, _| answer(r, movement::wall_right(g, r.get(Reg::L), r.get(Reg::H))),
-        0xDC5B => |g, _, r, _| answer(r, movement::wall_left(g, r.get(Reg::L), r.get(Reg::H))),
-        0xDC7F => |g, _, r, _| answer(r, movement::wall_up(g, r.get(Reg::L), r.get(Reg::H))),
-        _ => |g, _, r, _| answer(r, movement::wall_down(g, r.get(Reg::L), r.get(Reg::H))),
-    };
+    let rewrite: fn(&mut robin::Game, &robin::assets::Assets, Regs, &mut robin::io::Io) -> Regs =
+        match entry {
+            0xDC6C => |g, _, r, _| answer(r, movement::wall_right(g, r.get(Reg::L), r.get(Reg::H))),
+            0xDC5B => |g, _, r, _| answer(r, movement::wall_left(g, r.get(Reg::L), r.get(Reg::H))),
+            0xDC7F => |g, _, r, _| answer(r, movement::wall_up(g, r.get(Reg::L), r.get(Reg::H))),
+            _ => |g, _, r, _| answer(r, movement::wall_down(g, r.get(Reg::L), r.get(Reg::H))),
+        };
     Routine {
         name,
         bank: Some(0),

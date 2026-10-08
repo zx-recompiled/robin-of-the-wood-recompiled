@@ -2,7 +2,7 @@
 //! on each row*).
 
 use crate::game::Game;
-use crate::inputs::Random;
+use crate::io::Random;
 use crate::sprites::{self, Sprites};
 
 /// The four row lists, 12 bytes each.
@@ -275,7 +275,7 @@ fn fire(g: &mut Game, at: u16, record: u16, random: &mut Random) -> Option<u16> 
     if distance < 0x30 || right == left {
         return None;
     }
-    if g.characters.fire_always == 0 && random.r() & 1 == 0 {
+    if g.robin.bow == 0 && random.r() & 1 == 0 {
         return None;
     }
     let slot = match g.characters.cycle & 3 {

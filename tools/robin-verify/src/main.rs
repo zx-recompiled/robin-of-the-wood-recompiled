@@ -9,6 +9,7 @@
 //! is a case (`capture`). Nothing is stored: the states are the original's
 //! memory, which is never written to a file.
 
+mod armed;
 mod capture;
 mod checker;
 mod methods;
@@ -178,6 +179,12 @@ fn run() -> Result<bool, String> {
         toured.walked, toured.fell_back,
     );
     let method_problems = methods::run(&rom, &tape, &assets, &mut v)?;
+    let armed = armed::run(&rom, &tape, &assets, &mut v)?;
+    // What all the runs reached together is the actions' coverage report.
+    println!(
+        "robin-verify: played a game with Robin armed (a supplement): his actions ran in states {:?}",
+        armed.states
+    );
     let Verifier {
         routines,
         table_writes,
@@ -209,7 +216,7 @@ fn run() -> Result<bool, String> {
     {
         let unreached = r.unreached(&z, t);
         println!(
-            "  {}: {} calls, {} compared ({} from the tour, {} with the other control methods), {} repeats skipped, {} scrambling checks ({} with the stack left out), {} varied runs ({} did not return); {} instruction(s) never reached{}",
+            "  {}: {} calls, {} compared ({} from the tour, {} in the other games), {} repeats skipped, {} scrambling checks ({} with the stack left out), {} varied runs ({} did not return); {} instruction(s) never reached{}",
             r.name,
             t.calls,
             t.compared,

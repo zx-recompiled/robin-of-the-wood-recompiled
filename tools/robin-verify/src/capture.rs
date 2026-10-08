@@ -22,7 +22,8 @@ use std::hash::{Hash, Hasher};
 use robin::Game;
 use robin::assets::{Assets, BANK};
 use robin::controls::Controls;
-use robin::inputs::{Inputs, Random};
+use robin::io::{Ay, Io, Random};
+use zx_core::decode::{Instr, Reg8};
 use zx_recomp::script::Script;
 use zx_runtime::memory::Memory;
 use zx_runtime::{Zx, bus, interp};
@@ -131,10 +132,11 @@ pub struct Routine {
     /// routine, which runs to its return.
     pub exits: &'static [u16],
     /// The rewrite: the state, the data parsed from the tape, the registers
-    /// at entry, and the inputs: the controls as the original saw them, and
-    /// what it read from R (#37); returns the registers with its outputs
-    /// set.
-    pub rewrite: fn(&mut Game, &Assets, Regs, &mut Inputs) -> Regs,
+    /// at entry, and what it exchanges outside memory (`robin::io`): the
+    /// controls as the original saw them, what it read from R (#37) and the
+    /// AY's registers, given; the ports it writes, kept. Returns the
+    /// registers with its outputs set.
+    pub rewrite: fn(&mut Game, &Assets, Regs, &mut Io) -> Regs,
 }
 
 /// What one routine's suite saw.
@@ -340,7 +342,7 @@ impl Routine {
         let mut key = DefaultHasher::new();
         Regs::of(entry).hash(&mut key);
         entry_sp.hash(&mut key);
-        let mut ports = Vec::new();
+        let mut writes = Vec::new();
         let mut executed = Vec::new();
         let mut read: BTreeSet<(usize, usize)> = BTreeSet::new();
         let mut rom_read = None;
@@ -385,7 +387,7 @@ impl Routine {
                             blind.insert(p);
                         }
                     }
-                    bus::Kind::PortWrite => ports.push((pc, cy.at)),
+                    bus::Kind::PortWrite => writes.push((pc, cy.at, out_value(&c, &d.instr))),
                     // What a port answers is an input like memory's bytes:
                     // two calls with different keys held are different
                     // calls.
@@ -415,7 +417,7 @@ impl Routine {
             ret,
             entry_sp,
             min_sp,
-            ports,
+            writes,
             executed,
             blind,
             read,
@@ -434,16 +436,21 @@ impl Routine {
         // A rewrite that panics where the original carries on is a
         // difference like any other: reported, not the end of the run.
         let rewrite = self.rewrite;
-        let mut inputs = Inputs {
+        let mut io = Io {
             controls: Controls {
                 keys: entry.keys,
                 kempston: entry.kempston,
                 ear: entry.ear,
             },
             random: Random::given(run.random.clone()),
+            ay: Ay {
+                regs: std::array::from_fn(|r| entry.ay.reg(r)),
+                latch: entry.ay.selected().map_or(0xFF, |r| r as u8),
+            },
+            writes: Vec::new(),
         };
         let out = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            rewrite(&mut g, play.assets, before, &mut inputs)
+            rewrite(&mut g, play.assets, before, &mut io)
         })) {
             Ok(out) => out,
             Err(e) => {
@@ -457,11 +464,11 @@ impl Routine {
         };
         let after = Regs::of(&run.after);
         let mut differ = Vec::new();
-        if inputs.random.left() > 0 {
+        if io.random.left() > 0 {
             differ.push(format!(
                 "the original read R {} time(s) and the rewrite drew {} fewer",
                 run.random.len(),
-                inputs.random.left()
+                io.random.left()
             ));
         }
 
@@ -513,9 +520,29 @@ impl Routine {
                 ));
             }
         }
-        for (pc, port) in &run.ports {
+        // The ports written, port and value, in order.
+        let wrote: Vec<(u16, u8)> = run.writes.iter().map(|&(_, p, v)| (p, v)).collect();
+        if wrote != io.writes {
+            let n = wrote
+                .iter()
+                .zip(&io.writes)
+                .take_while(|(a, b)| a == b)
+                .count();
+            let at = |w: Option<&(u16, u8)>| {
+                w.map_or("nothing".into(), |(p, v)| {
+                    format!("{v:02x} to port {p:04x}")
+                })
+            };
             differ.push(format!(
-                "writes port {port:04x} at {pc:04x}, which the rewrite does not model"
+                "port writes differ: the original made {}, the rewrite {}; at write {}, the original wrote {}{}, the rewrite {}",
+                wrote.len(),
+                io.writes.len(),
+                n + 1,
+                at(wrote.get(n)),
+                run.writes
+                    .get(n)
+                    .map_or(String::new(), |(pc, _, _)| format!(" at {pc:04x}")),
+                at(io.writes.get(n)),
             ));
         }
         differ
@@ -664,7 +691,8 @@ pub(crate) struct Run {
     pub(crate) ret: u16,
     entry_sp: u16,
     min_sp: u16,
-    ports: Vec<(u16, u16)>,
+    /// Every port written: where from, the port, and the value.
+    writes: Vec<(u16, u16, u8)>,
     pub(crate) executed: Vec<u16>,
     /// The places it wrote before reading, other than the dead stack.
     blind: BTreeSet<(usize, usize)>,
@@ -681,6 +709,29 @@ pub(crate) struct Run {
 impl Run {
     fn after_bank_byte(&self, n: usize, i: usize) -> u8 {
         self.banks[n][i]
+    }
+}
+
+/// The value an `OUT` instruction about to run will write.
+fn out_value(z: &Zx, i: &Instr) -> u8 {
+    match *i {
+        Instr::OutA(_) => z.a,
+        Instr::OutC(Some(r)) => match r {
+            Reg8::B => z.b,
+            Reg8::C => z.c,
+            Reg8::D => z.d,
+            Reg8::E => z.e,
+            Reg8::H => z.h,
+            Reg8::L => z.l,
+            Reg8::A => z.a,
+            Reg8::IXH => (z.ix >> 8) as u8,
+            Reg8::IXL => z.ix as u8,
+            Reg8::IYH => (z.iy >> 8) as u8,
+            Reg8::IYL => z.iy as u8,
+        },
+        Instr::OutC(None) => 0,
+        // `OUTI` and its kin write the byte at HL.
+        _ => z.read(u16::from_be_bytes([z.h, z.l])),
     }
 }
 
@@ -745,7 +796,7 @@ mod tests {
 
     fn routine(
         outputs: &'static [Reg],
-        rewrite: fn(&mut Game, &Assets, Regs, &mut Inputs) -> Regs,
+        rewrite: fn(&mut Game, &Assets, Regs, &mut Io) -> Regs,
     ) -> Routine {
         Routine {
             name: "made up",
@@ -869,11 +920,51 @@ mod tests {
     }
 
     #[test]
-    fn a_port_write_is_caught() {
-        // `OUT (0xFE),A : RET`.
-        let z = machine(&[0xD3, 0xFE, 0xC9], &[]);
-        let f = failures(&routine(&[], |_, _, r, _| r), &z);
-        assert!(f.iter().any(|e| e.contains("writes port")), "{f:?}");
+    fn port_writes_are_compared_port_and_value_in_order() {
+        // `LD A,07 : OUT (FE),A : RET`, which writes 07 to port 07FE.
+        let z = machine(&[0x3E, 0x07, 0xD3, 0xFE, 0xC9], &[]);
+        let right = routine(&[], |_, _, r, io| {
+            io.out(0x07FE, 0x07);
+            r
+        });
+        assert!(failures(&right, &z).is_empty());
+        let wrong = failures(
+            &routine(&[], |_, _, r, io| {
+                io.out(0x07FE, 0x06);
+                r
+            }),
+            &z,
+        );
+        assert!(
+            wrong
+                .iter()
+                .any(|e| e.contains("the rewrite 06 to port 07fe")),
+            "{wrong:?}"
+        );
+        let none = failures(&routine(&[], |_, _, r, _| r), &z);
+        assert!(
+            none.iter().any(|e| e.contains("the rewrite nothing")),
+            "{none:?}"
+        );
+    }
+
+    #[test]
+    fn the_ay_reads_back_as_the_machine_has_it() {
+        // `LD BC,FFFD : LD A,07 : OUT (C),A : IN A,(C) : RET`: selects the
+        // mixer and reads it back.
+        let mut z = machine(
+            &[0x01, 0xFD, 0xFF, 0x3E, 0x07, 0xED, 0x79, 0xED, 0x78, 0xC9],
+            STORES_A,
+        );
+        z.port_out(0xFFFD, 7);
+        z.port_out(0xBFFD, 0x38);
+        let r = routine(&[Reg::A], |_, _, mut r, io| {
+            io.out(0xFFFD, 7);
+            r.set(Reg::A, io.input(0xFFFD));
+            r
+        });
+        let f = failures(&r, &z);
+        assert!(f.is_empty(), "{f:?}");
     }
 
     #[test]

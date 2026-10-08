@@ -7,16 +7,18 @@
 //! rewrite is checked against the original routine by routine; see
 //! `README.md`.
 
+pub mod actions;
 pub mod assets;
 pub mod characters;
 pub mod controls;
 pub mod game;
-pub mod inputs;
+pub mod io;
 pub mod layout;
 pub mod map;
 pub mod movement;
 pub mod print;
 pub mod screen;
+pub mod sound;
 pub mod sprites;
 
 pub use assets::{TAPE_SHA1, is_the_tape};

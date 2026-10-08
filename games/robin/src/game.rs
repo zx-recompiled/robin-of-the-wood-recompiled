@@ -300,8 +300,23 @@ pub struct Robin {
     pub direction: u8,
     /// His state: at 6 or more he doesn't move.
     pub state: u8,
-    /// Non-zero while he's fighting.
-    pub fighting: [u8; 2],
+    /// His attack's counter, from 16 down; 0 when he isn't attacking.
+    pub attack: u8,
+    /// While he's down: from `0x6E` when he's knocked down, counted down
+    /// while he lies there.
+    pub down: u8,
+    /// His sprite's animation sequence.
+    pub sequence: u16,
+    /// The state and sequence to stand in when he stops walking up or down.
+    pub standing: u8,
+    pub standing_sequence: u16,
+    /// What he carries: the sword, the bow (while he has it the characters
+    /// always fire), and the arrows left.
+    pub sword: u8,
+    pub bow: u8,
+    pub arrows: u8,
+    /// His energy; once it's negative, being knocked down ends the game.
+    pub energy: u8,
     /// The control method, as the address of its code.
     pub method: u16,
     /// The redefined keys: fire, up, down, left, right.
@@ -318,7 +333,15 @@ parts!(Robin {
     y: u8 = 0xCB80 => "robin.y",
     direction: u8 = 0xCB85 => "robin.direction",
     state: u8 = 0xCB81 => "robin.state",
-    fighting: [u8; 2] = 0xCB74 => "robin.fighting",
+    attack: u8 = 0xCB74 => "robin.attack",
+    down: u8 = 0xCB75 => "robin.down",
+    sequence: u16 = 0xCB78 => "robin.sequence",
+    standing: u8 = 0xCB82 => "robin.standing",
+    standing_sequence: u16 = 0xCB83 => "robin.standing_sequence",
+    sword: u8 = 0xD47A => "robin.sword",
+    bow: u8 = 0xD47B => "robin.bow",
+    arrows: u8 = 0xD47D => "robin.arrows",
+    energy: u8 = 0xD481 => "robin.energy",
     method: u16 = 0xD152 => "robin.method",
     keys: [u8; 5] = 0xD154 => "robin.keys",
     override_controls: [u8; 2] = 0xD0CE => "robin.override_controls",
@@ -339,8 +362,6 @@ pub struct Characters {
     pub floors: [u8; 84],
     /// Kept in the movement's own code: which of the four moves next.
     pub cycle: u8,
-    /// While set, a character facing Robin always fires.
-    pub fire_always: u8,
     /// The four's sprite records, 11 bytes each (*Sprites*).
     pub records: [u8; 44],
 }
@@ -350,8 +371,21 @@ parts!(Characters {
     row: u16 = 0xC444 => "characters.row",
     floors: [u8; 84] = 0xDD9B => "characters.floors",
     cycle: u8 = 0xA8D7 => "characters.cycle",
-    fire_always: u8 = 0xD47B => "characters.fire_always",
     records: [u8; 44] = 0xAAB8 => "characters.records",
+});
+
+/// The calls into other banks, through the trampoline at `0x5B8A`
+/// (`docs/re/robin.md`, *Sound*).
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Banked {
+    /// The bank paged in by the call being made, and the one it replaced.
+    pub current: u8,
+    pub saved: u8,
+}
+
+parts!(Banked {
+    current: u8 = 0x5BC7 => "banked.current",
+    saved: u8 = 0x5BC8 => "banked.saved",
 });
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -363,6 +397,7 @@ pub struct Game {
     pub sprites: SpriteState,
     pub robin: Robin,
     pub characters: Characters,
+    pub banked: Banked,
     /// The rest of RAM, banks 0 to 7, as it was read: what the rewrite does
     /// not model yet, and the blocks' bytes, which the game mirrors in place.
     rest: Box<[[u8; BANK]; 8]>,
@@ -402,6 +437,7 @@ impl Game {
             .or_else(|| SpriteState::name_of(addr))
             .or_else(|| Robin::name_of(addr))
             .or_else(|| Characters::name_of(addr))
+            .or_else(|| Banked::name_of(addr))
             .unwrap_or("the rest of RAM")
     }
 
@@ -422,6 +458,7 @@ impl Game {
             .or_else(|| self.sprites.get_part(addr))
             .or_else(|| self.robin.get_part(addr))
             .or_else(|| self.characters.get_part(addr))
+            .or_else(|| self.banked.get_part(addr))
             .unwrap_or(self.rest[bank][offset])
     }
 
@@ -437,10 +474,29 @@ impl Game {
             || self.map.set_part(addr, v)
             || self.sprites.set_part(addr, v)
             || self.robin.set_part(addr, v)
-            || self.characters.set_part(addr, v))
+            || self.characters.set_part(addr, v)
+            || self.banked.set_part(addr, v))
         {
             let (bank, offset) = place(addr);
             self.rest[bank][offset] = v;
+        }
+    }
+
+    /// The byte at `addr` with `bank` paged in at `0xC000`, as a call made
+    /// through the trampoline sees it.
+    #[must_use]
+    pub fn read_in(&self, bank: usize, addr: u16) -> u8 {
+        match addr {
+            0xC000.. if bank != 0 => self.rest[bank][usize::from(addr - 0xC000)],
+            _ => self.read(addr),
+        }
+    }
+
+    /// Writes `v` at `addr` with `bank` paged in at `0xC000`.
+    pub fn write_in(&mut self, bank: usize, addr: u16, v: u8) {
+        match addr {
+            0xC000.. if bank != 0 => self.rest[bank][usize::from(addr - 0xC000)] = v,
+            _ => self.write(addr, v),
         }
     }
 
@@ -459,6 +515,7 @@ impl Game {
             sprites: SpriteState::zeroed(),
             robin: Robin::zeroed(),
             characters: Characters::zeroed(),
+            banked: Banked::zeroed(),
             rest: Box::new(*banks),
         };
         g.display.read_parts(&read);
@@ -468,6 +525,7 @@ impl Game {
         g.sprites.read_parts(&read);
         g.robin.read_parts(&read);
         g.characters.read_parts(&read);
+        g.banked.read_parts(&read);
         g
     }
 
@@ -487,6 +545,7 @@ impl Game {
         self.sprites.write_parts(&mut write);
         self.robin.write_parts(&mut write);
         self.characters.write_parts(&mut write);
+        self.banked.write_parts(&mut write);
         banks
     }
 }
