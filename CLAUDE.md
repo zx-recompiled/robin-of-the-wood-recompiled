@@ -21,8 +21,9 @@ will start from (#3; `games/robin/tests/boot.rs`). The facts it needs are in
 built from the tape alone, with no ROM. Rewritten and checked by the
 differential suites (`tools/robin-verify`): the screen and printing (#24),
 the map, drawn at all 320 locations by a tour (#28), the sprites (#32),
-Robin's movement and controls (#34), and the four characters on each row
-(#38). The plan, in order, is the board's Backlog.
+Robin's movement and controls (#34), the four characters on each row
+(#38), and Robin's actions and sounds (#36). The plan, in order, is the
+board's Backlog.
 
 ## Commands
 
@@ -31,12 +32,12 @@ Robin's movement and controls (#34), and the four characters on each row
   (`robin-verify`), which **fail the gate without the tape and `128.rom` in
   `assets/`**. **Gate on the exit code, never on grepped output.**
 - `cargo run --release -p robin-verify -- assets` runs the differential
-  suites alone, about two minutes on a 12-core machine: the calls are
+  suites alone, about three minutes on a 12-core machine: the calls are
   checked on every core (#45). It compares every rewritten routine against
   the original's real calls over 20,000 frames of play, then a tour of all
   320 locations, walking Robin off the screen at every move (#46), then a
-  short game with each control method. It prints each routine's cases and
-  the instructions no call reached.
+  short game with each control method, and one with Robin armed (#36). It
+  prints each routine's cases and the instructions no call reached.
 - `cargo test -p zx-runtime --test z80test --test fuse -- --nocapture` checks
   the interpreter against z80test (measured on a real Spectrum) and the Fuse
   Z80 corpus (1335 cases, for timing). Their files go in `assets/`.

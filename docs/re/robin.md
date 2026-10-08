@@ -497,8 +497,8 @@ Found by reading Robin's update and the code it calls (#34).
 (`games/robin/src/movement.rs`) and confirmed** against the original by
 `tools/robin-verify`. That covers play, the tour (which now walks Robin off
 the screen), and a short game with each control method chosen through the
-menu. Robin's update (`0:C59A`) also runs his actions, which go with the
-characters, so it is not rewritten yet. **read**, unless marked.
+menu. Robin's update (`0:C59A`), which runs his actions, is rewritten and
+confirmed with them (*Robin's actions*, #36). **read**, unless marked.
 
 ### Robin
 
@@ -513,6 +513,7 @@ characters, so it is not rewritten yet. **read**, unless marked.
     every third, while he's fighting (`0xCB74` or `0xCB75` non-zero);
   - when it acts, it moves him (`0:C852`), runs his actions (`0:C8DF`,
     *Robin's actions*), and redraws his sprite from frame table `0x8C25`.
+  - **confirmed**: rewritten (`robin::actions::update`) and checked (#36).
 
 ### The controls
 
@@ -561,7 +562,17 @@ Then it takes the step (`0:C127`) and enters the new location (`0xBF0E`,
 
 ## Robin's actions
 
-Found by reading `0:C8DF` and the code it reaches (#36). **read**, unless
+Found by reading `0:C8DF` and the code it reaches (#36).
+
+**Rewritten (`games/robin/src/actions.rs`, `sound.rs`) and confirmed** against
+the original by `tools/robin-verify`. That covers:
+- play, the tour, and the control-method games;
+- a game with Robin armed from its start: the sword, the bow, ten arrows
+  and energy 9.
+
+Between them they reach all 16 states, attacking with each weapon,
+arrows fired and the last one's message, being knocked down and getting up
+again both ways, and the low-energy message. **confirmed**, unless
 marked.
 
 ### His state
@@ -630,9 +641,9 @@ starts at 16, and which attack it is depends on what he carries:
   nothing read so far sets it, #40):
   - his attack counter is cleared;
   - a sound plays (*Sound*);
-  - a count at `0xD481` drops by 2 (his energy, **guess**);
-  - `0:D7F7`: if the count is now below 9 (or `0xFF`), it prints a message
-    (`0xB3DB`), adds 1 back, and prints the count as a digit on the panel;
+  - his energy, `0xD481`, drops by 2;
+  - `0:D7F7`: if it's now below 9 (or `0xFF`), it prints a message
+    (`0xB3DB`), adds 1 back, and prints it as a digit on the panel;
   - his controls are overridden to do nothing (`0xD0CE`, *The controls*);
   - he goes to state 14 or 15.
 - **In states 14 and 15, `0xCB75` counts down.** When it reaches 0:
@@ -640,6 +651,11 @@ starts at 16, and which attack it is depends on what he carries:
   - the override is cleared;
   - the lower panel's colours are reset (`0xBE0F`: the 64 attribute cells
     from `0x5A40` take a colour from `0xBE47`).
+- **With his energy negative, he doesn't get up.** The main loop checks
+  (`0xBF3F`): once the counter reaches 60 with his energy below 0, it prints
+  a message (`0xB51F`), plays a tune, waits for a key and starts a new game.
+  His energy is 0 when a game starts, so in play the first knock-down ends
+  it. **read** (the main loop is #41's)
 
 ## The characters
 
@@ -733,7 +749,7 @@ every call play and the tour make (#38), unless marked.
     bit 5 becomes bit 4.
   - It's drawn from frame table `0x8C69` (`0:C7EF`, *Sprites*).
 - **Firing.** A character that faces Robin from at least `0x30` away (96
-  pixels) may fire. It always does while a flag at `0xD47B` is set; otherwise R
+  pixels) may fire. It always does while Robin has the bow (`0xD47B`); otherwise R
   decides, one time in 2 (`0xAA34`). The shot goes into a slot of the
   objects in flight (`0xBE41`, two bytes each), if that slot is free (#40).
   The slot is 1 for the first of the four, 2 for the second, and 0 for the
