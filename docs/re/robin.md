@@ -668,7 +668,7 @@ In 20,000 frames of play, three main-loop routines drew characters:
 
 - **four characters who walk the forest's rows**, run by `0xA8D6` (this
   section);
-- **the wanderer**, the character at `0xBB1B` (`0xBA83`), #39;
+- **the wanderer**, the character at `0xBB1B` (`0xBA83`, *The wanderer*);
 - **Robin** (`0:C59A`, *Robin's movement*).
 
 Others are drawn in situations play never reached (#42). Randomness: the
@@ -756,6 +756,54 @@ every call play and the tour make (#38), unless marked.
   other two, which share it. The shot gets the character's position and its
   way, and the character the sequence for firing (`0xAB14` right, `0xAB1A`
   left).
+
+### The wanderer
+
+Found by reading `0xBA83`, `0xBD87` and the code they reach (#39).
+**read**, unless marked.
+
+- **A friendly character** that walks the forest's rows from location to
+  location. Meeting it restores some of Robin's energy.
+- **Its record** is a sprite record at `0xBB1B`, drawn from frame table
+  `0x8C8F`. Its state follows:
+  - its location, a word at `0xBB26`;
+  - a timer, `0xBB28`;
+  - bit 6 of `0xBB29`, set once Robin has met it;
+  - its position within its location, `0xBB2A`, from 0 to `0x6F` as the
+    four characters' (*The four on each row*).
+- **When a game starts** (`0:CEA1`), it's put at the special location kept
+  at `0xD291` (*The map*), at position `0x38`, with its timer at `0x70`,
+  not yet met, walking right.
+- **Walking** (`0xBA83`, from the main loop) acts every fourth call, by a
+  counter kept in its own code (`0xBA84`). When it acts:
+  1. **The timer counts down.** When it runs out, it starts again at
+     `0xE0` and the wanderer turns round, with the animation sequence for
+     the new way (`0xBB2B` right, `0xBB37` left), and bit 7 of `0xBB29` is
+     set.
+  2. **It steps one position** that way. Past `0x6F`, or below 0, it goes
+     into the next location along: its location word moves on by one, and
+     its position wraps by `0x70`.
+  3. **It's drawn** if it's in Robin's location, or in the next one with
+     its position below `0x10` (drawn at the position plus `0x70`), as the
+     four characters are. Otherwise it's erased.
+- **Its way is kept in the code.** The step is one instruction, at
+  `0xBAB6`, that either adds 1 to its position or takes 1 away. Turning
+  round flips the instruction: bit 0 of its opcode switches between
+  `INC (HL)` and `DEC (HL)`. The set-up clears the bit, for right.
+- **Its animation starts only when the timer first runs out**, `0x70` of
+  its steps into a game. Until then its sequence is 0, and drawing it reads
+  the ROM (*When a sprite reads the ROM*, #21).
+- **Meeting it** (`0xBD87`, from the main loop): if it's drawn (bit 0 of
+  its record's flags) and not yet met, and overlaps Robin, within `0x20` across and `0x0C` up and down
+  (`0xBDB9`, a test the objects in flight share):
+  - a sound starts (`6:C00C`, through the trampoline, *Sound*): `6:C139`
+    sets a flag (`0xC15A`) and two AY registers for the interrupt's music
+    player, unless one is already playing (`0xC190`);
+  - the play area flashes: its attributes' ink goes up by one, 16 times over
+    (`0xBDD3`);
+  - the lower panel's colours are reset (`0xBE0F`, *Robin's actions*);
+  - his energy goes up (`0:D7F7`, *Robin's actions*);
+  - it's marked met, so it happens once a game.
 
 ## Sound
 
