@@ -3,6 +3,9 @@
 
 use crate::actions;
 use crate::game::Game;
+use crate::io::Io;
+use crate::sound;
+use crate::wanderer::{Thing, overlap};
 
 /// The back buffer and the changed-cell map (*The screen*), and the mark a
 /// drawn object leaves.
@@ -93,4 +96,149 @@ pub fn struck(g: &mut Game, which: u8, record: u16) {
     }
     let flags = record.wrapping_add(4);
     g.write(flags, g.read(flags) | 0x20);
+}
+
+/// The five records a hit can strike: the four characters' and one more.
+const RECORDS: u16 = 0xAAB8;
+/// The second group's four records, at the locations from 256 up.
+const SECOND_GROUP: u16 = 0xDBF1;
+
+/// The record a count of `which` (5 down to 1) is at.
+fn record(which: u8) -> u16 {
+    RECORDS + u16::from(5 - which) * 11
+}
+
+/// Whether record `at` is drawn and not stopped, so it can be hit.
+fn hittable(g: &Game, at: u16) -> bool {
+    let flags = g.read(at + 4);
+    flags & 0x01 != 0 && flags & 0x20 == 0
+}
+
+/// Whether `column`, as an object's, is within 8 to the right of `x`: its
+/// column, plus 2, times 4.
+fn near(column: u8, x: u8) -> bool {
+    let at = column.wrapping_add(2).wrapping_shl(2);
+    at.checked_sub(x).is_some_and(|d| d < 8)
+}
+
+/// A shot hitting Robin, while he isn't down: marked hit, he's hit, and the
+/// fourth sample plays (`0xBC6C`).
+pub fn shot_hits(g: &mut Game, io: &mut Io) {
+    if g.robin.down != 0 {
+        return;
+    }
+    let (x, y) = (g.robin.x, g.robin.y);
+    for slot in 1..4 {
+        let column = g.fighting.slots[slot * 2];
+        if column == 0 || !near(column, x) {
+            continue;
+        }
+        let row = g.fighting.slots[slot * 2 + 1].wrapping_shl(3);
+        if !row.checked_sub(y).is_some_and(|d| d < 0x24) {
+            continue;
+        }
+        g.fighting.slots[slot * 2 + 1] |= HIT;
+        robin_hit(g);
+        actions::banked_call(g, io, sound::PLAYER_BANK as u8, sound::shot_sample);
+        return;
+    }
+}
+
+/// The tune and the zap a character struck sets off (`0xBC46`).
+fn struck_sounds(g: &mut Game, io: &mut Io) {
+    actions::banked_call(g, io, sound::MUSIC_BANK, sound::hit_tune);
+    sound::zap(io);
+}
+
+/// Robin's arrow, in the rows the characters walk, hitting one of the five
+/// records: marked hit, the character struck, and the tune and zap
+/// (`0xBC0B`).
+pub fn arrow_hits(g: &mut Game, io: &mut Io) {
+    let column = g.fighting.slots[0];
+    if column == 0 || !(0x0A..0x0E).contains(&(g.fighting.slots[1] & 0x7F)) {
+        return;
+    }
+    for which in (1..=5).rev() {
+        let at = record(which);
+        if !hittable(g, at) || !near(column, g.read(at + 9)) {
+            continue;
+        }
+        g.fighting.slots[1] |= HIT;
+        struck(g, which, at);
+        struck_sounds(g, io);
+        return;
+    }
+}
+
+/// Robin's sword and fists: on the frames of his attack that strike, a
+/// point ahead of him that overlaps one of the five records strikes it,
+/// with the tune and zap (`0xBD19`).
+pub fn strike(g: &mut Game, io: &mut Io) {
+    let frame = g.read(g.robin.sequence) & 0x7F;
+    let left = g.robin.state & 1 != 0;
+    let (down, across) = match frame {
+        0x1A | 0x1F => (0, if left { 0 } else { 4 }),
+        0x1C => (8, if left { 0xFA } else { 0x0A }),
+        _ => return,
+    };
+    let point = Thing {
+        x: g.robin.x.wrapping_add(across),
+        y: g.robin.y.wrapping_add(down),
+        down: 0x10,
+        across: 0x05,
+    };
+    for which in (1..=5).rev() {
+        let at = record(which);
+        if !hittable(g, at) {
+            continue;
+        }
+        let it = Thing {
+            x: g.read(at + 9),
+            y: g.read(at + 10),
+            down: 0x18,
+            across: 0x0B,
+        };
+        if overlap(it, point) {
+            struck(g, which, at);
+            struck_sounds(g, io);
+            return;
+        }
+    }
+}
+
+/// At the locations from 256 up, while Robin isn't down and the cooldown
+/// has run out: one of the second group touching him hits him, plays a
+/// sample by R, and starts the cooldown (`0xBCAA`).
+pub fn second_group_hits(g: &mut Game, io: &mut Io) {
+    if g.map.location >> 8 == 0 || g.robin.down != 0 {
+        return;
+    }
+    if g.fighting.cooldown != 0 {
+        g.fighting.cooldown -= 1;
+        return;
+    }
+    let robin = Thing {
+        x: g.robin.x,
+        y: g.robin.y,
+        down: 0x20,
+        across: 0x0C,
+    };
+    for n in 0..4 {
+        let at = SECOND_GROUP + n * 11;
+        if g.read(at + 4) & 0x01 == 0 {
+            continue;
+        }
+        let it = Thing {
+            x: g.read(at + 9),
+            y: g.read(at + 10),
+            down: 0x10,
+            across: 0x0C,
+        };
+        if overlap(it, robin) {
+            robin_hit(g);
+            actions::banked_call(g, io, sound::PLAYER_BANK as u8, sound::sample);
+            g.fighting.cooldown = 0x1F;
+            return;
+        }
+    }
 }

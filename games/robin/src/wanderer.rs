@@ -91,11 +91,33 @@ pub fn walk(g: &mut Game, sprites: &Sprites) {
     }
 }
 
-/// Whether two things at `(x, y)` overlap: closer than `down` vertically
-/// and `across` horizontally (`0xBDB9`).
+/// Something with a position and the limits it overlaps by: closer than
+/// `down` vertically and `across` horizontally.
+#[derive(Clone, Copy)]
+pub struct Thing {
+    pub x: u8,
+    pub y: u8,
+    pub down: u8,
+    pub across: u8,
+}
+
+/// Whether `first` and `second` overlap (`0xBDB9`). It goes as the
+/// original's register sets do. Vertically, the limit is `second`'s if
+/// `first` is at or below it, and `first`'s otherwise. Horizontally, from
+/// the one whose limit was used: the other's limit if it's at or to the
+/// right of the other, and its own otherwise.
 #[must_use]
-pub fn overlap(a: (u8, u8), b: (u8, u8), down: u8, across: u8) -> bool {
-    a.1.abs_diff(b.1) < down && a.0.abs_diff(b.0) < across
+pub fn overlap(first: Thing, second: Thing) -> bool {
+    let (on, off) = if first.y >= second.y {
+        (second, first)
+    } else {
+        (first, second)
+    };
+    if on.y.abs_diff(off.y) >= on.down {
+        return false;
+    }
+    let limit = if on.x >= off.x { off.across } else { on.across };
+    on.x.abs_diff(off.x) < limit
 }
 
 /// Its flags: set once Robin has met it.
@@ -112,8 +134,19 @@ pub fn meet(g: &mut Game, io: &mut Io) {
     if w.record[4] & 0x01 == 0 || w.flags & MET != 0 {
         return;
     }
-    let at = (w.record[9], w.record[10]);
-    if !overlap((g.robin.x, g.robin.y), at, 0x20, 0x0C) {
+    let robin = Thing {
+        x: g.robin.x,
+        y: g.robin.y,
+        down: 0x20,
+        across: 0x0C,
+    };
+    let it = Thing {
+        x: w.record[9],
+        y: w.record[10],
+        down: 0x20,
+        across: 0x0C,
+    };
+    if !overlap(robin, it) {
         return;
     }
     flash(g, io);

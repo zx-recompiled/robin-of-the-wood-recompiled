@@ -602,6 +602,71 @@ pub fn all() -> Vec<Routine> {
             },
         },
         Routine {
+            name: "a shot hits Robin (0xBC6C)",
+            bank: None,
+            entry: 0xBC6C,
+            code: (0xBC6C, 0xBCA9),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                fighting::shot_hits(g, io);
+                r
+            },
+        },
+        Routine {
+            name: "Robin's arrow hits a character (0xBC0B)",
+            bank: None,
+            entry: 0xBC0B,
+            code: (0xBC0B, 0xBC6B),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                fighting::arrow_hits(g, io);
+                r
+            },
+        },
+        Routine {
+            name: "Robin's sword and fists strike (0xBD19)",
+            bank: None,
+            entry: 0xBD19,
+            code: (0xBD19, 0xBD86),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                fighting::strike(g, io);
+                r
+            },
+        },
+        Routine {
+            name: "the second group touches Robin (0xBCAA)",
+            bank: None,
+            entry: 0xBCAA,
+            code: (0xBCAA, 0xBCFA),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                fighting::second_group_hits(g, io);
+                r
+            },
+        },
+        Routine {
+            name: "start the hit's tune (6:C048)",
+            bank: Some(6),
+            entry: 0xC048,
+            code: (0xC072, 0xC0A0),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                sound::hit_tune(g, io);
+                r
+            },
+        },
+        Routine {
             name: "Robin hit (0xBCFB)",
             bank: None,
             entry: 0xBCFB,
@@ -961,8 +1026,14 @@ fn overlap_regs(mut r: Regs) -> Regs {
             r.set(b, t);
         }
     }
-    let (y, x) = (r.get(Reg::B), r.get(Reg::C));
-    let (y2, x2) = (r.get(Reg::B_), r.get(Reg::C_));
+    let thing = |r: &Regs, [y, x, down, across]: [Reg; 4]| wanderer::Thing {
+        x: r.get(x),
+        y: r.get(y),
+        down: r.get(down),
+        across: r.get(across),
+    };
+    let first = thing(&r, [Reg::B, Reg::C, Reg::D, Reg::E]);
+    let second = thing(&r, [Reg::B_, Reg::C_, Reg::D_, Reg::E_]);
     // One difference, as `SUB` then, on a borrow, `EXX` and `NEG`.
     let difference = |r: &mut Regs, a: u8, other: Reg| {
         exx(r);
@@ -974,7 +1045,7 @@ fn overlap_regs(mut r: Regs) -> Regs {
             (d, f)
         }
     };
-    let (dy, _) = difference(&mut r, y, Reg::B);
+    let (dy, _) = difference(&mut r, first.y, Reg::B);
     let down = r.get(Reg::D);
     let f = flags::cp(dy, down);
     if f & flags::C == 0 {
@@ -986,7 +1057,7 @@ fn overlap_regs(mut r: Regs) -> Regs {
     let (dx, _) = difference(&mut r, c, Reg::C);
     let across = r.get(Reg::E);
     let f = flags::cp(dx, across);
-    let hit = wanderer::overlap((x, y), (x2, y2), down, across);
+    let hit = wanderer::overlap(first, second);
     r.set(Reg::A, dx);
     r.set(Reg::F, f & !flags::C | if hit { flags::C } else { 0 });
     r
