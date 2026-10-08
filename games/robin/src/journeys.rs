@@ -162,14 +162,13 @@ pub fn trade(g: &mut Game, io: &mut Io) {
     if let Some(message) = message {
         print::print_at(g, 0x60, message);
     }
-    g.write(TRADE_COLOUR, 0x12);
+    // The flash: the colour its code holds, which it then sets to 4 for
+    // good, so later trades flash 4 then 4.
     let cell = if moved(g) { 0x5894 } else { 0x588D };
-    g.write(cell, 0x12);
-    if g.read(TRADED) == 0 {
-        g.write(TRADED, 1);
-        g.write(TRADE_COLOUR, 0x04);
-        g.write(cell, 0x04);
-    }
+    g.write(cell, g.read(TRADE_COLOUR));
+    g.write(TRADED, 1);
+    g.write(TRADE_COLOUR, 0x04);
+    g.write(cell, 0x04);
 }
 
 /// On entering a location: if it's one of the nine doorways and he

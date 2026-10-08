@@ -974,7 +974,8 @@ never reached. **read**, unless marked.
   he has both, **one of three pieces** (`0xD47E`, shown in the panel); each
   with its message;
 - **a cell beside the location flashes**: a colour kept in the code
-  (`0xDEB7`) is written to it, a busy wait, then a second.
+  (`0xDEB7`) is written to it, a busy wait, then 4, which the code keeps:
+  `0x12` the first time, 4 for every trade after.
 
 ### Doorways and journeys
 
