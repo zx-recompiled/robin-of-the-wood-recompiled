@@ -759,7 +759,11 @@ every call play and the tour make (#38), unless marked.
 
 ### The second group
 
-Found by reading `0:DAE4` (#41). **read**, unless marked.
+Found by reading `0:DAE4` (#41).
+
+**Rewritten (`games/robin/src/characters.rs`, `move_second`) and
+confirmed** against the original by `tools/robin-verify`: the tour and play
+reach every instruction. **confirmed**, unless marked.
 
 - **The locations from 256 up have a second group of four characters**,
   with their own lists at `0xDC2B`, 12 bytes each, one for each row by its
@@ -782,8 +786,12 @@ Found by reading `0:DAE4` (#41). **read**, unless marked.
 
 ### The fifth character
 
-Found by reading `0xB7DB` and the code it reaches (#41). **read**, unless
-marked.
+Found by reading `0xB7DB` and the code it reaches (#41).
+
+**Rewritten (`games/robin/src/fifth.rs`) and confirmed** against the
+original by `tools/robin-verify`, all but the robbery: nothing yet has Robin
+strike the first, so its 72 instructions are never reached. **confirmed**,
+unless marked.
 
 - **Two who walk a route together**, whose records are extended sprite
   records:
@@ -807,7 +815,7 @@ marked.
 - **The walking is parameterised by its own code** (`0xB947`): the two
   sequences, the frame table, and the target of a jump (`0xB953`), which
   makes it turn on the spot instead of walking.
-- **Robbing the first**: when Robin strikes it (bit 5 of its flags), it's
+- **Robbing the first** (**read**, never reached): when Robin strikes it (bit 5 of its flags), it's
   marked robbed, and drops what it carries, one or two kind-2 items, where
   its companion is (*Items*: the dropping code's operands are pointed at the
   companion's position, then back at Robin's). Each robbery counts up to
@@ -870,8 +878,15 @@ instruction of the meeting. **confirmed**, unless marked.
 
 ## Items
 
-Found by reading `0:D484`, `0:D6D0` and the code they reach (#41). **read**,
-unless marked.
+Found by reading `0:D484`, `0:D6D0` and the code they reach (#41).
+
+**Rewritten (`games/robin/src/items.rs`) and confirmed** against the
+original by `tools/robin-verify`. Play and the tour place and restock them;
+the collector's game, a supplement, starts Robin beside seven of them with
+his inventory full, which reaches picking up each kind, carrying, and the
+drop. Four instructions of picking up are never reached: taking one of the
+thirty (play never walks him into one), the eleven full when he drops one,
+and a drop at the screen's left edge. **confirmed**, unless marked.
 
 ### Where they are
 
@@ -937,7 +952,15 @@ name the location and the position to read, Robin's (`0xC440`, `0xCB7F`,
 ## Trades and journeys
 
 Found by reading `0:DDEF`, `0:C3CA`, `0:D8EC` and the code they reach (#41).
-**read**, unless marked.
+
+**Rewritten (`games/robin/src/journeys.rs`)**. Confirmed against the
+original by `tools/robin-verify` as far as it's reached: the trade's test,
+taking out of the inventory and showing it, and recolouring. The trade
+itself needs R at `0x13` with three kind-2 items carried, which nothing
+reaches. The doorway, the sparkle and the hook read the ROM through
+`0:CD5F` in nearly every run, which the verifier skips (#21), so only a
+handful are compared; the journey, its wipe, and taking the third back are
+never reached. **read**, unless marked.
 
 ### The trade
 
@@ -984,7 +1007,7 @@ Found by reading `0:DDEF`, `0:C3CA`, `0:D8EC` and the code they reach (#41).
   item (`0xD47C`) is taken back if he has it (`0:C3AE`). Then the items,
   the copy to the screen, and the characters' set-up. It ends by jumping
   back to the main loop's start, not returning.
-- **Recolouring** (`0:C306`): at 26 locations of the first row (`0xC448`),
+- **Recolouring** (`0:C306`, **confirmed**): at 26 locations of the first row (`0xC448`),
   the attribute buffer's colours become white ink where there's paper, and
   bright cyan where there's ink but not white.
 
@@ -1063,7 +1086,9 @@ on each row*).
 
 ## The main loop
 
-`0xBE62`, which every routine above is called from. **read**, unless marked.
+`0xBE62`, which every routine above is called from. Its own checks, BREAK
+and the game over, are **rewritten (`games/robin/src/main_loop.rs`) and
+confirmed**; the order it calls the rest in is **read**, unless marked.
 
 - **BREAK** (`0:C433`), first: Caps Shift with Space starts a new game
   (`0xBE5A`: the stack reset, then the new game's set-up, `0:CC72`). Its
@@ -1084,8 +1109,8 @@ on each row*).
   down long enough (`0xCB75` at `0x3C`, *Robin's actions*), it prints its
   message (`0xB51F`) and starts a tune (`6:C006`). Then it waits, with
   interrupts on, until a key is pressed, and starts a new game as BREAK
-  does. Its message and tune are **confirmed**; the wait and the restart are
-  the main loop's.
+  does. Its message and tune are **confirmed** (the armed game reaches
+  them); the wait and the restart are the main loop's.
 
 ## Sound
 
