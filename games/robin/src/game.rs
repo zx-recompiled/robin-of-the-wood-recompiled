@@ -374,6 +374,32 @@ parts!(Characters {
     records: [u8; 44] = 0xAAB8 => "characters.records",
 });
 
+/// The wanderer (`docs/re/robin.md`, *The wanderer*).
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Wanderer {
+    /// Its sprite record.
+    pub record: [u8; 11],
+    /// Its location, timer, flags (bit 6 met, bit 7 turned) and position.
+    pub location: u16,
+    pub timer: u8,
+    pub flags: u8,
+    pub position: u8,
+    /// Kept in its walking's code: the counter, and the step, which is
+    /// `INC (HL)` or `DEC (HL)`.
+    pub counter: u8,
+    pub step: u8,
+}
+
+parts!(Wanderer {
+    record: [u8; 11] = 0xBB1B => "wanderer.record",
+    location: u16 = 0xBB26 => "wanderer.location",
+    timer: u8 = 0xBB28 => "wanderer.timer",
+    flags: u8 = 0xBB29 => "wanderer.flags",
+    position: u8 = 0xBB2A => "wanderer.position",
+    counter: u8 = 0xBA84 => "wanderer.counter",
+    step: u8 = 0xBAB6 => "wanderer.step",
+});
+
 /// The calls into other banks, through the trampoline at `0x5B8A`
 /// (`docs/re/robin.md`, *Sound*).
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -398,6 +424,7 @@ pub struct Game {
     pub robin: Robin,
     pub characters: Characters,
     pub banked: Banked,
+    pub wanderer: Wanderer,
     /// The rest of RAM, banks 0 to 7, as it was read: what the rewrite does
     /// not model yet, and the blocks' bytes, which the game mirrors in place.
     rest: Box<[[u8; BANK]; 8]>,
@@ -438,6 +465,7 @@ impl Game {
             .or_else(|| Robin::name_of(addr))
             .or_else(|| Characters::name_of(addr))
             .or_else(|| Banked::name_of(addr))
+            .or_else(|| Wanderer::name_of(addr))
             .unwrap_or("the rest of RAM")
     }
 
@@ -459,6 +487,7 @@ impl Game {
             .or_else(|| self.robin.get_part(addr))
             .or_else(|| self.characters.get_part(addr))
             .or_else(|| self.banked.get_part(addr))
+            .or_else(|| self.wanderer.get_part(addr))
             .unwrap_or(self.rest[bank][offset])
     }
 
@@ -475,7 +504,8 @@ impl Game {
             || self.sprites.set_part(addr, v)
             || self.robin.set_part(addr, v)
             || self.characters.set_part(addr, v)
-            || self.banked.set_part(addr, v))
+            || self.banked.set_part(addr, v)
+            || self.wanderer.set_part(addr, v))
         {
             let (bank, offset) = place(addr);
             self.rest[bank][offset] = v;
@@ -516,6 +546,7 @@ impl Game {
             robin: Robin::zeroed(),
             characters: Characters::zeroed(),
             banked: Banked::zeroed(),
+            wanderer: Wanderer::zeroed(),
             rest: Box::new(*banks),
         };
         g.display.read_parts(&read);
@@ -526,6 +557,7 @@ impl Game {
         g.robin.read_parts(&read);
         g.characters.read_parts(&read);
         g.banked.read_parts(&read);
+        g.wanderer.read_parts(&read);
         g
     }
 
@@ -546,6 +578,7 @@ impl Game {
         self.robin.write_parts(&mut write);
         self.characters.write_parts(&mut write);
         self.banked.write_parts(&mut write);
+        self.wanderer.write_parts(&mut write);
         banks
     }
 }

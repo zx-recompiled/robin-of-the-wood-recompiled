@@ -1,7 +1,7 @@
 //! The routines of the original that have been rewritten, and how each
 //! rewrite takes the original's registers (`docs/re/robin.md`).
 
-use robin::{actions, characters, map, movement, print, screen, sound, sprites};
+use robin::{actions, characters, map, movement, print, screen, sound, sprites, wanderer};
 
 use crate::capture::{Reg, Regs, Routine};
 
@@ -558,6 +558,99 @@ pub fn all() -> Vec<Routine> {
             },
         },
         Routine {
+            name: "the wanderer's set-up (0:CEA1)",
+            bank: Some(0),
+            entry: 0xCEA1,
+            code: (0xCEA1, 0xCEBA),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, _| {
+                wanderer::set_up(g);
+                r
+            },
+        },
+        Routine {
+            name: "the wanderer walks (0xBA83)",
+            bank: None,
+            entry: 0xBA83,
+            code: (0xBA83, 0xBB1A),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, a, r, _| {
+                wanderer::walk(g, a.sprites());
+                r
+            },
+        },
+        Routine {
+            name: "Robin meets the wanderer (0xBD87)",
+            bank: None,
+            entry: 0xBD87,
+            code: (0xBD87, 0xBDB8),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                wanderer::meet(g, io);
+                r
+            },
+        },
+        Routine {
+            name: "the meeting's sound and flash (0xBDCD)",
+            bank: None,
+            entry: 0xBDCD,
+            // After the trampoline's call and the three bytes it takes.
+            code: (0xBDD3, 0xBDF1),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                wanderer::flash(g, io);
+                r
+            },
+        },
+        Routine {
+            name: "start the meeting's sound (6:C00C)",
+            bank: Some(6),
+            entry: 0xC00C,
+            code: (0xC13D, 0xC159),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                sound::meeting(g, io);
+                r
+            },
+        },
+        Routine {
+            name: "do two things overlap (0xBDB9)",
+            bank: None,
+            entry: 0xBDB9,
+            code: (0xBDB9, 0xBDCC),
+            // It answers in the carry, with the difference in A, and leaves
+            // whichever register set its subtractions ended in.
+            outputs: &[
+                Reg::A,
+                Reg::F,
+                Reg::B,
+                Reg::C,
+                Reg::D,
+                Reg::E,
+                Reg::H,
+                Reg::L,
+                Reg::B_,
+                Reg::C_,
+                Reg::D_,
+                Reg::E_,
+                Reg::H_,
+                Reg::L_,
+            ],
+            exits: &[],
+            preserves: &[],
+            rewrite: |_, _, r, _| overlap_regs(r),
+        },
+        Routine {
             name: "Robin's actions (0:C8DF)",
             bank: Some(0),
             entry: 0xC8DF,
@@ -772,6 +865,104 @@ fn wall(name: &'static str, entry: u16, code: (u16, u16)) -> Routine {
         exits: &[],
         preserves: &[Reg::D, Reg::E, Reg::H, Reg::L],
         rewrite,
+    }
+}
+
+/// `0xBDB9` as it leaves the registers. It takes one thing's position in
+/// BC and the other's in the other set's BC (B vertical, C horizontal), and
+/// its limits in DE. It subtracts the vertical positions, flipping to the
+/// other set with `EXX` and negating when that borrows, and compares with
+/// D, the set it's in; then the same with the horizontal ones and E. The
+/// answer, in the carry, is the game's (`wanderer::overlap`); the rest is
+/// what those steps leave.
+fn overlap_regs(mut r: Regs) -> Regs {
+    fn exx(r: &mut Regs) {
+        for (a, b) in [
+            (Reg::B, Reg::B_),
+            (Reg::C, Reg::C_),
+            (Reg::D, Reg::D_),
+            (Reg::E, Reg::E_),
+            (Reg::H, Reg::H_),
+            (Reg::L, Reg::L_),
+        ] {
+            let t = r.get(a);
+            r.set(a, r.get(b));
+            r.set(b, t);
+        }
+    }
+    let (y, x) = (r.get(Reg::B), r.get(Reg::C));
+    let (y2, x2) = (r.get(Reg::B_), r.get(Reg::C_));
+    // One difference, as `SUB` then, on a borrow, `EXX` and `NEG`.
+    let difference = |r: &mut Regs, a: u8, other: Reg| {
+        exx(r);
+        let (d, f) = flags::sub(a, r.get(other));
+        if f & flags::C != 0 {
+            exx(r);
+            flags::neg(d)
+        } else {
+            (d, f)
+        }
+    };
+    let (dy, _) = difference(&mut r, y, Reg::B);
+    let down = r.get(Reg::D);
+    let f = flags::cp(dy, down);
+    if f & flags::C == 0 {
+        r.set(Reg::A, dy);
+        r.set(Reg::F, f);
+        return r;
+    }
+    let c = r.get(Reg::C);
+    let (dx, _) = difference(&mut r, c, Reg::C);
+    let across = r.get(Reg::E);
+    let f = flags::cp(dx, across);
+    let hit = wanderer::overlap((x, y), (x2, y2), down, across);
+    r.set(Reg::A, dx);
+    r.set(Reg::F, f & !flags::C | if hit { flags::C } else { 0 });
+    r
+}
+
+/// The flags of the Z80's 8-bit subtractions, as `SUB`, `CP` and `NEG`
+/// leave them.
+mod flags {
+    pub const C: u8 = 0x01;
+    const N: u8 = 0x02;
+    const PV: u8 = 0x04;
+    const H: u8 = 0x10;
+    const Z: u8 = 0x40;
+    const S: u8 = 0x80;
+
+    fn of(a: u8, b: u8, r: u8, xy: u8) -> u8 {
+        let mut f = N | (r & S) | (xy & 0x28);
+        if r == 0 {
+            f |= Z;
+        }
+        if a & 0x0F < b & 0x0F {
+            f |= H;
+        }
+        if (a ^ b) & (a ^ r) & 0x80 != 0 {
+            f |= PV;
+        }
+        if a < b {
+            f |= C;
+        }
+        f
+    }
+
+    /// `SUB b`: the result and the flags, bits 5 and 3 from the result.
+    pub fn sub(a: u8, b: u8) -> (u8, u8) {
+        let r = a.wrapping_sub(b);
+        (r, of(a, b, r, r))
+    }
+
+    /// `CP b`: the flags, bits 5 and 3 from the operand.
+    pub fn cp(a: u8, b: u8) -> u8 {
+        of(a, b, a.wrapping_sub(b), b)
+    }
+
+    /// `NEG`: 0 − a.
+    pub fn neg(a: u8) -> (u8, u8) {
+        let r = 0u8.wrapping_sub(a);
+        (r, of(0, a, r, r))
     }
 }
 

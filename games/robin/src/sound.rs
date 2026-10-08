@@ -97,3 +97,29 @@ pub fn play(g: &mut Game, io: &mut Io, delay: u8, length: u16, amplitudes: u16, 
         io.out(0xBFFD, g.read_in(bank, SAVED + n));
     }
 }
+
+/// The bank the music driver is in, and where it keeps whether a tune is
+/// playing and the effect it's to start.
+pub const MUSIC_BANK: u8 = 6;
+const PLAYING: u16 = 0xC190;
+const EFFECT: u16 = 0xC15A;
+
+/// Writes `v` to AY register `r` (`6:C127`).
+fn ay(io: &mut Io, r: u8, v: u8) {
+    io.out(0xFFFD, r);
+    io.out(0xBFFD, v);
+}
+
+/// Starts the sound for meeting the wanderer, for the interrupt's music
+/// player, unless a tune is playing: its flag, and the mixer and the noise
+/// period set (`6:C139`).
+pub fn meeting(g: &mut Game, io: &mut Io) {
+    let bank = usize::from(MUSIC_BANK);
+    if g.read_in(bank, PLAYING) != 0 {
+        return;
+    }
+    g.write_in(bank, EFFECT, 0x80);
+    g.write_in(bank, PLAYING, 0);
+    ay(io, 7, 0x28);
+    ay(io, 6, 0x1F);
+}
