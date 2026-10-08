@@ -578,45 +578,41 @@ pub fn all() -> Vec<Routine> {
 
 /// A floor routine: no registers in or out.
 fn floor(name: &'static str, entry: u16, code: (u16, u16)) -> Routine {
-    let rewrite: fn(
-        &mut robin::Game,
-        &robin::assets::Assets,
-        Regs,
-        &mut robin::inputs::Inputs,
-    ) -> Regs = match entry {
-        0xDD49 => |g, _, r, _| {
-            characters::save_floor(g);
-            r
-        },
-        0xDD55 => |g, _, r, _| {
-            characters::current_to_right(g);
-            r
-        },
-        0xDD5A => |g, _, r, _| {
-            characters::current_to_left(g);
-            r
-        },
-        0xDD66 => |g, _, r, _| {
-            characters::clear_left(g);
-            r
-        },
-        0xDD6B => |g, _, r, _| {
-            characters::clear_right(g);
-            r
-        },
-        0xDD79 => |g, _, r, _| {
-            characters::floors_vertically(g);
-            r
-        },
-        0xDD83 => |g, _, r, _| {
-            characters::floors_going_left(g);
-            r
-        },
-        _ => |g, _, r, _| {
-            characters::floors_going_right(g);
-            r
-        },
-    };
+    let rewrite: fn(&mut robin::Game, &robin::assets::Assets, Regs, &mut robin::io::Io) -> Regs =
+        match entry {
+            0xDD49 => |g, _, r, _| {
+                characters::save_floor(g);
+                r
+            },
+            0xDD55 => |g, _, r, _| {
+                characters::current_to_right(g);
+                r
+            },
+            0xDD5A => |g, _, r, _| {
+                characters::current_to_left(g);
+                r
+            },
+            0xDD66 => |g, _, r, _| {
+                characters::clear_left(g);
+                r
+            },
+            0xDD6B => |g, _, r, _| {
+                characters::clear_right(g);
+                r
+            },
+            0xDD79 => |g, _, r, _| {
+                characters::floors_vertically(g);
+                r
+            },
+            0xDD83 => |g, _, r, _| {
+                characters::floors_going_left(g);
+                r
+            },
+            _ => |g, _, r, _| {
+                characters::floors_going_right(g);
+                r
+            },
+        };
     Routine {
         name,
         bank: Some(0),
@@ -632,17 +628,13 @@ fn floor(name: &'static str, entry: u16, code: (u16, u16)) -> Routine {
 /// A wall test: it takes Robin's position in HL, and answers in A and the
 /// flags, as `OR (HL)` leaves them on a wall and `XOR A` does otherwise.
 fn wall(name: &'static str, entry: u16, code: (u16, u16)) -> Routine {
-    let rewrite: fn(
-        &mut robin::Game,
-        &robin::assets::Assets,
-        Regs,
-        &mut robin::inputs::Inputs,
-    ) -> Regs = match entry {
-        0xDC6C => |g, _, r, _| answer(r, movement::wall_right(g, r.get(Reg::L), r.get(Reg::H))),
-        0xDC5B => |g, _, r, _| answer(r, movement::wall_left(g, r.get(Reg::L), r.get(Reg::H))),
-        0xDC7F => |g, _, r, _| answer(r, movement::wall_up(g, r.get(Reg::L), r.get(Reg::H))),
-        _ => |g, _, r, _| answer(r, movement::wall_down(g, r.get(Reg::L), r.get(Reg::H))),
-    };
+    let rewrite: fn(&mut robin::Game, &robin::assets::Assets, Regs, &mut robin::io::Io) -> Regs =
+        match entry {
+            0xDC6C => |g, _, r, _| answer(r, movement::wall_right(g, r.get(Reg::L), r.get(Reg::H))),
+            0xDC5B => |g, _, r, _| answer(r, movement::wall_left(g, r.get(Reg::L), r.get(Reg::H))),
+            0xDC7F => |g, _, r, _| answer(r, movement::wall_up(g, r.get(Reg::L), r.get(Reg::H))),
+            _ => |g, _, r, _| answer(r, movement::wall_down(g, r.get(Reg::L), r.get(Reg::H))),
+        };
     Routine {
         name,
         bank: Some(0),

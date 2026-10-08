@@ -2,7 +2,7 @@
 //! on each row*).
 
 use crate::game::Game;
-use crate::inputs::Random;
+use crate::io::Random;
 use crate::sprites::{self, Sprites};
 
 /// The four row lists, 12 bytes each.
