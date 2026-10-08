@@ -547,6 +547,19 @@ pub fn all() -> Vec<Routine> {
             },
         },
         Routine {
+            name: "move and draw one of the second group (0:DAE4)",
+            bank: Some(0),
+            entry: 0xDAE4,
+            code: (0xDAE4, 0xDBF0),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, a, r, io| {
+                characters::move_second(g, a.sprites(), &mut io.random);
+                r
+            },
+        },
+        Routine {
             name: "move and draw one of the four (A8D6)",
             bank: None,
             entry: 0xA8D6,

@@ -757,6 +757,29 @@ every call play and the tour make (#38), unless marked.
   way, and the character the sequence for firing (`0xAB14` right, `0xAB1A`
   left).
 
+### The second group
+
+Found by reading `0:DAE4` (#41). **read**, unless marked.
+
+- **The locations from 256 up have a second group of four characters**,
+  with their own lists at `0xDC2B`, 12 bytes each, one for each row by its
+  number (*The four on each row* for the entry's set-up). The current row's
+  list is `0xC446`, and their sprite records are at `0xDBF1`, 11 bytes apart,
+  drawn from frame table `0x8C8F`.
+- **Walking them** (`0:DAE4`, from the main loop) is the four's walking
+  (`0xA8D6`) with less to it:
+  - one a call, by a counter kept in its own code (`0xDAE5`);
+  - only one in Robin's column or beside it moves;
+  - it moves two positions a step, with no floor to stop it, and is never
+    still;
+  - one time in 32, R (`0:DB38`) turns it to face Robin. It judges the way
+    from the start of the character's screen, not its position: right if
+    Robin's position, a quarter of it plus `0x1C`, is at least `0x1C` times
+    how many screens the character is along;
+  - it's drawn as the four are. When it's erased, it's given its walking
+    sequence again (`0xDC1D` left, `0xDC24` right).
+  - it never fires; touching Robin hurts him instead (*Fighting*).
+
 ### The wanderer
 
 Found by reading `0xBA83`, `0xBD87` and the code they reach (#39).
