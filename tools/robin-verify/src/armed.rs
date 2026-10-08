@@ -1,6 +1,6 @@
 //! A game with Robin armed from its start (#36, Decision 1): the sword, the
 //! bow and ten arrows, set as the game's own code sets them when he's given
-//! them, and his energy full. Play never gets that far, so this is how his
+//! them, and energy 9. Play never gets that far, so this is how his
 //! attacks with them, and being knocked down and getting up again, are
 //! reached and checked: with no energy, a knock-down ends the game. It
 //! is a supplement: states the original can be in, reached sooner than play
