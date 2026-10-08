@@ -168,6 +168,19 @@ pub const ARRIVAL: Tune = Tune {
     other: 0xC657,
 };
 
+/// The tune the game over plays (`6:C006`).
+pub const GAME_OVER: Tune = Tune {
+    start: 0xC065,
+    speed: 0x0C,
+    notes: 0xC954,
+    other: 0xC92F,
+};
+
+/// Starts the game over's tune (`6:C006`).
+pub fn game_over_tune(g: &mut Game, io: &mut Io) {
+    start_tune(g, io, GAME_OVER);
+}
+
 /// Starts the tune a hit plays (`6:C048`).
 pub fn hit_tune(g: &mut Game, io: &mut Io) {
     start_tune(g, io, HIT);

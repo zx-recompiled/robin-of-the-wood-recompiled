@@ -1061,6 +1061,32 @@ him. The armed game (*Robin's actions*) lands his arrows on a character.
 four row characters, bit 5 of its state is set too, so it stops (*The four
 on each row*).
 
+## The main loop
+
+`0xBE62`, which every routine above is called from. **read**, unless marked.
+
+- **BREAK** (`0:C433`), first: Caps Shift with Space starts a new game
+  (`0xBE5A`: the stack reset, then the new game's set-up, `0:CC72`). Its
+  answer is in the carry, from rotating the keyboard's bits, so the other
+  flags are left as they came in. **confirmed**
+- **Then, in order**:
+  1. Robin's update (*Robin's movement*);
+  2. the objects in flight (*Fighting*);
+  3. the four and the second group (*The characters*);
+  4. the hits (*Fighting*);
+  5. the wanderer (*The wanderer*) and the fifth character;
+  6. Robin's sword and fists, and meeting the wanderer;
+  7. the screen's flush (*The screen*);
+  8. picking things up (*Items*);
+  9. the game over, the hook and the trade (*Trades and journeys*);
+  10. last, leaving the screen (*Robin's movement*).
+- **The game over** (`0xBF3F`): once his energy is negative and he's lain
+  down long enough (`0xCB75` at `0x3C`, *Robin's actions*), it prints its
+  message (`0xB51F`) and starts a tune (`6:C006`). Then it waits, with
+  interrupts on, until a key is pressed, and starts a new game as BREAK
+  does. Its message and tune are **confirmed**; the wait and the restart are
+  the main loop's.
+
 ## Sound
 
 - **It uses the AY sound chip.** It selects registers through `0xFFFD` and

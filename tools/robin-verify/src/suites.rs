@@ -2,8 +2,8 @@
 //! rewrite takes the original's registers (`docs/re/robin.md`).
 
 use robin::{
-    actions, characters, fifth, fighting, items, journeys, map, movement, print, screen, sound,
-    sprites, wanderer,
+    actions, characters, fifth, fighting, items, journeys, main_loop, map, movement, print, screen,
+    sound, sprites, wanderer,
 };
 
 use crate::capture::{Reg, Regs, Routine};
@@ -570,6 +570,47 @@ pub fn all() -> Vec<Routine> {
             preserves: &[],
             rewrite: |g, a, r, inputs| {
                 characters::move_one(g, a.sprites(), &mut inputs.random);
+                r
+            },
+        },
+        Routine {
+            name: "BREAK held (0:C433)",
+            bank: Some(0),
+            entry: 0xC433,
+            code: (0xC433, 0xC43E),
+            // It answers in the carry, from an RRA, which leaves S, Z and
+            // P/V as they were.
+            outputs: &[Reg::A, Reg::F],
+            exits: &[],
+            preserves: &[],
+            rewrite: |_, _, mut r, io| {
+                let first = io.input(0x7FFE);
+                // RRA rotates the carry in: the caller's, then 0, as the first
+                // left it.
+                let a = if first & 1 != 0 {
+                    first >> 1 | (r.get(Reg::F) & 1) << 7
+                } else {
+                    io.input(0xFEFE) >> 1
+                };
+                let held = main_loop::break_held(io);
+                let carry = u8::from(!held);
+                r.set(Reg::A, a);
+                r.set(Reg::F, r.get(Reg::F) & 0xC4 | a & 0x28 | carry);
+                r
+            },
+        },
+        Routine {
+            name: "the game over (0xBF3F)",
+            bank: None,
+            entry: 0xBF3F,
+            code: (0xBF3F, 0xBF5C),
+            // It ends at the wait for a key that starts the game again,
+            // which is the main loop's, or returns.
+            outputs: &[],
+            exits: &[0xBE95, 0xBF5D],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                main_loop::game_over(g, io);
                 r
             },
         },

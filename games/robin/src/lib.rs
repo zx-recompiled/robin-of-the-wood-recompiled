@@ -18,6 +18,7 @@ pub mod io;
 pub mod items;
 pub mod journeys;
 pub mod layout;
+pub mod main_loop;
 pub mod map;
 pub mod movement;
 pub mod print;
