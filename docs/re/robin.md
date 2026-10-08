@@ -511,9 +511,8 @@ characters, so it is not rewritten yet. **read**, unless marked.
     out;
   - it then resets the counter to 1, so it acts on every call, or to 3,
     every third, while he's fighting (`0xCB74` or `0xCB75` non-zero);
-  - when it acts, it moves him (`0:C852`), runs his actions (`0:C8DF`:
-    firing and fighting, with the characters), and redraws his sprite from
-    frame table `0x8C25`.
+  - when it acts, it moves him (`0:C852`), runs his actions (`0:C8DF`,
+    *Robin's actions*), and redraws his sprite from frame table `0x8C25`.
 
 ### The controls
 
@@ -559,6 +558,88 @@ against the play area's edges:
 
 Then it takes the step (`0:C127`) and enters the new location (`0xBF0E`,
 *The map*). Otherwise it starts the loop again.
+
+## Robin's actions
+
+Found by reading `0:C8DF` and the code it reaches (#36). **read**, unless
+marked.
+
+### His state
+
+- **His state byte, `0xCB81`, is one of 16 states**, each with a handler,
+  found through a table of addresses at `0xCC3C`:
+
+  | States | What he's doing |
+  |---|---|
+  | 0, 1 | standing |
+  | 2, 3 | walking right, left |
+  | 4, 5 | walking up, down |
+  | 6, 7 | a stroke of the sword |
+  | 8, 9 | firing the bow |
+  | 10, 11 | a blow of his fists |
+  | 12, 13 | the sword's other stroke, with down held |
+  | 14, 15 | knocked down |
+
+  Bit 0 of the state is the way he faces in every pair: 0 right, 1 left.
+- **Each handler reads his controls** (`0xCB85`, *The controls*) and either
+  leaves things as they are, or names his next state and the animation
+  sequence his sprite is to play. Both are then stored: the state in
+  `0xCB81`, the sequence in his sprite record (`0xCB78`, *Sprites*).
+- **The sequences** are at `0xCB97`–`0xCC3B`: frame numbers, ending in
+  `0xFF` and the address to loop back to. The last standing sequence is
+  kept at `0xCB82`/`0xCB83`, so walking up or down with no direction left
+  returns to it.
+
+### Starting an attack
+
+**Fire starts an attack** when all of these hold:
+- he isn't already attacking (`0xCB74` is 0);
+- he isn't knocked down (`0xCB75` is 0);
+- he's aligned to the grid (horizontal position a multiple of 4, vertical a
+  multiple of 8);
+- no direction up or down is held.
+
+The attack's way is the direction held, or the way he faces. With a
+direction held, its sequence starts a frame earlier. Its counter, `0xCB74`,
+starts at 16, and which attack it is depends on what he carries:
+
+1. **The bow**, if a flag at `0xD47B` is set and arrows are left
+   (`0xD47D`), and no character on the screen is within `0x32` of him. Each
+   shot uses an arrow; when the last goes, a message is printed (`0xB423`).
+   The same flag makes the characters always fire (*The four on each row*),
+   so it probably means he has the bow. **guess**
+2. **The sword**, if a flag at `0xD47A` is set: states 6 and 7, or 12 and
+   13 if he's holding down (which can only be so when he attacks again
+   without letting go of fire).
+3. **His fists**, otherwise.
+
+### While attacking
+
+- **Each frame of an attack counts `0xCB74` down.** On the attack's 7th
+  frame, the bow's states fire an arrow (`0xBB43`):
+  - only if its slot in the objects in flight, `0xBE3F`, is free;
+  - only if he isn't within two columns of either edge of the play area;
+  - with a short beeper twang (`0xBE2C`);
+  - the arrow's column, row and way go into the slot (#40 for its flight).
+- **When the counter runs out**, he attacks again if fire is still held.
+  Otherwise he walks the way held, or stands.
+
+### Knocked down
+
+- **When `0xCB75` is `0x6E`** (set when something hits him, **guess**:
+  nothing read so far sets it, #40):
+  - his attack counter is cleared;
+  - a sound plays (*Sound*);
+  - a count at `0xD481` drops by 2 (his energy, **guess**);
+  - `0:D7F7`: if the count is now below 9 (or `0xFF`), it prints a message
+    (`0xB3DB`), adds 1 back, and prints the count as a digit on the panel;
+  - his controls are overridden to do nothing (`0xD0CE`, *The controls*);
+  - he goes to state 14 or 15.
+- **In states 14 and 15, `0xCB75` counts down.** When it reaches 0:
+  - he's back in state 0;
+  - the override is cleared;
+  - the lower panel's colours are reset (`0xBE0F`: the 64 attribute cells
+    from `0x5A40` take a colour from `0xBE47`).
 
 ## The characters
 
@@ -667,9 +748,26 @@ every call play and the tour make (#38), unless marked.
   (tone periods, noise, mixer, volumes, envelope shape). It also reads
   registers back through `0xFFFD`. The code is at `0xC0xx`–`0xC2xx`, in a
   paged bank. **provisional**
-- **It uses the beeper too, at the menu**: port `0xFE` takes `0x00`, `0x08`,
-  `0x10` and `0x18` from one place (`0xC0AE`), toggling both EAR (bit 4) and
-  MIC (bit 3). None was seen in a short stretch of play. **provisional**
+- **It plays sampled sounds through the beeper and the AY at once**: a
+  player in bank 4 at `0xC090`, reached through a trampoline in bank 5,
+  `0x5B8A` (**read**, #36):
+  - **The trampoline** takes the address and the bank to call from the
+    three bytes after its call. It pages that bank in at `0xC000`, keeping
+    the one it replaces at `0x5BC8` (and the current one at `0x5BC7`), and
+    pages it back afterwards. It leaves interrupts off.
+  - **The player** turns interrupts off and saves the AY's 14 registers by
+    reading them back, then sets the AY up for playing. It plays a sample of
+    so many bytes, a bit at a time, from its highest bit. Each bit is
+    masked with an amplitude, which changes every 64 bytes from a second
+    table, and the result is written twice: to port `0xFE`, as EAR and MIC
+    (bits 4 and 3), and to `0xBFFD`, as the AY's volume. A delay between
+    bits sets the rate. Then it restores the registers and turns interrupts
+    back on.
+  - **When Robin is knocked down**, `4:C012` picks one of four samples by R
+    (#37), of 1,000 to 2,100 bytes: tens of thousands of writes,
+    with the game standing still while they play.
+  - The menu plays its samples through the same player (`0xC0AE` is its
+    write to port `0xFE`).
 - The menu offers *ENTER = music on/off*. **provisional**
 
 ## Input
