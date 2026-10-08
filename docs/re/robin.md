@@ -780,6 +780,41 @@ Found by reading `0:DAE4` (#41). **read**, unless marked.
     sequence again (`0xDC1D` left, `0xDC24` right).
   - it never fires; touching Robin hurts him instead (*Fighting*).
 
+### The fifth character
+
+Found by reading `0xB7DB` and the code it reaches (#41). **read**, unless
+marked.
+
+- **Two who walk a route together**, whose records are extended sprite
+  records:
+  - the first at `0xAAE4`, the fifth record a hit can strike (*Fighting*);
+  - its companion at `0xBA4F`.
+
+  After each record come its way (`+0x0B`, bit 0 set for left), the route's
+  start and end locations (`+0x0C`, `+0x0E`) and the location it's in
+  (`+0x10`). `0xBA61` says who's out (bit 1 the first, bit 0 the companion)
+  and whether the first has been robbed (bit 2).
+- **Bringing them on** (`0xB7DB`, from the main loop): when neither is out,
+  and Robin hasn't robbed the first six times (`0xD482`), R picks one of
+  eight routes at `0xBA63`, never the same start twice running. Both start
+  at its start, the first at position `0x18`, the companion at `0x30`.
+- **Walking them**, every fourth call (a counter, `0xBA62`, and a mask kept
+  in the code, `0xB854`), each that's out:
+  - steps one position its way, into the next location along at an edge,
+    and turns round at either end of its route;
+  - is drawn, as the four on each row are, from its own frame table: if it's
+    in Robin's location, or coming on from the next one to the right.
+- **The walking is parameterised by its own code** (`0xB947`): the two
+  sequences, the frame table, and the target of a jump (`0xB953`), which
+  makes it turn on the spot instead of walking.
+- **Robbing the first**: when Robin strikes it (bit 5 of its flags), it's
+  marked robbed, and drops what it carries, one or two kind-2 items, where
+  its companion is (*Items*: the dropping code's operands are pointed at the
+  companion's position, then back at Robin's). Each robbery counts up to
+  six. From then on, while it's on Robin's row it only turns on the spot,
+  every second call; once he's off its row it's gone. The companion goes
+  too, once it's away from Robin and inside the screen's middle.
+
 ### The wanderer
 
 Found by reading `0xBA83`, `0xBD87` and the code they reach (#39).

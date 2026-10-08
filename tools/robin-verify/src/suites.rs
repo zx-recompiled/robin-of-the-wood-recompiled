@@ -2,7 +2,8 @@
 //! rewrite takes the original's registers (`docs/re/robin.md`).
 
 use robin::{
-    actions, characters, fighting, items, map, movement, print, screen, sound, sprites, wanderer,
+    actions, characters, fifth, fighting, items, map, movement, print, screen, sound, sprites,
+    wanderer,
 };
 
 use crate::capture::{Reg, Regs, Routine};
@@ -569,6 +570,19 @@ pub fn all() -> Vec<Routine> {
             preserves: &[],
             rewrite: |g, a, r, inputs| {
                 characters::move_one(g, a.sprites(), &mut inputs.random);
+                r
+            },
+        },
+        Routine {
+            name: "the fifth character and its companion (0xB7DB)",
+            bank: None,
+            entry: 0xB7DB,
+            code: (0xB7DB, 0xBA40),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, a, r, io| {
+                fifth::bring_on(g, a.sprites(), io);
                 r
             },
         },
