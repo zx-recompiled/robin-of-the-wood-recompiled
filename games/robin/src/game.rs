@@ -364,6 +364,11 @@ pub struct Characters {
     pub cycle: u8,
     /// The four's sprite records, 11 bytes each (*Sprites*).
     pub records: [u8; 44],
+    /// The second group, at the locations from 256 up: the current row's
+    /// list, the cycle counter kept in its walking's code, and its records.
+    pub second_row: u16,
+    pub second_cycle: u8,
+    pub second_records: [u8; 44],
 }
 
 parts!(Characters {
@@ -372,6 +377,9 @@ parts!(Characters {
     floors: [u8; 84] = 0xDD9B => "characters.floors",
     cycle: u8 = 0xA8D7 => "characters.cycle",
     records: [u8; 44] = 0xAAB8 => "characters.records",
+    second_row: u16 = 0xC446 => "characters.second_row",
+    second_cycle: u8 = 0xDAE5 => "characters.second_cycle",
+    second_records: [u8; 44] = 0xDBF1 => "characters.second_records",
 });
 
 /// The wanderer (`docs/re/robin.md`, *The wanderer*).

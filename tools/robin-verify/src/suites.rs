@@ -2,7 +2,8 @@
 //! rewrite takes the original's registers (`docs/re/robin.md`).
 
 use robin::{
-    actions, characters, fighting, map, movement, print, screen, sound, sprites, wanderer,
+    actions, characters, fifth, fighting, items, journeys, main_loop, map, movement, print, screen,
+    sound, sprites, wanderer,
 };
 
 use crate::capture::{Reg, Regs, Routine};
@@ -547,6 +548,19 @@ pub fn all() -> Vec<Routine> {
             },
         },
         Routine {
+            name: "move and draw one of the second group (0:DAE4)",
+            bank: Some(0),
+            entry: 0xDAE4,
+            code: (0xDAE4, 0xDBF0),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, a, r, io| {
+                characters::move_second(g, a.sprites(), &mut io.random);
+                r
+            },
+        },
+        Routine {
             name: "move and draw one of the four (A8D6)",
             bank: None,
             entry: 0xA8D6,
@@ -556,6 +570,244 @@ pub fn all() -> Vec<Routine> {
             preserves: &[],
             rewrite: |g, a, r, inputs| {
                 characters::move_one(g, a.sprites(), &mut inputs.random);
+                r
+            },
+        },
+        Routine {
+            name: "BREAK held (0:C433)",
+            bank: Some(0),
+            entry: 0xC433,
+            code: (0xC433, 0xC43E),
+            // It answers in the carry, from an RRA, which leaves S, Z and
+            // P/V as they were.
+            outputs: &[Reg::A, Reg::F],
+            exits: &[],
+            preserves: &[],
+            rewrite: |_, _, mut r, io| {
+                let first = io.input(0x7FFE);
+                // RRA rotates the carry in: the caller's, then 0, as the first
+                // left it.
+                let a = if first & 1 != 0 {
+                    first >> 1 | (r.get(Reg::F) & 1) << 7
+                } else {
+                    io.input(0xFEFE) >> 1
+                };
+                let held = main_loop::break_held(io);
+                let carry = u8::from(!held);
+                r.set(Reg::A, a);
+                r.set(Reg::F, r.get(Reg::F) & 0xC4 | a & 0x28 | carry);
+                r
+            },
+        },
+        Routine {
+            name: "the game over (0xBF3F)",
+            bank: None,
+            entry: 0xBF3F,
+            code: (0xBF3F, 0xBF5C),
+            // It ends at the wait for a key that starts the game again,
+            // which is the main loop's, or returns.
+            outputs: &[],
+            exits: &[0xBE95, 0xBF5D],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                main_loop::game_over(g, io);
+                r
+            },
+        },
+        Routine {
+            name: "the main loop's hook and journeys (0:C3CA)",
+            bank: Some(0),
+            entry: 0xC3CA,
+            code: (0xC3CA, 0xC40E),
+            outputs: &[],
+            exits: &[0xBE98, 0xBE62],
+            preserves: &[],
+            rewrite: |g, a, r, io| {
+                journeys::hook(g, a, io);
+                r
+            },
+        },
+        Routine {
+            name: "a doorway on entering (0:D8EC)",
+            bank: Some(0),
+            entry: 0xD8EC,
+            code: (0xD8EC, 0xD97C),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                journeys::doorway(g, io);
+                r
+            },
+        },
+        Routine {
+            name: "a doorway's sparkle (0:D97D)",
+            bank: Some(0),
+            entry: 0xD97D,
+            code: (0xD97D, 0xDA6D),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                journeys::sparkle(g, io);
+                r
+            },
+        },
+        Routine {
+            name: "the trade (0:DDEF)",
+            bank: Some(0),
+            entry: 0xDDEF,
+            code: (0xDDEF, 0xDED1),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                journeys::trade(g, io);
+                r
+            },
+        },
+        Routine {
+            name: "a location recoloured (0:C306)",
+            bank: Some(0),
+            entry: 0xC306,
+            code: (0xC306, 0xC33B),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, _| {
+                journeys::recolour(g);
+                r
+            },
+        },
+        Routine {
+            name: "the inventory shown (0:DA84)",
+            bank: Some(0),
+            entry: 0xDA84,
+            code: (0xDA84, 0xDAB8),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, _| {
+                journeys::show_inventory(g);
+                r
+            },
+        },
+        Routine {
+            name: "an item taken out of the inventory (0:DA6E)",
+            bank: Some(0),
+            entry: 0xDA6E,
+            code: (0xDA6E, 0xDA83),
+            // The slot before, to look at again; its caller counts in BC.
+            outputs: &[Reg::H, Reg::L],
+            exits: &[],
+            preserves: &[Reg::B, Reg::C],
+            rewrite: |g, _, mut r, _| {
+                let at = u16::from_be_bytes([r.get(Reg::H), r.get(Reg::L)]);
+                let back = journeys::remove(g, at, r.get(Reg::B));
+                r.set_pair(Reg::H, Reg::L, back);
+                r
+            },
+        },
+        Routine {
+            name: "the fifth character and its companion (0xB7DB)",
+            bank: None,
+            entry: 0xB7DB,
+            code: (0xB7DB, 0xBA40),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, a, r, io| {
+                fifth::bring_on(g, a.sprites(), io);
+                r
+            },
+        },
+        Routine {
+            name: "a location's items placed (0:D484)",
+            bank: Some(0),
+            entry: 0xD484,
+            code: (0xD484, 0xD4F3),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            // Its restocking tests the Z flag it's called with.
+            rewrite: |g, _, r, io| {
+                items::place(g, &mut io.random, r.get(Reg::F) & 0x40 != 0);
+                r
+            },
+        },
+        Routine {
+            name: "the world restocked (0:D2DF)",
+            bank: Some(0),
+            entry: 0xD2DF,
+            code: (0xD2DF, 0xD330),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                items::restock(g, &mut io.random, r.get(Reg::F) & 0x40 != 0);
+                r
+            },
+        },
+        Routine {
+            name: "a free place for an item (0:D35A)",
+            bank: Some(0),
+            entry: 0xD35A,
+            code: (0xD35A, 0xD389),
+            // A is the free place's kind, 0: the new game's set-up stores
+            // it plus 1 (0:D2D0).
+            outputs: &[Reg::A, Reg::D, Reg::E],
+            exits: &[],
+            // Its callers keep the count they're filling to in B.
+            preserves: &[
+                Reg::B,
+                Reg::H,
+                Reg::L,
+                Reg::Ixh,
+                Reg::Ixl,
+                Reg::Iyh,
+                Reg::Iyl,
+            ],
+            rewrite: |g, _, mut r, io| {
+                let at = items::free_place(g, &mut io.random);
+                r.set_pair(Reg::D, Reg::E, at);
+                r.set(Reg::A, g.read(at));
+                r
+            },
+        },
+        Routine {
+            name: "an item picked up (0:D6D0)",
+            bank: Some(0),
+            entry: 0xD6D0,
+            // With what it gives, the inventory and dropping, which follow
+            // the energy's figure (0:D7F7) in the code.
+            code: (0xD6D0, 0xD8C5),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                items::pick_up(g, io);
+                r
+            },
+        },
+        Routine {
+            name: "a beep (0:D8C6)",
+            bank: Some(0),
+            entry: 0xD8C6,
+            code: (0xD8C6, 0xD8D1),
+            outputs: &[],
+            exits: &[],
+            preserves: &[
+                Reg::D,
+                Reg::E,
+                Reg::H,
+                Reg::L,
+                Reg::Ixh,
+                Reg::Ixl,
+                Reg::Iyh,
+                Reg::Iyl,
+            ],
+            rewrite: |_, _, r, io| {
+                sound::beep(io, r.get(Reg::B));
                 r
             },
         },

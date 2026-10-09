@@ -438,3 +438,97 @@ pub fn enter(g: &mut Game, sprites: &Sprites, direction: u8, random: &mut Random
     g.write(ROBIN + 4, g.read(ROBIN + 4) | 0x05);
     sprites::animate(g, sprites, ROBIN);
 }
+
+/// The second group's frame table and walking sequences.
+const SECOND_FRAMES: u16 = 0x8C8F;
+
+/// Moves the next of the second group, one a call, at the locations from
+/// 256 up, and draws it (`0:DAE4`). As the four on each row do (`0xA8D6`),
+/// but two positions a step, with no floor, never still, and never firing.
+/// One time in 32, R turns it to face Robin, judged from the start of its
+/// screen rather than its position.
+pub fn move_second(g: &mut Game, sprites: &Sprites, random: &mut Random) {
+    if g.map.location >> 8 == 0 {
+        return;
+    }
+    g.characters.second_cycle = g.characters.second_cycle.wrapping_sub(1);
+    if g.characters.second_cycle == 0 {
+        g.characters.second_cycle = 4;
+    }
+    g.sprites.table = SECOND_FRAMES;
+    let n = g.characters.second_cycle;
+    let at = nth(g.characters.second_row, 3, n);
+    let column = g.map.location as u8 & 0x0F;
+    let near = g.read(at).wrapping_sub(column).wrapping_add(1) & 0x0F;
+    if near < 3 {
+        let start = (0..=near)
+            .fold(0u8, |a, _| a.wrapping_add(0x1C))
+            .wrapping_sub(0x1C);
+        let robin = (g.robin.x >> 2).wrapping_add(0x1C);
+        let toward = if robin >= start { RIGHT } else { 0 };
+        if random.r() & 0x1F == 0 {
+            let state = g.read(at + 2);
+            g.write(at + 2, (state & 0x3F) | toward | (state >> 1 & FACED));
+        }
+        let position = g.read(at + 1);
+        let carry = if g.read(at + 2) & RIGHT == 0 {
+            let p = position.wrapping_sub(2);
+            if p & 0x80 == 0 {
+                g.write(at + 1, p);
+                None
+            } else {
+                g.write(at + 1, p.wrapping_add(0x70));
+                Some(0xFF)
+            }
+        } else {
+            let p = position.wrapping_add(2);
+            g.write(at + 1, p);
+            (p >= 0x70).then(|| {
+                g.write(at + 1, p - 0x70);
+                1
+            })
+        };
+        if let Some(carry) = carry {
+            g.write(at, g.read(at).wrapping_add(carry) & 0x0F);
+        }
+    }
+    let record = nth(SECOND_RECORDS, 11, g.characters.second_cycle);
+    let theirs = g.read(at) & 0x0F;
+    let position = g.read(at + 1);
+    let flags = record + 4;
+    let x = if theirs == column {
+        Some(position)
+    } else if theirs == column.wrapping_add(1) & 0x0F && position < 0x10 {
+        Some(position + 0x70)
+    } else {
+        None
+    };
+    let state = g.read(at + 2);
+    match x {
+        Some(x) => {
+            g.write(record + 9, x);
+            if (state ^ state << 1) & 0x80 != 0 {
+                let (state, walk) = if state & RIGHT == 0 {
+                    (state & !FACED, SECOND_WALK_LEFT)
+                } else {
+                    (state | FACED, SECOND_WALK_RIGHT)
+                };
+                g.write(at + 2, state);
+                sequence(g, record, walk);
+            }
+            g.write(flags, g.read(flags) | 0x05);
+            sprites::animate(g, sprites, record);
+        }
+        None => {
+            g.write(flags, g.read(flags) & !0x04);
+            sprites::animate(g, sprites, record);
+            g.write(flags, g.read(flags) & !0x01);
+            let walk = if g.read(at + 2) & RIGHT == 0 {
+                SECOND_WALK_LEFT
+            } else {
+                SECOND_WALK_RIGHT
+            };
+            sequence(g, record, walk);
+        }
+    }
+}

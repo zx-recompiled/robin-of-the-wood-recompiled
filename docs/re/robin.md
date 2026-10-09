@@ -757,6 +757,72 @@ every call play and the tour make (#38), unless marked.
   way, and the character the sequence for firing (`0xAB14` right, `0xAB1A`
   left).
 
+### The second group
+
+Found by reading `0:DAE4` (#41).
+
+**Rewritten (`games/robin/src/characters.rs`, `move_second`) and
+confirmed** against the original by `tools/robin-verify`: the tour and play
+reach every instruction. **confirmed**, unless marked.
+
+- **The locations from 256 up have a second group of four characters**,
+  with their own lists at `0xDC2B`, 12 bytes each, one for each row by its
+  number (*The four on each row* for the entry's set-up). The current row's
+  list is `0xC446`, and their sprite records are at `0xDBF1`, 11 bytes apart,
+  drawn from frame table `0x8C8F`.
+- **Walking them** (`0:DAE4`, from the main loop) is the four's walking
+  (`0xA8D6`) with less to it:
+  - one a call, by a counter kept in its own code (`0xDAE5`);
+  - only one in Robin's column or beside it moves;
+  - it moves two positions a step, with no floor to stop it, and is never
+    still;
+  - one time in 32, R (`0:DB38`) turns it to face Robin. It judges the way
+    from the start of the character's screen, not its position: right if
+    Robin's position, a quarter of it plus `0x1C`, is at least `0x1C` times
+    how many screens the character is along;
+  - it's drawn as the four are. When it's erased, it's given its walking
+    sequence again (`0xDC1D` left, `0xDC24` right).
+  - it never fires; touching Robin hurts him instead (*Fighting*).
+
+### The fifth character
+
+Found by reading `0xB7DB` and the code it reaches (#41).
+
+**Rewritten (`games/robin/src/fifth.rs`) and confirmed** against the
+original by `tools/robin-verify`, all but the robbery: nothing yet has Robin
+strike the first, so its 72 instructions are never reached. **confirmed**,
+unless marked.
+
+- **Two who walk a route together**, whose records are extended sprite
+  records:
+  - the first at `0xAAE4`, the fifth record a hit can strike (*Fighting*);
+  - its companion at `0xBA4F`.
+
+  After each record come its way (`+0x0B`, bit 0 set for left), the route's
+  start and end locations (`+0x0C`, `+0x0E`) and the location it's in
+  (`+0x10`). `0xBA61` says who's out (bit 1 the first, bit 0 the companion)
+  and whether the first has been robbed (bit 2).
+- **Bringing them on** (`0xB7DB`, from the main loop): when neither is out,
+  and Robin hasn't robbed the first six times (`0xD482`), R picks one of
+  eight routes at `0xBA63`, never the same start twice running. Both start
+  at its start, the first at position `0x18`, the companion at `0x30`.
+- **Walking them**, every fourth call (a counter, `0xBA62`, and a mask kept
+  in the code, `0xB854`), each that's out:
+  - steps one position its way, into the next location along at an edge,
+    and turns round at either end of its route;
+  - is drawn, as the four on each row are, from its own frame table: if it's
+    in Robin's location, or coming on from the next one to the right.
+- **The walking is parameterised by its own code** (`0xB947`): the two
+  sequences, the frame table, and the target of a jump (`0xB953`), which
+  makes it turn on the spot instead of walking.
+- **Robbing the first** (**read**, never reached): when Robin strikes it (bit 5 of its flags), it's
+  marked robbed, and drops what it carries, one or two kind-2 items, where
+  its companion is (*Items*: the dropping code's operands are pointed at the
+  companion's position, then back at Robin's). Each robbery counts up to
+  six. From then on, while it's on Robin's row it only turns on the spot,
+  every second call; once he's off its row it's gone. The companion goes
+  too, once it's away from Robin and inside the screen's middle.
+
 ### The wanderer
 
 Found by reading `0xBA83`, `0xBD87` and the code they reach (#39).
@@ -809,6 +875,142 @@ instruction of the meeting. **confirmed**, unless marked.
   - the lower panel's colours are reset (`0xBE0F`, *Robin's actions*);
   - his energy goes up (`0:D7F7`, *Robin's actions*);
   - it's marked met, so it happens once a game.
+
+## Items
+
+Found by reading `0:D484`, `0:D6D0` and the code they reach (#41).
+
+**Rewritten (`games/robin/src/items.rs`) and confirmed** against the
+original by `tools/robin-verify`. Play and the tour place and restock them;
+the collector's game, a supplement, starts Robin beside seven of them with
+his inventory full, which reaches picking up each kind, carrying, and the
+drop. Four instructions of picking up are never reached: taking one of the
+thirty (play never walks him into one), the eleven full when he drops one,
+and a drop at the screen's left edge. **confirmed**, unless marked.
+
+### Where they are
+
+- **Items are messages printed on the screen.** An item's kind is the stock
+  message that draws it (*The text printer*), and the printer's list of
+  recorded messages (`0xD457`) is what's on the screen now.
+- **Thirty fixed places in the world** at `0xD38A`, five bytes each: the
+  location (a word), the position, and the kind, 0 once taken.
+- **Eleven more** at `0xD420`, the same five bytes, free while the location
+  is `0xFFFF`: items dropped, and two the game puts there when it starts.
+- **On entering a location** (`0:D484`, from the entry):
+  1. the world restocks (below);
+  2. the list of what's on the screen is cleared;
+  3. of the thirty, the first still there at this location is printed;
+  4. of the eleven, every one at this location is printed.
+
+  If the eleventh is one, the original takes one return address too many
+  off the stack, so it returns to its caller's caller. **read**, never seen.
+
+### Restocking
+
+`0:D2DF`, first in entering a location, if the last item taken was of kind
+5 or 7 (`0xD483`). Its test reads the Z flag after a load, which sets no
+flags, so whether it acts depends on the flags it's called with.
+- R picks a number: 6 to 10 for kind 5, 8 to 12 for kind 7.
+- While the world has fewer than that of the kind (counted at `0xD47F` and
+  `0xD480`), one of the thirty places, picked from R and the next free one
+  on (`0:D35A`), gets that kind.
+
+### Picking one up
+
+`0:D6D0`, from the main loop: the first item on the screen within reach of
+Robin is taken. Within reach is its first position byte from `0x08` to
+`0x17` less than his horizontal position (at least `0x18`), and its second
+from `0x0D` to `0x1C` more than his vertical one. The printer's positions
+and his aren't in the same units, so these are as the bytes compare.
+- **Arrows** (kind 7) only if he has none left; they give him ten, with a
+  beeper sound (`0:D8C6`).
+- **Kinds 0, 3, 6 and 7 print a message** first (`0xB351`, `0xB37D`, `0xB3E9`,
+  `0xB423`).
+- **It's printed again to take it off the screen**, and taken out of the
+  eleven, or else out of the thirty. From the thirty, a kind 5 or 7 lowers
+  its count and is remembered for restocking; an arrow stops there.
+- **What it gives**, by kind, each with a beeper sound:
+  - 0: the sword (`0xD47A`), 3: the bow (`0xD47B`), 6: a third (`0xD47C`);
+  - 1: energy (`0:D7F7`, *Robin's actions*);
+  - the rest go into his inventory.
+
+### His inventory
+
+Eight slots at `0xD472`, `0xFF` where empty. A new item goes in first,
+pushing the others along, and the panel shows them, in two rows of four from
+`0xD8D6`, as one of two messages (`0xB404` for kind 5). The one pushed off
+the end, if it's a kind 2, is dropped where he stands (`0:D874`): into the
+first free of the eleven, at his location and just above and behind his
+position, and printed if it's on the screen.
+
+`0:D874` takes where to drop from its own code. Its instructions' operands
+name the location and the position to read, Robin's (`0xC440`, `0xCB7F`,
+`0xCB80`) unless the fifth character's code has set them to its own
+(*The fifth character*).
+
+## Trades and journeys
+
+Found by reading `0:DDEF`, `0:C3CA`, `0:D8EC` and the code they reach (#41).
+
+**Rewritten (`games/robin/src/journeys.rs`)**. Confirmed against the
+original by `tools/robin-verify` as far as it's reached: the trade's test,
+taking out of the inventory and showing it, and recolouring. The trade
+itself needs R at `0x13` with three kind-2 items carried, which nothing
+reaches. The doorway, the sparkle and the hook read the ROM through
+`0:CD5F` in nearly every run, which the verifier skips (#21), so only a
+handful are compared; the journey, its wipe, and taking the third back are
+never reached. **read**, unless marked.
+
+### The trade
+
+`0:DDEF`, from the main loop, at the first special location (`0xD28F`,
+*The map*), once a visit (`0xDED2`, cleared on entering a location):
+- **if R is `0x13` and he carries three kind-2 items**, they're taken out of
+  his inventory (`0:DA6E`, the rest moving up), the inventory shown again
+  (`0:DA84`), and the robberies' count lowered by three (*The fifth
+  character*);
+- **he's given the sword**, or if he has it, **the bow and ten arrows**, or if
+  he has both, **one of three pieces** (`0xD47E`, shown in the panel); each
+  with its message;
+- **a cell beside the location flashes**: a colour kept in the code
+  (`0xDEB7`) is written to it, a busy wait, then 4, which the code keeps:
+  `0x12` the first time, 4 for every trade after.
+
+### Doorways and journeys
+
+- **Nine doorways** (`0xDAB9`). On entering one with anything in his
+  inventory (`0:D8EC`, from the entry), its attributes are drawn (`0xA2F4`),
+  the main loop's hook is set to its sparkle, he's walked in by the controls'
+  override (*The controls*), and a sound starts. Then its code runs on into
+  the sparkle's first frame.
+- **The main loop's hook** (`0:C3CA`) is a call whose operand the game sets:
+  to a plain return (`0:DA03`), or to the sparkle (`0:D97D`).
+- **The sparkle**, each frame: the doorway's 40 rows of pixels (`0xA204`)
+  masked with random bytes are combined with the screen's. That's 120 bytes,
+  each with two reads of R, one of them through `0:CD5F`, which reads the
+  byte at R × `0x101`, the ROM below `0x4000` (#21). It runs in two passes,
+  `XOR` then `OR`, and the code rewrites its own instructions to switch:
+  the combining one (`0:D9AA`, `XOR (HL)` or `OR (HL)`), and the one that
+  reads R (`0:D997`), which becomes `LD R,A` for the last frame.
+- **At the end** (`0:DA04`), the hook is taken out, and what he carries
+  decides:
+  - with three kind-5 items, they're taken and he's sent to location `0xCC`;
+  - with two, they're taken and his health is restored;
+  - with one, it's taken;
+  - with none, a kind-2 item is taken back, or if there isn't one, he's sent
+    to location `0x9C`.
+
+  Then he walks back out, the way he came, unless he's being sent.
+- **A journey** (`0:C3CA`, when `0xDAD6` says so) enters the new location
+  much as the entry does: the play area cleared, drawn, recoloured
+  (`0:C306`), then a diagonal wipe onto the screen (`0:C40F`). The third
+  item (`0xD47C`) is taken back if he has it (`0:C3AE`). Then the items,
+  the copy to the screen, and the characters' set-up. It ends by jumping
+  back to the main loop's start, not returning.
+- **Recolouring** (`0:C306`, **confirmed**): at 26 locations of the first row (`0xC448`),
+  the attribute buffer's colours become white ink where there's paper, and
+  bright cyan where there's ink but not white.
 
 ## Fighting
 
@@ -882,6 +1084,34 @@ him. The armed game (*Robin's actions*) lands his arrows on a character.
 `0xBDF2`: the record struck gets bit 5 of its flags set. If it's one of the
 four row characters, bit 5 of its state is set too, so it stops (*The four
 on each row*).
+
+## The main loop
+
+`0xBE62`, which every routine above is called from. Its own checks, BREAK
+and the game over, are **rewritten (`games/robin/src/main_loop.rs`) and
+confirmed**; the order it calls the rest in is **read**, unless marked.
+
+- **BREAK** (`0:C433`), first: Caps Shift with Space starts a new game
+  (`0xBE5A`: the stack reset, then the new game's set-up, `0:CC72`). Its
+  answer is in the carry, from rotating the keyboard's bits, so the other
+  flags are left as they came in. **confirmed**
+- **Then, in order**:
+  1. Robin's update (*Robin's movement*);
+  2. the objects in flight (*Fighting*);
+  3. the four and the second group (*The characters*);
+  4. the hits (*Fighting*);
+  5. the wanderer (*The wanderer*) and the fifth character;
+  6. Robin's sword and fists, and meeting the wanderer;
+  7. the screen's flush (*The screen*);
+  8. picking things up (*Items*);
+  9. the game over, the hook and the trade (*Trades and journeys*);
+  10. last, leaving the screen (*Robin's movement*).
+- **The game over** (`0xBF3F`): once his energy is negative and he's lain
+  down long enough (`0xCB75` at `0x3C`, *Robin's actions*), it prints its
+  message (`0xB51F`) and starts a tune (`6:C006`). Then it waits, with
+  interrupts on, until a key is pressed, and starts a new game as BREAK
+  does. Its message and tune are **confirmed** (the armed game reaches
+  them); the wait and the restart are the main loop's.
 
 ## Sound
 

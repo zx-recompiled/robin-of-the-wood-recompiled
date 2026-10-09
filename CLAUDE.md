@@ -22,8 +22,11 @@ built from the tape alone, with no ROM. Rewritten and checked by the
 differential suites (`tools/robin-verify`): the screen and printing (#24),
 the map, drawn at all 320 locations by a tour (#28), the sprites (#32),
 Robin's movement and controls (#34), the four characters on each row
-(#38), Robin's actions and sounds (#36), the wanderer (#39), and the
-fighting (#40). The plan, in order, is the board's Backlog.
+(#38), Robin's actions and sounds (#36), the wanderer (#39), the
+fighting (#40), and the rest of the main loop's routines (#41: the second
+group, items, the fifth character, the trade, doorways and journeys, BREAK
+and the game over), checked as far as play reaches them. The plan, in
+order, is the board's Backlog.
 
 ## Commands
 
@@ -36,8 +39,9 @@ fighting (#40). The plan, in order, is the board's Backlog.
   checked on every core (#45). It compares every rewritten routine against
   the original's real calls over 20,000 frames of play, then a tour of all
   320 locations, walking Robin off the screen at every move (#46), then a
-  short game with each control method, and one with Robin armed (#36). It
-  prints each routine's cases and the instructions no call reached.
+  short game with each control method, one with Robin armed (#36), and
+  one with things to pick up where he starts (#41). It prints each
+  routine's cases and the instructions no call reached.
 - `cargo test -p zx-runtime --test z80test --test fuse -- --nocapture` checks
   the interpreter against z80test (measured on a real Spectrum) and the Fuse
   Z80 corpus (1335 cases, for timing). Their files go in `assets/`.

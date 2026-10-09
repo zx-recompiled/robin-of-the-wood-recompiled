@@ -144,23 +144,69 @@ const TUNE_OTHER: u16 = 0xC9A0;
 /// The values the AY's registers 0 to 13 are reset to.
 const AY_RESET: u16 = 0xC230;
 
-/// Starts the tune a hit plays, for the interrupt's music player
-/// (`6:C048`): its pointers and settings, then the AY's registers reset and
-/// the envelope period set.
+/// A tune for the music driver: where it starts again, its speed, and its
+/// two parts' notes.
+#[derive(Clone, Copy)]
+pub struct Tune {
+    pub start: u16,
+    pub speed: u8,
+    pub notes: u16,
+    pub other: u16,
+}
+
+/// The tune a hit plays (`6:C048`), and the one an arrival plays (`6:C000`).
+pub const HIT: Tune = Tune {
+    start: 0xC04B,
+    speed: 0x08,
+    notes: 0xC98C,
+    other: 0xC977,
+};
+pub const ARRIVAL: Tune = Tune {
+    start: 0xC04B,
+    speed: 0x08,
+    notes: 0xC7C4,
+    other: 0xC657,
+};
+
+/// The tune the game over plays (`6:C006`).
+pub const GAME_OVER: Tune = Tune {
+    start: 0xC065,
+    speed: 0x0C,
+    notes: 0xC954,
+    other: 0xC92F,
+};
+
+/// Starts the game over's tune (`6:C006`).
+pub fn game_over_tune(g: &mut Game, io: &mut Io) {
+    start_tune(g, io, GAME_OVER);
+}
+
+/// Starts the tune a hit plays (`6:C048`).
 pub fn hit_tune(g: &mut Game, io: &mut Io) {
+    start_tune(g, io, HIT);
+}
+
+/// Starts the tune an arrival plays (`6:C000`).
+pub fn arrival_tune(g: &mut Game, io: &mut Io) {
+    start_tune(g, io, ARRIVAL);
+}
+
+/// Starts `tune` for the interrupt's music player (`6:C07D`): its pointers
+/// and settings, then the AY's registers reset and the envelope period set.
+pub fn start_tune(g: &mut Game, io: &mut Io, tune: Tune) {
     let bank = usize::from(MUSIC_BANK);
     let word = |g: &mut Game, at: u16, v: u16| {
         let [lo, hi] = v.to_le_bytes();
         g.write_in(bank, at, lo);
         g.write_in(bank, at + 1, hi);
     };
-    word(g, TUNE_START, 0xC04B);
-    g.write_in(bank, TUNE_SPEED, 0x08);
+    word(g, TUNE_START, tune.start);
+    g.write_in(bank, TUNE_SPEED, tune.speed);
     g.write_in(bank, EFFECT, 0);
     g.write_in(bank, PLAYING, 0);
     g.write_in(bank, TUNE_COUNT, 1);
-    word(g, TUNE_NOTES, 0xC98C);
-    word(g, TUNE_OTHER, 0xC977);
+    word(g, TUNE_NOTES, tune.notes);
+    word(g, TUNE_OTHER, tune.other);
     for r in 0..14u8 {
         let v = g.read_in(bank, AY_RESET + u16::from(r));
         ay(io, r, v);
@@ -177,4 +223,46 @@ pub fn zap(io: &mut Io) {
             io.out(u16::from(a) << 8 | 0xFE, a);
         }
     }
+}
+
+/// A beeper sound of `b` toggles of EAR and MIC, the delay between them
+/// shortening from `b` (`0:D8C6`): 256 for 0.
+pub fn beep(io: &mut Io, mut b: u8) {
+    let mut a = 0u8;
+    loop {
+        a ^= 0x18;
+        io.out(u16::from(a) << 8 | 0xFE, a);
+        b = b.wrapping_sub(1);
+        if b == 0 {
+            return;
+        }
+    }
+}
+
+/// Where the music driver keeps an effect's two settings.
+const EFFECT_A: u16 = 0xC18C;
+const EFFECT_B: u16 = 0xC18E;
+
+/// Starts the effect a departure plays, for the interrupt's player
+/// (`6:C018`): its settings, a tune's flag cleared, and the mixer set.
+pub fn departure(g: &mut Game, io: &mut Io) {
+    start_effect(g, io, 0xFF, 0x0000, 0x0002);
+}
+
+/// Starts an effect (`6:C1D5`).
+fn start_effect(g: &mut Game, io: &mut Io, playing: u8, a: u16, b: u16) {
+    let bank = usize::from(MUSIC_BANK);
+    for (at, v) in [(EFFECT_A, a), (EFFECT_B, b)] {
+        let [lo, hi] = v.to_le_bytes();
+        g.write_in(bank, at, lo);
+        g.write_in(bank, at + 1, hi);
+    }
+    g.write_in(bank, PLAYING, playing);
+    g.write_in(bank, EFFECT, 0);
+    ay(io, 7, 0x38);
+}
+
+/// The sample a departure's end plays (`4:C006`).
+pub fn departure_sample(g: &mut Game, io: &mut Io) {
+    play(g, io, 5, 0x0578, 0xC9A0, 0xC9B8);
 }
