@@ -119,6 +119,65 @@ pub fn copy_attrs(g: &mut Game) {
     }
 }
 
+/// The reveal's block copies, kept in its code: each `LDIR` or `LDDR` until
+/// the last pass, when their first byte becomes 0 (`NOP`, then `OR B`) so
+/// they copy nothing.
+const REVEAL_COPIES: [u16; 4] = [0xCDA6, 0xCDCC, 0xCDEA, 0xCDFE];
+
+/// A new location revealed from the middle (`0:CD73`). First the attribute
+/// buffer's colours go into the changed-cell map, where they're set. Then,
+/// in 14 passes, each half of the play area slides one column out towards
+/// its edge, and the next column of the new screen goes in beside the
+/// middle: its colour from the changed-cell map, flash masked off, and its
+/// pixels from the back buffer.
+pub fn reveal(g: &mut Game) {
+    for i in 0..=0x240u16 {
+        let a = g.read(0xE800 + i);
+        if a != 0 {
+            g.write(0xE500 + i, a);
+        }
+    }
+    for at in REVEAL_COPIES {
+        g.write(at, 0xED);
+    }
+    for n in (0..=13u16).rev() {
+        if n == 0 {
+            for at in REVEAL_COPIES {
+                g.write(at, 0);
+            }
+        }
+        let (left, right) = (2 + n, 29 - n);
+        for row in 0..18u16 {
+            let [lo, hi] = g.display.rows[usize::from(row) * 8].to_le_bytes();
+            let attrs = u16::from_be_bytes([hi >> 3 & 7 | 0x58, lo]);
+            slide(g, attrs, n);
+            for (column, colour) in [(left, left), (right, right)] {
+                let a = g.read(attrs.wrapping_add(colour).wrapping_sub(0x7300)) & 0x7F;
+                g.write(attrs + column, a);
+            }
+            for line in row * 8..row * 8 + 8 {
+                let at = g.display.rows[usize::from(line)];
+                slide(g, at, n);
+                for column in [left, right] {
+                    let b = g.read(0xEB00 + line * 32 + column);
+                    g.write(at + column, b);
+                }
+            }
+        }
+    }
+}
+
+/// One row of the reveal's slide: columns 3 to `2 + n` one to the left, and
+/// columns `28 - n` to 28 one to the right, from the edge inwards.
+fn slide(g: &mut Game, row: u16, n: u16) {
+    for c in 2..2 + n {
+        g.write(row + c, g.read(row + c + 1));
+    }
+    for c in 0..n {
+        g.write(row + 29 - c, g.read(row + 28 - c));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

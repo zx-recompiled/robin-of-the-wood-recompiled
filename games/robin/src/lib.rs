@@ -22,6 +22,7 @@ pub mod main_loop;
 pub mod map;
 pub mod movement;
 pub mod print;
+pub mod scene;
 pub mod screen;
 pub mod sound;
 pub mod sprites;

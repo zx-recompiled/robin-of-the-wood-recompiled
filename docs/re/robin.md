@@ -221,6 +221,21 @@ from nothing but their own arithmetic.
   buffer, 28 bytes each, to the screen through the row table.
 - **The whole play area's attributes**, `0:C086`: the attribute buffer's 18
   rows of 28 to the screen, bit 7 masked off.
+- **The reveal**, `0:CD73`, when a new game starts and at the scripted
+  scene's end (#42). What it leaves is **confirmed** (every instruction
+  reached, at each new game). How it slides is **read**: the last pass
+  overwrites every column the slide moved, so a check of the state it
+  leaves can't see the slide, only a look at the frames while it runs:
+  1. every set colour in the attribute buffer is copied into the
+     changed-cell map;
+  2. in 14 passes, each half of the play area (columns 2 to 15, and 16 to
+     29) slides one column out towards its edge, and the new screen's next
+     column goes in beside the middle: its colour from the changed-cell
+     map, flash masked off, and its pixels from the back buffer.
+
+  Its block copies are instructions it rewrites: for the last pass, which
+  copies nothing, their first byte becomes 0, leaving a `NOP` and an `OR B`.
+  The next reveal makes them `LDIR` and `LDDR` again.
 
 ### The text printer
 
@@ -707,7 +722,8 @@ every call play and the tour make (#38), unless marked.
      XORed with R and kept below 16. Their bits 4 and 5 are cleared.
   2. The current row's list is taken, and the controls' override is
      cleared.
-  3. At the location kept at `0xD295`, a scripted scene starts (#42). Two
+  3. At the location kept at `0xD295`, a scripted scene starts (*The
+     scripted scene*). Two
      of the four are put either side of Robin's screen, facing in. Robin is
      walked in by the controls' override (*The controls*), and another
      character's record (`0xB7BD`) is set up and drawn. Where it stands
@@ -822,6 +838,37 @@ unless marked.
   six. From then on, while it's on Robin's row it only turns on the spot,
   every second call; once he's off its row it's gone. The companion goes
   too, once it's away from Robin and inside the screen's middle.
+
+### The scripted scene
+
+Found by reading `0xB723` and the code it reaches (#42).
+
+**Rewritten (`games/robin/src/scene.rs`) and confirmed** against the
+original by `tools/robin-verify`, all but its end. Play reaches every part
+of it: it enters the scene's location, `0x43`, near frame 9,600. The end
+reads the ROM (below), so the verifier skips it (#21). **confirmed**, unless
+marked.
+
+- **One character stands at a location** picked when a game starts (`0xD295`,
+  one of eight at `0xD27F`). Entering it sets up its record at `0xB7BD`
+  and walks Robin in (*The four on each row*, step 3).
+- **Each call** (`0xB723`, from the main loop) at that location counts down
+  `0xD297`, and acts every fourth:
+  1. the character is drawn, from frame table `0x8C8F`;
+  2. if Robin is in the middle of the screen (his position from `0x24` to
+     `0x5B`) and it hasn't yet moved, it starts: bit 7 of its flags is
+     set, the counter starts again at `0x50`, and it's given a sequence by
+     the way it faces (`0xB7C8`, or `0xB7CD` with bit 7 of its `+8`);
+  3. otherwise, once its sequence reaches its frame 2, Robin stops being
+     walked in (the controls' override, *The controls*), and when the
+     counter has run out, the end.
+- **The end** (`0xB790`, **read**, never compared): a sample (`4:C000`,
+  *Sound*), the warble at `0x8B32` (*What it uses from the ROM*). Then Robin
+  is at location `0x9C`, entered as a new game's first location is: the
+  play area cleared, drawn, recoloured (`0:C306`), the characters' entry,
+  and the reveal (`0:CD73`, *The screen*). Last, the scene moves on to a new
+  place (`0:CE8D`, from `0:CD5F`'s random value, #21). It returns to the
+  main loop's start, not its caller.
 
 ### The wanderer
 
@@ -1100,7 +1147,8 @@ confirmed**; the order it calls the rest in is **read**, unless marked.
   2. the objects in flight (*Fighting*);
   3. the four and the second group (*The characters*);
   4. the hits (*Fighting*);
-  5. the wanderer (*The wanderer*) and the fifth character;
+  5. the scripted scene, the wanderer, and the fifth character (*The
+     characters*);
   6. Robin's sword and fists, and meeting the wanderer;
   7. the screen's flush (*The screen*);
   8. picking things up (*Items*);
@@ -1165,7 +1213,8 @@ confirmed**; the order it calls the rest in is **read**, unless marked.
     onto itself. Writes to ROM go nowhere, and the flags it leaves are thrown
     away straight after, so only the time it takes matters: 16,384 uncontended
     transfers each time. Nothing depends on what the ROM holds. **read**
-    (called from at least `0xB796` and `0xCD4E`; what for is #4's to find)
+    (called from the scripted scene's end, `0xB796`, and the new game's
+    set-up, `0xCD4E`; rewritten as `sound::warble`, #42)
   - **The random numbers**: the routine at `0xCD5F` takes R, reads the byte
     at `R × 0x101`, and mixes it with R into the seed at `0xD26A`. When R is
     below `0x40` that address is in the ROM, so **the ROM's contents feed the
