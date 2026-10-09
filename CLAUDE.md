@@ -25,8 +25,8 @@ Robin's movement and controls (#34), the four characters on each row
 (#38), Robin's actions and sounds (#36), the wanderer (#39), the
 fighting (#40), and the rest of the main loop's routines (#41: the second
 group, items, the fifth character, the trade, doorways and journeys, BREAK
-and the game over), checked as far as play reaches them. The plan, in
-order, is the board's Backlog.
+and the game over), checked as far as play reaches them, and the scripted
+scene (#42). The plan, in order, is the board's Backlog.
 
 ## Commands
 
