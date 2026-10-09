@@ -615,6 +615,60 @@ pub fn all() -> Vec<Routine> {
             },
         },
         Routine {
+            name: "one pass of the main loop (0xBE62)",
+            bank: None,
+            entry: 0xBE62,
+            code: (0xBE62, 0xBF3E),
+            outputs: &[],
+            // Back at its start; or a new game (BREAK), the game over's
+            // wait for a key, or the ending's waits, which are the caller's.
+            exits: &[0xBE62, 0xBE5A, 0xBF5D, 0xBEEF],
+            preserves: &[],
+            rewrite: |g, a, r, io| {
+                main_loop::frame(g, a, io);
+                r
+            },
+        },
+        Routine {
+            name: "leave the screen for the next location (0xBECE)",
+            bank: None,
+            entry: 0xBECE,
+            code: (0xBECE, 0xBF3E),
+            outputs: &[],
+            exits: &[0xBE62, 0xBEEF],
+            preserves: &[],
+            rewrite: |g, a, r, io| {
+                main_loop::leave(g, a, io, r.get(Reg::E));
+                r
+            },
+        },
+        Routine {
+            name: "location 0xBB darkened (0:C33C)",
+            bank: Some(0),
+            entry: 0xC33C,
+            code: (0xC33C, 0xC359),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, _| {
+                journeys::darken(g);
+                r
+            },
+        },
+        Routine {
+            name: "a message on entering a location (0:C35A)",
+            bank: Some(0),
+            entry: 0xC35A,
+            code: (0xC35A, 0xC3AD),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, _| {
+                journeys::location_message(g);
+                r
+            },
+        },
+        Routine {
             name: "the main loop's hook and journeys (0:C3CA)",
             bank: Some(0),
             entry: 0xC3CA,
