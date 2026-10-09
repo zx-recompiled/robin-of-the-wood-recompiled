@@ -348,15 +348,17 @@ impl Routine {
         let mut rom_read = None;
         let mut blind: BTreeSet<(usize, usize)> = BTreeSet::new();
         let mut steps = 0u64;
-        let done = |c: &Zx| {
+        // An exit counts only once the run has begun, so a stretch can end
+        // where it starts: one pass of a loop (#60).
+        let done = |c: &Zx, steps: u64| {
             if self.exits.is_empty() {
                 c.pc == ret && c.sp == entry_sp.wrapping_add(2)
             } else {
-                self.exits.contains(&c.pc) && self.in_bank(c)
+                steps > 0 && self.exits.contains(&c.pc) && self.in_bank(c)
             }
         };
         let mut random = Vec::new();
-        while !done(&c) {
+        while !done(&c, steps) {
             steps += 1;
             if steps > STEP_LIMIT {
                 return Err(format!(
@@ -1057,6 +1059,28 @@ mod tests {
         });
         wrong.exits = &[0x8110];
         assert!(failures(&wrong, &z).iter().any(|e| e.contains("output A")));
+    }
+
+    #[test]
+    fn a_stretch_can_end_where_it_starts() {
+        // `INC A : LD (0x9000),A : JP 0x8100`, a loop; one pass of it is
+        // a stretch from 0x8100 back to 0x8100.
+        let z = machine(&[0x3C, 0x32, 0x00, 0x90, 0xC3, 0x00, 0x81], &[]);
+        let mut r = routine(&[Reg::A], |g, _, mut r, _| {
+            let a = r.get(Reg::A).wrapping_add(1);
+            g.write(0x9000, a);
+            r.set(Reg::A, a);
+            r
+        });
+        r.exits = &[0x8100];
+        let f = failures(&r, &z);
+        assert!(f.is_empty(), "{f:?}");
+        let mut wrong = routine(&[Reg::A], |_, _, mut r, _| {
+            r.set(Reg::A, r.get(Reg::A).wrapping_add(1));
+            r
+        });
+        wrong.exits = &[0x8100];
+        assert!(!failures(&wrong, &z).is_empty(), "the store left out");
     }
 
     /// `LD A,R : RET`, and the caller stores A.
