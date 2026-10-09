@@ -222,8 +222,10 @@ from nothing but their own arithmetic.
 - **The whole play area's attributes**, `0:C086`: the attribute buffer's 18
   rows of 28 to the screen, bit 7 masked off.
 - **The reveal**, `0:CD73`, when a new game starts and at the scripted
-  scene's end (#42). **confirmed** (every instruction reached, at each new
-  game):
+  scene's end (#42). What it leaves is **confirmed** (every instruction
+  reached, at each new game). How it slides is **read**: the last pass
+  overwrites every column the slide moved, so a check of the state it
+  leaves can't see the slide, only a look at the frames while it runs:
   1. every set colour in the attribute buffer is copied into the
      changed-cell map;
   2. in 14 passes, each half of the play area (columns 2 to 15, and 16 to
