@@ -1201,14 +1201,17 @@ so the frame's bit 7, the way he faces, drops out.
 ### The ending
 
 Entering location `0x69` (`0xBEDF`), the only location not entered by the
-entry above (*The grid*). **read**, unless marked.
+entry above (*The grid*). **Rewritten (`main_loop::ending`) and confirmed**
+up to its waits: play never gets there, so a supplement game, the ending's,
+sends the original into it from `0x68` through its own step (#60).
+**confirmed**, unless marked.
 1. `0:CF5F`: the play area cleared, stock message `0x50` printed at its top
    left, and revealed (`0:CD73`, *The screen*).
 2. With interrupts off, the border flashes: R is written to port `0xFE`
    `0x960` times.
 3. It waits for every key to be let go, a delay, then for any key, and
    starts a new game (`0xBE5A`). The rewrite leaves these waits to its
-   caller.
+   caller. **read**
 
 ## Sound
 

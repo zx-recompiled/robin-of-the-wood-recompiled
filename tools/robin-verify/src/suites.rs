@@ -643,6 +643,19 @@ pub fn all() -> Vec<Routine> {
             },
         },
         Routine {
+            name: "the ending's message (0:CF5F)",
+            bank: Some(0),
+            entry: 0xCF5F,
+            code: (0xCF5F, 0xCF6E),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, _| {
+                main_loop::ending_message(g);
+                r
+            },
+        },
+        Routine {
             name: "location 0xBB darkened (0:C33C)",
             bank: Some(0),
             entry: 0xC33C,
