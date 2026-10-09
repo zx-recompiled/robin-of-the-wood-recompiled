@@ -25,8 +25,9 @@ Robin's movement and controls (#34), the four characters on each row
 (#38), Robin's actions and sounds (#36), the wanderer (#39), the
 fighting (#40), and the rest of the main loop's routines (#41: the second
 group, items, the fifth character, the trade, doorways and journeys, BREAK
-and the game over), checked as far as play reaches them, and the scripted
-scene (#42). The plan, in order, is the board's Backlog.
+and the game over), checked as far as play reaches them, the scripted
+scene (#42), and the main loop itself, a pass at a time, with the entry and
+the ending (#60). The plan, in order, is the board's Backlog.
 
 ## Commands
 
@@ -40,7 +41,8 @@ scene (#42). The plan, in order, is the board's Backlog.
   the original's real calls over 20,000 frames of play, then a tour of all
   320 locations, walking Robin off the screen at every move (#46), then a
   short game with each control method, one with Robin armed (#36), and
-  one with things to pick up where he starts (#41). It prints each
+  one with things to pick up where he starts (#41), and one sent into the
+  ending (#60). Each pass of the main loop is also checked whole. It prints each
   routine's cases and the instructions no call reached.
 - `cargo test -p zx-runtime --test z80test --test fuse -- --nocapture` checks
   the interpreter against z80test (measured on a real Spectrum) and the Fuse
