@@ -217,7 +217,7 @@ pub fn doorway(g: &mut Game, io: &mut Io) {
 
 /// `0:CD5F`'s random value: the byte at R × `0x101`, R and the last
 /// value, mixed.
-fn random(g: &mut Game, io: &mut Io) -> u8 {
+pub fn random(g: &mut Game, io: &mut Io) -> u8 {
     let r = io.random.r();
     let v = g.read(u16::from_be_bytes([r, r])) ^ r ^ g.read(RANDOM);
     g.write(RANDOM, v);

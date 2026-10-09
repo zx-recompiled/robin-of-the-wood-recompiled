@@ -266,3 +266,32 @@ fn start_effect(g: &mut Game, io: &mut Io, playing: u8, a: u16, b: u16) {
 pub fn departure_sample(g: &mut Game, io: &mut Io) {
     play(g, io, 5, 0x0578, 0xC9A0, 0xC9B8);
 }
+
+/// The sample the scripted scene's end plays (`4:C000`).
+pub fn scene_sample(g: &mut Game, io: &mut Io) {
+    play(g, io, 1, 0x07D0, 0xC1B0, 0xC1D0);
+}
+
+/// Where the warble's sample is: its length, then its bits; and its delay
+/// between bits, kept in its code.
+const WARBLE: u16 = 0x8B79;
+const WARBLE_DELAY: u16 = 0x8B56;
+
+/// A beeper warble (`0x8B32`): the sample at `0x8B79` played 11 times, a
+/// bit at a time from the highest, EAR and MIC on for a 1 and off for a 0,
+/// with the delay between bits growing from 2 to `0x0C`. Each time is
+/// followed by a pause, a 16K copy of the ROM onto itself. Its bytes are
+/// rotated through and left as they were.
+pub fn warble(g: &mut Game, io: &mut Io) {
+    let length = u16::from_le_bytes([g.read(WARBLE), g.read(WARBLE + 1)]);
+    for delay in 2..=0x0Cu8 {
+        g.write(WARBLE_DELAY, delay);
+        for n in 0..length {
+            let b = g.read(WARBLE + 2 + n);
+            for bit in (0..8).rev() {
+                let a = if b >> bit & 1 != 0 { 0x18 } else { 0 };
+                io.out(u16::from(a) << 8 | 0xFE, a);
+            }
+        }
+    }
+}

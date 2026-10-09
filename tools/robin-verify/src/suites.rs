@@ -2,8 +2,8 @@
 //! rewrite takes the original's registers (`docs/re/robin.md`).
 
 use robin::{
-    actions, characters, fifth, fighting, items, journeys, main_loop, map, movement, print, screen,
-    sound, sprites, wanderer,
+    actions, characters, fifth, fighting, items, journeys, main_loop, map, movement, print, scene,
+    screen, sound, sprites, wanderer,
 };
 
 use crate::capture::{Reg, Regs, Routine};
@@ -705,6 +705,46 @@ pub fn all() -> Vec<Routine> {
                 let at = u16::from_be_bytes([r.get(Reg::H), r.get(Reg::L)]);
                 let back = journeys::remove(g, at, r.get(Reg::B));
                 r.set_pair(Reg::H, Reg::L, back);
+                r
+            },
+        },
+        Routine {
+            name: "the scripted scene (0xB723)",
+            bank: None,
+            entry: 0xB723,
+            code: (0xB723, 0xB7BC),
+            outputs: &[],
+            // Its end jumps back to the main loop's start.
+            exits: &[0xBE83, 0xBE62],
+            preserves: &[],
+            rewrite: |g, a, r, io| {
+                scene::scripted(g, a, io);
+                r
+            },
+        },
+        Routine {
+            name: "a new location revealed (0:CD73)",
+            bank: Some(0),
+            entry: 0xCD73,
+            code: (0xCD73, 0xCE4A),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, _| {
+                screen::reveal(g);
+                r
+            },
+        },
+        Routine {
+            name: "the scene moved on (0:CE8D)",
+            bank: Some(0),
+            entry: 0xCE8D,
+            code: (0xCE8D, 0xCEA0),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                scene::move_on(g, io);
                 r
             },
         },
