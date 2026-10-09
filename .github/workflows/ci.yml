@@ -187,20 +187,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: EmbarkStudios/cargo-deny-action@v2
-        with:
-          command: check
-
-      # THIRD-PARTY.md is committed so it can be reviewed in a diff and read
-      # by anyone browsing the repository. That only works if it cannot go
-      # quietly stale, which is what this is for: the failure mode of an
-      # attribution file is forgetting it, not getting it wrong.
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.98.1"
 
       - uses: Swatinem/rust-cache@v2
 
+      # Installed with cargo rather than through cargo-deny-action, whose
+      # Docker image Docker Hub's anonymous pull limit refused (#58). The
+      # version is the one the local gate uses, so the two agree.
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked --version 0.20.2
+
+      - name: Dependency policy
+        run: cargo deny check
+
+      # THIRD-PARTY.md is committed so it can be reviewed in a diff and read
+      # by anyone browsing the repository. That only works if it cannot go
+      # quietly stale, which is what this is for: the failure mode of an
+      # attribution file is forgetting it, not getting it wrong.
       - name: Install cargo-about
         run: cargo install cargo-about --locked --features cli
 
