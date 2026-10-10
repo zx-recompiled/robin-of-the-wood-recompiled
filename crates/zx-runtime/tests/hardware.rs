@@ -161,7 +161,7 @@ fn minfo(model: Model, frame: u32, int: u32) {
 
 #[test]
 fn minfo_on_the_128k() {
-    minfo(Model::Spectrum128, 70908, 35);
+    minfo(Model::Spectrum128, 70908, 36);
 }
 
 #[test]
