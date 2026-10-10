@@ -489,19 +489,16 @@ impl Panel {
                     .text(Some(canvas), x + 2.5, row + 0.9, None, 1.0, &s);
                 x += w + 2.0;
             }
-            self.fonts.text(
-                Some(canvas),
-                left,
-                row + 9.0,
-                Some(width),
-                1.3,
-                &[span(
-                    "The assists come with #100 and #101.",
-                    3.6,
-                    Weight::Regular,
-                    FAINT,
-                )],
-            );
+            if aids.is_on(Aid::Saves) {
+                self.fonts.text(
+                    Some(canvas),
+                    left,
+                    row + 9.0,
+                    Some(width),
+                    1.3,
+                    &[span("Saves come with #101.", 3.6, Weight::Regular, FAINT)],
+                );
+            }
         }
     }
 

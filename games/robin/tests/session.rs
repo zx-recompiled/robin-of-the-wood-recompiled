@@ -161,3 +161,46 @@ fn the_menu_shows_on_a_black_border() {
     let lit = picture.iter().filter(|&&p| p != corner).count();
     assert!(lit > 1000, "the menu is drawn: {lit} pixels not black");
 }
+
+/// Plays a game under random held keys with the assists `on`, as the
+/// window applies them after each frame in play (#100). The frame it ended
+/// at, if it did.
+fn ends(a: &Assets, on: robin::assists::Assists) -> Option<u32> {
+    let mut s = started(a, 6);
+    hold(&mut s, a, held(&[ZERO]), 5);
+    let mut kept = robin::assists::SetAside::default();
+    let mut rng = common::XorShift(0x1357_9BDF);
+    let ways = [(2, 0), (1, 0), (7, 3), (7, 2), (3, 0)];
+    let mut keys = NONE;
+    for frame in 0..20_000 {
+        if frame % 15 == 0 {
+            keys = NONE;
+            for &w in &ways {
+                if rng.next(3) == 0 {
+                    keys = held(&[w]);
+                }
+            }
+        }
+        s.frame(a, controls(keys));
+        if s.state == State::GameOver {
+            return Some(frame);
+        }
+        if s.state == State::Playing {
+            robin::assists::apply(&mut s.game, on, &mut kept);
+        }
+    }
+    None
+}
+
+#[test]
+fn with_infinite_energy_and_lives_a_game_never_ends() {
+    let Some(a) = tape() else { return };
+    let off = robin::assists::Assists::default();
+    assert!(ends(&a, off).is_some(), "the same play ends without them");
+    let on = robin::assists::Assists {
+        energy: true,
+        lives: true,
+        no_witch: true,
+    };
+    assert_eq!(ends(&a, on), None, "and never with them");
+}

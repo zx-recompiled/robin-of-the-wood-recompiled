@@ -38,6 +38,14 @@ pub fn energy(g: &mut Game) {
 
 /// Resets the lower panel's 64 attribute cells to the colour at `0xBE47`:
 /// its bits 1 to 3 as the ink, bit 0 as bright (`0xBE0F`).
+/// Prints his energy's figure on the panel again, as `0:D7F7` does after
+/// changing it. For the assists (#100), which change it from outside.
+pub fn show_energy(g: &mut Game) {
+    g.write(ENERGY_DIGIT, g.robin.energy.wrapping_add(b'0'));
+    g.printer.replace = PRINTED;
+    print::print_at(g, PRINTED, ENERGY);
+}
+
 pub fn panel_colours(g: &mut Game) {
     let c = g.read(PANEL_COLOUR);
     let colour = (c >> 1) & 7 | (c & 1) << 6;
