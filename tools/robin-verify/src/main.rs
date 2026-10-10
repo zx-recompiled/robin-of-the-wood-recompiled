@@ -13,6 +13,7 @@ mod armed;
 mod capture;
 mod checker;
 mod collector;
+mod ending;
 mod methods;
 mod suites;
 mod tour;
@@ -189,6 +190,20 @@ fn run() -> Result<bool, String> {
     let picked = collector::run(&rom, &tape, &assets, &mut v)?;
     println!(
         "robin-verify: played a game with things to pick up where Robin starts (a supplement): he took {picked}"
+    );
+    let ended = ending::run(&rom, &tape, &assets, &mut v)?;
+    println!(
+        "robin-verify: played a game sent into location 0x69 (a supplement): {}, {}",
+        if ended.ended {
+            "the ending ran"
+        } else {
+            "the ending never ran"
+        },
+        if ended.broke {
+            "then BREAK started a new game"
+        } else {
+            "and BREAK never started one"
+        }
     );
     let Verifier {
         routines,

@@ -379,7 +379,49 @@ pub fn recolour(g: &mut Game) {
     }
 }
 
-/// A wipe onto the new screen: the changed-cell map's diagonals marked and
+/// At location `0xBB`, every cell of the attribute buffer with any paper
+/// becomes green ink on black (`0:C33C`).
+pub fn darken(g: &mut Game) {
+    if g.map.location != 0x00BB {
+        return;
+    }
+    for at in 0xE800..=0xEA40u16 {
+        if g.read(at) & 0x38 != 0 {
+            g.write(at, 0x04);
+        }
+    }
+}
+
+/// On entering a location of the first row: a stock message at a few of
+/// them, by what Robin has; or at `0x6E`, the third item taken back
+/// (`0:C35A`).
+pub fn location_message(g: &mut Game) {
+    let [lo, hi] = g.map.location.to_le_bytes();
+    if hi != 0 {
+        return;
+    }
+    let pieces = g.read(PIECES);
+    let (message, at) = if g.read(THIRD) == 0 && pieces != 3 {
+        match lo {
+            0x65 => (0x4E, (0x48, 0x50)),
+            0x6E => (0x4E, (0x24, 0x58)),
+            _ => return,
+        }
+    } else if pieces == 3 && lo == 0x79 {
+        (0x4D, (0x10, 0x50))
+    } else if lo == 0xBB {
+        (0x4D, (0x10, 0x10))
+    } else {
+        if lo == 0x6E {
+            third_returned(g);
+        }
+        return;
+    };
+    g.printer.replace = message;
+    print::print_message(g, message, at.0, at.1);
+}
+
+/// A wipe onto the new screen:/// A wipe onto the new screen: the changed-cell map's diagonals marked and
 /// copied to the screen one by one, then the third item's return
 /// (`0:C40F`).
 pub fn wipe(g: &mut Game) {

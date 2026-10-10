@@ -1134,32 +1134,84 @@ on each row*).
 
 ## The main loop
 
-`0xBE62`, which every routine above is called from. Its own checks, BREAK
-and the game over, are **rewritten (`games/robin/src/main_loop.rs`) and
-confirmed**; the order it calls the rest in is **read**, unless marked.
+`0xBE62`, which every routine above is called from, once a frame.
+**Rewritten (`games/robin/src/main_loop.rs`, `frame`) and confirmed** as a
+whole: a suite runs one pass of it at a time, from `0xBE62` back to
+`0xBE62` (#60). **confirmed**, unless marked.
 
 - **BREAK** (`0:C433`), first: Caps Shift with Space starts a new game
   (`0xBE5A`: the stack reset, then the new game's set-up, `0:CC72`). Its
   answer is in the carry, from rotating the keyboard's bits, so the other
-  flags are left as they came in. **confirmed**
+  flags are left as they came in.
 - **Then, in order**:
-  1. Robin's update (*Robin's movement*);
-  2. the objects in flight (*Fighting*);
-  3. the four and the second group (*The characters*);
-  4. the hits (*Fighting*);
-  5. the scripted scene, the wanderer, and the fifth character (*The
-     characters*);
-  6. Robin's sword and fists, and meeting the wanderer;
-  7. the screen's flush (*The screen*);
-  8. picking things up (*Items*);
-  9. the game over, the hook and the trade (*Trades and journeys*);
-  10. last, leaving the screen (*Robin's movement*).
+  1. Robin's update (`0:C59A`, *Robin's actions*);
+  2. the objects in flight (`0xBB84`, *Fighting*);
+  3. one of the four (`0xA8D6`), and one of the second group (`0:DAE4`),
+     *The characters*;
+  4. the hits: arrows (`0xBC0B`), shots (`0xBC6C`), the second group
+     touching Robin (`0xBCAA`), and his sword and fists (`0xBD19`),
+     *Fighting*;
+  5. the scripted scene (`0xB723`), the wanderer (`0xBA83`) and the fifth
+     character (`0xB7DB`), *The characters*;
+  6. meeting the wanderer (`0xBD87`);
+  7. the screen's flush (`0:C754`, *The screen*);
+  8. picking things up (`0:D6D0`, *Items*);
+  9. the game over (`0xBF3F`), the hook (`0:C3CA`) and the trade
+     (`0:DDEF`), *Trades and journeys*;
+  10. last, leaving the screen (`0xBE9B`, *Robin's movement*), which takes
+      the step and enters the next location.
+- **Some passes end early**, back at the loop's start: the scene's end and
+  a journey jump there, rather than returning. The game over and BREAK go
+  to a new game.
 - **The game over** (`0xBF3F`): once his energy is negative and he's lain
   down long enough (`0xCB75` at `0x3C`, *Robin's actions*), it prints its
   message (`0xB51F`) and starts a tune (`6:C006`). Then it waits, with
   interrupts on, until a key is pressed, and starts a new game as BREAK
-  does. Its message and tune are **confirmed** (the armed game reaches
-  them); the wait and the restart are the main loop's.
+  does. The rewrite leaves that wait to its caller.
+
+### Entering a location
+
+`0xBECE`, from leaving the screen, with the direction he left by.
+**confirmed**
+1. The step to the next location (`0:C127`, *The grid*). At `0x69`, the
+   ending instead (below).
+2. Bit 1 of Robin's flags is cleared, and the play area cleared and drawn
+   (`0:CF19`, `0xBF6A`), with the special locations' lists (`0:C056`).
+3. At location `0xBB`, every cell of the attribute buffer with any paper
+   becomes green ink on black (`0:C33C`).
+4. The first row's recolouring (`0:C306`, *Trades and journeys*).
+5. A message at a few locations of the first row (`0:C35A`). Without the
+   third item and with fewer than three pieces, stock message `0x4E` at
+   `0x65` and `0x6E`. Otherwise `0x4D`, at `0x79` with all three pieces or at
+   `0xBB`. At `0x6E` the third item is taken back (`0:C3AE`) instead.
+   Whatever it prints, the printer's replace flag is left at the message's
+   number.
+6. The characters' entry (`0:C16E`), the items (`0:D484`), and the whole
+   play area copied to the screen (`0:C086`, `0:C6FE`).
+7. The hook set to nothing (`0:DA03`), then the doorway (`0:D8EC`).
+
+**A quirk the rewrite copies**: placing the items restocks only if the Z
+flag it's called with is clear (*Items*, *Restocking*). Here that's the flag
+the characters' entry leaves, which ends by drawing Robin. The frame drawing
+(`0:C5CE`) returns with AF taken from a word it pushed, a pointer into the
+frame. So Z is bit 6 of the low byte of his frame's address plus 2. The
+address comes from the frame table indexed by the frame doubled in one byte,
+so the frame's bit 7, the way he faces, drops out.
+
+### The ending
+
+Entering location `0x69` (`0xBEDF`), the only location not entered by the
+entry above (*The grid*). **Rewritten (`main_loop::ending`) and confirmed**
+up to its waits: play never gets there, so a supplement game, the ending's,
+sends the original into it from `0x68` through its own step (#60).
+**confirmed**, unless marked.
+1. `0:CF5F`: the play area cleared, stock message `0x50` printed at its top
+   left, and revealed (`0:CD73`, *The screen*).
+2. With interrupts off, the border flashes: R is written to port `0xFE`
+   `0x960` times.
+3. It waits for every key to be let go, a delay, then for any key, and
+   starts a new game (`0xBE5A`). The rewrite leaves these waits to its
+   caller. **read**
 
 ## Sound
 
