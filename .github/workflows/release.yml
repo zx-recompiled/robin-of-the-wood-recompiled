@@ -102,6 +102,9 @@ jobs:
           fi
           cp LICENSE-MIT LICENSE-APACHE "$dir/"
           cp THIRD-PARTY.md "$dir/THIRD-PARTY.txt"
+          # The font the program draws its own screens in travels with its
+          # licence, as the OFL asks.
+          cp games/robin/fonts/LICENSE.txt "$dir/LICENSE-Inter.txt"
           if [ "$RUNNER_OS" = "Windows" ]; then
             7z a -tzip "$dir.zip" "$dir" > /dev/null
             echo "ASSET=$dir.zip" >> "$GITHUB_ENV"

@@ -1,5 +1,6 @@
 //! The playable program: the rewritten game in a window, with the keyboard
-//! (#66). Sound is #67's.
+//! (#66), or the screen that asks for the tape when none is found (#70).
+//! Sound is #67's.
 //!
 //! Usage: `robin [TAPE]`, or `robin [TAPE] --headless FRAMES [DIR]` to play a
 //! scripted run without a window and write screenshots to `DIR`.
@@ -18,23 +19,36 @@ fn main() {
             .map_or_else(|| PathBuf::from("screenshots"), PathBuf::from);
         (frames, dir)
     });
-    let path = match args
-        .first()
-        .map(PathBuf::from)
-        .or_else(frontend::tape::find)
-    {
-        Some(path) => path,
+    // A tape named on the command line is used as it is; otherwise the
+    // usual places are searched.
+    let tape = match args.first() {
+        Some(path) => match frontend::tape::read(&PathBuf::from(path)) {
+            Ok(bytes) => Some(bytes),
+            Err(e) => fail(&e),
+        },
         None => {
-            eprintln!("{}", frontend::tape::NOT_FOUND);
-            std::process::exit(1);
+            let folders = frontend::tape::folders();
+            frontend::tape::find(&folders, robin::is_the_tape).map(|t| t.bytes)
         }
     };
     let result = match headless {
-        Some((frames, dir)) => frontend::headless::run(&path, frames, &dir),
-        None => frontend::video::run(&path),
+        // Without a window there's nobody to ask, so no tape is the end.
+        Some((frames, dir)) => match &tape {
+            Some(bytes) => frontend::headless::run(bytes, frames, &dir),
+            None => fail(&frontend::tape::not_found_message(
+                &frontend::tape::folders(),
+            )),
+        },
+        // In a window, no tape means asking for one.
+        None => frontend::video::run(tape),
     };
     if let Err(e) = result {
-        eprintln!("error: {e}");
-        std::process::exit(1);
+        fail(&format!("error: {e}"));
     }
+}
+
+/// Says what went wrong, and gives up.
+fn fail(message: &str) -> ! {
+    eprintln!("{message}");
+    std::process::exit(1)
 }

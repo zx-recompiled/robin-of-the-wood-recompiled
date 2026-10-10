@@ -5,7 +5,9 @@
 pub mod gamepad;
 pub mod headless;
 pub mod input;
+pub mod prompt;
 pub mod tape;
+pub mod text;
 pub mod video;
 
 /// The 128K's frame rate: 70,908 T-states at 3.5469 MHz.
