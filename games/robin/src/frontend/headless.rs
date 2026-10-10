@@ -1,5 +1,6 @@
 //! Plays without a window: 0 at the menu, then random held keys, with a
-//! screenshot every so many frames. For testing the program end to end.
+//! screenshot every so many frames, and the beeper's sound written to a
+//! WAV file. For testing the program end to end.
 
 use std::path::Path;
 
@@ -7,12 +8,17 @@ use robin::controls::Controls;
 use robin::picture::{FULL_H, FULL_W};
 use robin::session::{Session, State};
 
+use super::audio::{self, Beeper};
+
+/// The sound file's sample rate.
+const RATE: u32 = 48_000;
+
 /// The keys it holds: Q, A, N, M (up, down, left, right) and 1 (fire), the
 /// tape's own (`docs/re/robin.md`, *The controls*).
 const WAYS: [(usize, u8); 5] = [(2, 0), (1, 0), (7, 3), (7, 2), (3, 0)];
 
-/// Plays `frames` frames from `tape`, writing about 40
-/// screenshots to `dir`.
+/// Plays `frames` frames from `tape`, writing about 40 screenshots to `dir`,
+/// and the sound to `sound.wav` there.
 ///
 /// # Errors
 ///
@@ -24,6 +30,7 @@ pub fn run(tape: &[u8], frames: u64, dir: &Path) -> Result<(), String> {
     let every = (frames / 40).max(1);
     let mut rng: u64 = 0x9E37_79B9;
     let mut controls = Controls::default();
+    let mut beeper = Beeper::new(RATE);
     for frame in 0..frames {
         if frame % 15 == 0 {
             rng ^= rng << 13;
@@ -38,12 +45,16 @@ pub fn run(tape: &[u8], frames: u64, dir: &Path) -> Result<(), String> {
             controls.keys[4] &= !1;
         }
         session.frame(&assets, controls);
+        beeper.frame(session.io.ula_writes());
         if frame % every == 0 {
             let png = zx_core::png::encode(&session.picture(), FULL_W, FULL_H);
             let file = dir.join(format!("frame{frame:06}.png"));
             std::fs::write(&file, png).map_err(|e| format!("{}: {e}", file.display()))?;
         }
     }
+    let file = dir.join("sound.wav");
+    std::fs::write(&file, audio::wav(beeper.samples(), RATE))
+        .map_err(|e| format!("{}: {e}", file.display()))?;
     println!(
         "played {frames} frames; at location {:#05x}, {:?}",
         session.game.map.location, session.state

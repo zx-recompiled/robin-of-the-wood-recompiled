@@ -1,7 +1,8 @@
-//! The window, the keyboard and the headless runner around a
-//! [`robin::session::Session`] (#66), adapted from starquake-recompiled's
-//! frontend (`REUSED.md`).
+//! The window, the keyboard, the sound and the headless runner around a
+//! [`robin::session::Session`] (#66, #67), adapted from
+//! starquake-recompiled's frontend (`REUSED.md`).
 
+pub mod audio;
 pub mod gamepad;
 pub mod headless;
 pub mod input;
