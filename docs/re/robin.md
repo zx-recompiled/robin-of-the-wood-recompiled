@@ -1327,6 +1327,24 @@ them once a frame, as it does the menu's.
     with the game standing still while they play.
   - The menu plays its samples through the same player (`0xC0AE` is its
     write to port `0xFE`).
+- **The beeper's timing** (#67, **confirmed**). A sound on the beeper is
+  its writes to port `0xFE` and the time between them, set by the delay
+  loops its code runs. The rewrite keeps a clock in T-states, without
+  contention, and its sounds move it on as the original's instructions take.
+  The suites compare each write's time from the first, exactly, in the
+  beep (`0:D8C6`), the twang (`0xBE2C`), the zap (`0xBC4C`, in the hits that
+  set it off), the sample player (`4:C090`) and the ending's border flash.
+  Between two writes:
+  - the beep and the twang: a delay loop of 16 T-states a turn, from the
+    count, then 30 more for the beep and 41 for the twang (the count is the
+    number of turns, 0 for 256);
+  - the sample player: 13 T-states a turn of its delay (`4:C141`), and 244
+    more within a byte, 239 to the next byte, 246 to the next 64;
+  - the ending's flash: 46.
+
+  On the 128K an `OUT` to `0xFE` is slowed by a few T-states while the
+  beam is in the picture. That contention is left out, under 1% of a
+  sound's length.
 - **The music player**, every frame from the interrupt (*Interrupts*).
   **Rewritten (`sound.rs`) and confirmed** (#62), every instruction reached:
   - **ENTER** (bit 0 of `0xBFFE`) toggles the music (`6:C2CD`, `0xFF` off),

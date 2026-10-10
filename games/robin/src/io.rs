@@ -134,6 +134,12 @@ pub struct Io {
     pub ay: Ay,
     /// Every port written, and the value, in order.
     pub writes: Vec<(u16, u8)>,
+    /// A clock, in T-states without contention, that the routines making a
+    /// sound on the beeper move on by their delays (#67).
+    pub t: u32,
+    /// The clock at each write to the ULA's port (`0xFE`: the beeper and the
+    /// border), in order.
+    pub beeps: Vec<u32>,
 }
 
 impl Io {
@@ -148,10 +154,18 @@ impl Io {
         }
     }
 
+    /// Moves the clock on by `n` T-states.
+    pub fn wait(&mut self, n: u32) {
+        self.t = self.t.wrapping_add(n);
+    }
+
     /// Writes `v` to `port`: kept, in order, and passed to the AY if it's
     /// one of its ports.
     pub fn out(&mut self, port: u16, v: u8) {
         self.writes.push((port, v));
+        if port & 1 == 0 {
+            self.beeps.push(self.t);
+        }
         match Ay::decode(port) {
             Some(true) => self.ay.latch = v,
             Some(false) => self.ay.write(v),

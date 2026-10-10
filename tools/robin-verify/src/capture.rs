@@ -172,6 +172,14 @@ const VARIED: [&str; 4] = [
     "the changed-cell map",
 ];
 
+/// The routines whose writes to the ULA's port are timed and compared, as
+/// offsets from the first: the sounds made on the beeper, and the routines
+/// that make them and nothing else on that port (#67). Elsewhere code the
+/// rewrite doesn't time can come between two writes.
+const TIMED: &[u16] = &[
+    0xBE2C, 0xD8C6, 0xC090, 0xC012, 0xBECE, 0xBC0B, 0xBD19, 0xBC6C,
+];
+
 /// How many distinct calls from each caller get the scrambling check.
 pub(crate) const SCRAMBLE_PER_CALLER: u32 = 20;
 /// How far the original runs before a call is taken as hung.
@@ -358,6 +366,9 @@ impl Routine {
             }
         };
         let mut random = Vec::new();
+        // The time, in T-states without contention, and at each write to
+        // the ULA's port (#67).
+        let (mut clock, mut beeps) = (0u32, Vec::new());
         while !done(&c, steps) {
             steps += 1;
             if steps > STEP_LIMIT {
@@ -372,6 +383,10 @@ impl Routine {
             }
             let d = interp::decode_at(&c, pc);
             for cy in bus::cycles(&c, &d, pc).iter() {
+                if cy.kind == bus::Kind::PortWrite && cy.at & 1 == 0 {
+                    beeps.push(clock);
+                }
+                clock += cy.len;
                 match cy.kind {
                     bus::Kind::Read => {
                         (cy.at, c.read(cy.at)).hash(&mut key);
@@ -425,6 +440,7 @@ impl Routine {
             read,
             rom_read,
             random,
+            beeps,
             banks: banks(&c),
             after: c,
         })
@@ -450,6 +466,8 @@ impl Routine {
                 latch: entry.ay.selected().map_or(0xFF, |r| r as u8),
             },
             writes: Vec::new(),
+            t: 0,
+            beeps: Vec::new(),
         };
         let out = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             rewrite(&mut g, play.assets, before, &mut io)
@@ -466,6 +484,18 @@ impl Routine {
         };
         let after = Regs::of(&run.after);
         let mut differ = Vec::new();
+        if TIMED.contains(&self.entry) {
+            let from = |b: &[u32]| b.iter().map(|&t| t.wrapping_sub(b[0])).collect::<Vec<_>>();
+            let (orig, new) = (from(&run.beeps), from(&io.beeps));
+            if let Some(n) = (0..orig.len().max(new.len())).find(|&n| orig.get(n) != new.get(n)) {
+                differ.push(format!(
+                    "the beeper's times differ: write {} at +{:?} T-states, the rewrite's at +{:?}",
+                    n + 1,
+                    orig.get(n),
+                    new.get(n)
+                ));
+            }
+        }
         if io.random.left() > 0 {
             differ.push(format!(
                 "the original read R {} time(s) and the rewrite drew {} fewer",
@@ -710,6 +740,8 @@ pub(crate) struct Run {
     read: BTreeSet<(usize, usize)>,
     /// The first read of the ROM, if it made one: where, and what.
     pub(crate) rom_read: Option<(u16, u16)>,
+    /// The time of each write to the ULA's port, without contention.
+    pub(crate) beeps: Vec<u32>,
     /// What R gave each `LD A,R`, in order.
     random: Vec<u8>,
     banks: Box<[[u8; BANK]; 8]>,

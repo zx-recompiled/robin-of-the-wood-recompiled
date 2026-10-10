@@ -26,15 +26,36 @@ const SAMPLES: [(u8, u16, u16, u16); 4] = [
 /// A beeper twang: EAR and MIC toggled once for each count of `b` up to
 /// `0x80`, with a delay that grows between them (`0xBE2C`).
 pub fn twang(io: &mut Io, mut b: u8) {
+    io.wait(11 + 11 + 4); // PUSH AF, PUSH BC, XOR A
     let mut a = 0u8;
     loop {
+        io.wait(4); // LD C,B
+        delay(io, b);
         a ^= 0x18;
+        io.wait(7);
         io.out(u16::from(a) << 8 | 0xFE, a);
+        io.wait(11 + 4 + 8); // OUT, INC B, BIT 7,B
         b = b.wrapping_add(1);
         if b & 0x80 != 0 {
+            io.wait(7 + 10 + 10 + 10); // JR Z, POP BC, POP AF, RET
             return;
         }
+        io.wait(12);
     }
+}
+
+/// `DEC C : JR NZ` back to itself, from `c` (0 for 256): 16 T-states a
+/// turn, 5 fewer for the last.
+fn delay(io: &mut Io, c: u8) {
+    let n = if c == 0 { 256 } else { u32::from(c) };
+    io.wait(16 * n - 5);
+}
+
+/// `DJNZ` back to itself, from `b` (0 for 256): 13 T-states a turn, 5 fewer
+/// for the last.
+fn djnz_delay(io: &mut Io, b: u8) {
+    let n = if b == 0 { 256 } else { u32::from(b) };
+    io.wait(13 * n - 5);
 }
 
 /// Plays one of the four samples, picked by R, through the beeper and the
@@ -80,8 +101,15 @@ pub fn play(g: &mut Game, io: &mut Io, delay: u8, length: u16, amplitudes: u16, 
     }
     let (mut left, mut amplitude, mut at) = (length, amplitudes, sample);
     'bytes: loop {
-        for _ in 0..0x40 {
-            for _ in 0..8 {
+        io.wait(7); // LD C,0x40
+        for block in 0..0x40 {
+            io.wait(if block == 0 { 7 } else { 4 + 4 + 10 + 7 }); // (NOP, NOP, JP,) LD B,8
+            for bit in 0..8 {
+                // PUSH BC, CALL the delay (LD B,n, DJNZ, RET), XOR A,
+                // RLC (IX+0), RLA, NEG, AND (HL), LD B,A, RRA, AND 0x18.
+                io.wait(11 + 17 + 7);
+                djnz_delay(io, delay);
+                io.wait(10 + 4 + 23 + 4 + 8 + 7 + 4 + 4 + 7);
                 // Rotated in place: after eight, the byte is as it was.
                 let byte = g.read_in(bank, at);
                 g.write_in(bank, at, byte.rotate_left(1));
@@ -92,14 +120,26 @@ pub fn play(g: &mut Game, io: &mut Io, delay: u8, length: u16, amplitudes: u16, 
                 };
                 let ear = (a >> 1) & 0x18;
                 io.out(u16::from(ear) << 8 | 0xFE, ear);
+                // OUT, LD A,B, AND 0x0F, LD BC,0xBFFD, OUT (C),A, POP BC,
+                // DEC B, JP Z; then three PUSH and POP pairs and JR.
+                io.wait(11 + 4 + 7 + 10);
                 io.out(0xBFFD, a & 0x0F);
+                io.wait(12 + 10 + 4 + 10);
+                if bit < 7 {
+                    io.wait(3 * (11 + 10) + 12);
+                }
             }
+            // INC IX, DEC DE, BIT 7,D, JR NZ, DEC C, JP Z.
+            io.wait(10 + 6 + 8);
             at = at.wrapping_add(1);
             left = left.wrapping_sub(1);
             if left & 0x8000 != 0 {
+                io.wait(12);
                 break 'bytes;
             }
+            io.wait(7 + 4 + 10);
         }
+        io.wait(6 + 12); // INC HL, JR
         amplitude = amplitude.wrapping_add(1);
     }
     for (n, r) in registers() {
@@ -232,25 +272,49 @@ pub fn reset_ay(g: &mut Game, io: &mut Io) {
 /// The zap a hit plays there and then (`0xBC4C`): for each count from
 /// `0x14` to `0x27`, that many writes to the beeper of R's bits 3 and 4.
 pub fn zap(io: &mut Io) {
-    for count in 0x14..0x28 {
-        for _ in 0..count {
+    io.wait(4 + 7); // EI, LD C,0x14
+    for count in 0x14..0x28u8 {
+        io.wait(11); // PUSH BC
+        let mut c = count;
+        loop {
+            io.wait(4 + 9); // LD B,C, LD A,R
             let a = io.random.r() & 0x18;
+            io.wait(7);
             io.out(u16::from(a) << 8 | 0xFE, a);
+            io.wait(11);
+            djnz_delay(io, c);
+            c -= 1;
+            io.wait(4);
+            if c == 0 {
+                io.wait(7);
+                break;
+            }
+            io.wait(12);
         }
+        io.wait(10 + 4 + 4 + 7); // POP BC, INC C, LD A,C, CP 0x28
+        io.wait(if count + 1 == 0x28 { 7 } else { 12 });
     }
+    io.wait(10); // RET
 }
 
 /// A beeper sound of `b` toggles of EAR and MIC, the delay between them
 /// shortening from `b` (`0:D8C6`): 256 for 0.
 pub fn beep(io: &mut Io, mut b: u8) {
+    io.wait(4); // XOR A
     let mut a = 0u8;
     loop {
+        io.wait(4); // LD C,B
+        delay(io, b);
         a ^= 0x18;
+        io.wait(7);
         io.out(u16::from(a) << 8 | 0xFE, a);
+        io.wait(11);
         b = b.wrapping_sub(1);
         if b == 0 {
+            io.wait(8 + 10); // DJNZ, RET
             return;
         }
+        io.wait(13);
     }
 }
 
@@ -299,16 +363,32 @@ const WARBLE_DELAY: u16 = 0x8B56;
 /// rotated through and left as they were.
 pub fn warble(g: &mut Game, io: &mut Io) {
     let length = u16::from_le_bytes([g.read(WARBLE), g.read(WARBLE + 1)]);
-    for delay in 2..=0x0Cu8 {
-        g.write(WARBLE_DELAY, delay);
+    for delay_n in 2..=0x0Cu8 {
+        g.write(WARBLE_DELAY, delay_n);
+        // PUSH AF, LD (nn),A, LD HL,nn, CALL, then its length read.
+        io.wait(11 + 13 + 10 + 17 + 7 + 6 + 7 + 6);
         for n in 0..length {
             let b = g.read(WARBLE + 2 + n);
+            io.wait(7); // LD B,8
             for bit in (0..8).rev() {
+                io.wait(7); // LD C,n
+                delay(io, delay_n);
+                // LD A,0x18, RLC (HL), JP NC, then LD C,0 or AND 7, JP.
+                io.wait(7 + 15 + 10 + 7 + 10);
                 let a = if b >> bit & 1 != 0 { 0x18 } else { 0 };
                 io.out(u16::from(a) << 8 | 0xFE, a);
+                io.wait(11);
+                io.wait(if bit == 0 { 8 } else { 13 }); // DJNZ
             }
+            // NOP, INC IX, INC HL, DEC DE, LD A,D, OR E, JR NZ.
+            io.wait(4 + 10 + 6 + 6 + 4 + 4);
+            io.wait(if n + 1 == length { 7 } else { 12 });
         }
+        // RET; the pause, LD HL,0 to LDIR of 16K; POP AF, INC A, CP, JR NZ.
+        io.wait(10 + 10 + 4 + 4 + 4 + 7 + (21 * 0x3FFF + 16) + 10 + 4 + 7);
+        io.wait(if delay_n == 0x0C { 7 } else { 12 });
     }
+    io.wait(10); // RET
 }
 
 /// The sample the menu plays (`4:C00F`).
