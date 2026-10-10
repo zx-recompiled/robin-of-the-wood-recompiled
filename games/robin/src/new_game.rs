@@ -109,3 +109,111 @@ pub fn set_method(g: &mut Game, method: u8) {
     g.write(CONTROLS, lo);
     g.write(CONTROLS + 1, hi);
 }
+
+/// The redefinition's strings, the keys it records, and their names.
+const HEADING: u16 = 0xD0E8;
+const PROMPTS: u16 = 0xD10C;
+const PROMPT_LENGTH: u16 = 0x0E;
+const NAME_IN_PROMPT: u16 = 0x0B;
+const KEYS: u16 = 0xD154;
+const NAMES: u16 = 0xD159;
+/// How many keys it asks for: the four ways and fire.
+const ASKED: u8 = 5;
+
+/// Redefining the keys (`0:CFDC`): for each of five, every key let go, then
+/// one pressed, recorded and named. Its waits are steps, once a frame.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Redefine {
+    /// How many have been recorded.
+    pub done: u8,
+    /// Whether every key has been let go since the last.
+    pub released: bool,
+}
+
+/// The redefinition's screen and its first prompt (`0:CFDC`).
+pub fn redefine(g: &mut Game) -> Redefine {
+    screen::clear_play_area(g, 0x45);
+    screen::reveal(g);
+    print::print_replacing(g, HEADING);
+    print::print_replacing(g, PROMPTS);
+    Redefine {
+        done: 0,
+        released: false,
+    }
+}
+
+impl Redefine {
+    /// One frame's step: waiting for every key to be let go (`0:D028`), then
+    /// for one (`0:D01D`). Once it's pressed, it's recorded, and the next
+    /// prompt printed. True once all five are, with the keys set as the
+    /// method (`0:CFBD`).
+    pub fn step(&mut self, g: &mut Game, io: &Io) -> bool {
+        if !self.released {
+            if any_key(io) {
+                return false;
+            }
+            self.released = true;
+        }
+        let Scan::One(code) = scan(io) else {
+            return false;
+        };
+        record(g, self.done, code);
+        self.done += 1;
+        self.released = false;
+        if self.done == ASKED {
+            set_method(g, 0);
+            return true;
+        }
+        print::print_replacing(g, PROMPTS + u16::from(self.done) * PROMPT_LENGTH);
+        false
+    }
+}
+
+/// Whether any key is held, read from every half-row at once (`0:D028`).
+#[must_use]
+pub fn any_key(io: &Io) -> bool {
+    !io.input(0x00FE) & 0x1F != 0
+}
+
+/// What a scan of the keyboard found (`0:D033`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Scan {
+    None,
+    /// One key, by its code: `0x27` for the first of the first half-row
+    /// read, down by one a key, a half-row of five at a time.
+    One(u8),
+    Several,
+}
+
+/// The half-rows the scan reads, in its order.
+pub const SCAN_ROWS: [u16; 8] = [
+    0xFEFE, 0xFDFE, 0xFBFE, 0xF7FE, 0xEFFE, 0xDFFE, 0xBFFE, 0x7FFE,
+];
+
+/// A scan of the keyboard (`0:D033`): the one key held, if only one is.
+#[must_use]
+pub fn scan(io: &Io) -> Scan {
+    let mut found = None;
+    for (row, port) in SCAN_ROWS.into_iter().enumerate() {
+        let keys = !io.input(port) & 0x1F;
+        if keys == 0 {
+            continue;
+        }
+        if found.is_some() || keys & (keys - 1) != 0 {
+            return Scan::Several;
+        }
+        let bit = keys.trailing_zeros() as u8;
+        found = Some(0x2F - row as u8 - 8 * (bit + 1));
+    }
+    found.map_or(Scan::None, Scan::One)
+}
+
+/// The `n`th key recorded as `code`, and its name put into its prompt,
+/// printed again (`0:D000`).
+pub fn record(g: &mut Game, n: u8, code: u8) {
+    g.write(KEYS + u16::from(n), code);
+    let name = g.read(NAMES + u16::from(code));
+    let prompt = PROMPTS + u16::from(n) * PROMPT_LENGTH;
+    g.write(prompt + NAME_IN_PROMPT, name);
+    print::print_replacing(g, prompt);
+}

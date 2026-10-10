@@ -670,6 +670,76 @@ pub fn all() -> Vec<Routine> {
             },
         },
         Routine {
+            name: "the redefinition's screen (0:CFDC)",
+            bank: Some(0),
+            entry: 0xCFDC,
+            code: (0xCFDC, 0xCFF7),
+            outputs: &[],
+            // To its first wait, for the keys to be let go.
+            exits: &[0xCFF8],
+            preserves: &[],
+            rewrite: |g, _, r, _| {
+                new_game::redefine(g);
+                r
+            },
+        },
+        Routine {
+            name: "wait for the keys to be let go (0:D028)",
+            bank: Some(0),
+            entry: 0xD028,
+            code: (0xD028, 0xD032),
+            outputs: &[],
+            // Polled again, or let go.
+            exits: &[0xD028, 0xCFFB],
+            preserves: &[],
+            rewrite: |_, _, r, io| {
+                let _ = new_game::any_key(io);
+                r
+            },
+        },
+        Routine {
+            name: "a scan of the keyboard (0:D033)",
+            bank: Some(0),
+            entry: 0xD033,
+            code: (0xD033, 0xD052),
+            // The key in D, 0xFF for none; NZ if more than one is held.
+            outputs: &[Reg::D, Reg::F],
+            exits: &[],
+            preserves: &[],
+            rewrite: |_, _, r, io| scan_regs(io, r),
+        },
+        Routine {
+            name: "a key recorded and named (0:D000)",
+            bank: Some(0),
+            entry: 0xD000,
+            code: (0xD000, 0xD018),
+            // Where the next key and the next prompt go.
+            outputs: &[Reg::D, Reg::E, Reg::H, Reg::L],
+            exits: &[0xD019],
+            preserves: &[],
+            rewrite: |g, _, mut r, _| {
+                let keys = u16::from_be_bytes([r.get(Reg::D), r.get(Reg::E)]);
+                let prompt = u16::from_be_bytes([r.get(Reg::H), r.get(Reg::L)]);
+                new_game::record(g, (keys - 0xD154) as u8, r.get(Reg::A));
+                r.set_pair(Reg::D, Reg::E, keys + 1);
+                r.set_pair(Reg::H, Reg::L, prompt + 0x0E);
+                r
+            },
+        },
+        Routine {
+            name: "the keys set as the method (0:CFBD)",
+            bank: Some(0),
+            entry: 0xCFBD,
+            code: (0xCFBD, 0xCFDB),
+            outputs: &[],
+            exits: &[0xCCD0],
+            preserves: &[],
+            rewrite: |g, _, r, _| {
+                new_game::set_method(g, 0);
+                r
+            },
+        },
+        Routine {
             name: "one pass of the main loop (0xBE62)",
             bank: None,
             entry: 0xBE62,
@@ -1479,6 +1549,58 @@ fn overlap_regs(mut r: Regs) -> Regs {
 
 /// The flags of the Z80's 8-bit subtractions, as `SUB`, `CP` and `NEG`
 /// leave them.
+/// The registers `0:D033` leaves, from what the scan found: D the key, or
+/// `0xFF`, or what it had when it found a second; and F by the way it left.
+/// Off the end, a `CP A`. At a second half-row with a key, an `INC D`. At a
+/// second key in one half-row, the `SRL H` that found the first.
+fn scan_regs(io: &robin::io::Io, mut r: Regs) -> Regs {
+    let mut d: u8 = 0xFF;
+    let mut a = 0u8;
+    for (row, port) in new_game::SCAN_ROWS.into_iter().enumerate() {
+        a = !io.input(port) & 0x1F;
+        if a == 0 {
+            continue;
+        }
+        d = d.wrapping_add(1);
+        if d != 0 {
+            let mut f = (d & 0x80) | (d & 0x28);
+            if d & 0x0F == 0 {
+                f |= 0x10;
+            }
+            if d == 0x80 {
+                f |= 0x04;
+            }
+            r.set(Reg::D, d);
+            r.set(Reg::F, f);
+            return r;
+        }
+        let mut h = a;
+        let mut code = 0x2F - row as u8;
+        loop {
+            code = code.wrapping_sub(8);
+            let carry = h & 1;
+            h >>= 1;
+            if carry != 0 {
+                break;
+            }
+        }
+        if h != 0 {
+            let mut f = flags::C | (h & 0x28);
+            if h.count_ones().is_multiple_of(2) {
+                f |= 0x04;
+            }
+            r.set(Reg::D, d);
+            r.set(Reg::F, f);
+            return r;
+        }
+        d = code;
+        a = code;
+    }
+    r.set(Reg::D, d);
+    r.set(Reg::F, flags::cp(a, a));
+    r
+}
+
 mod flags {
     pub const C: u8 = 0x01;
     const N: u8 = 0x02;

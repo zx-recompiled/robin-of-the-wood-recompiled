@@ -1238,6 +1238,26 @@ sends the original into it from `0x68` through its own step (#60).
   number at `0xABEE` and its table of ports and bits at `0xD152` (`0xD06E`,
   `0xD07F`, `0xD088`, *The controls*).
 
+### Redefining the keys
+
+`0:CFDC`, from the pick's 1. Its waits are busy loops; the rewrite steps
+them once a frame, as it does the menu's.
+1. **Its screen**: the play area cleared to `0x45`, revealed, then a
+   heading (`0xD0E8`) and the first of five prompts (`0xD10C`, `0x0E`
+   bytes apart), printed replacing what's there (`0:CEBB`).
+2. **For each of the five**: it waits for every key to be let go (`0:D028`,
+   reading every half-row at once through port `0x00FE`), then for exactly
+   one to be held (`0:D01D`). It records the key's code at `0xD154` on, puts
+   its name from the table at `0xD159` into the prompt (at `+0x0B`), and
+   prints the prompt again. Then the next prompt.
+3. **Then the keyboard is the method** (`0:CFBD`).
+- **The scan** (`0:D033`) reads the eight half-rows from `0xFEFE` to
+  `0x7FFE`. A key's code is `0x27` for the first key of the first half-row,
+  down by one a key: `0x2F` less the half-row's number, less 8 for each key
+  up to and including it. It answers in D (`0xFF` for none) and the Z flag,
+  which is clear if more than one key is held. Then D is what it had when it
+  found the second.
+
 ## Sound
 
 - **It uses the AY sound chip.** It selects registers through `0xFFFD` and
