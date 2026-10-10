@@ -2,10 +2,13 @@
 //! [`robin::session::Session`] (#66, #67), adapted from
 //! starquake-recompiled's frontend (`REUSED.md`).
 
+pub mod aids;
 pub mod audio;
 pub mod gamepad;
 pub mod headless;
 pub mod input;
+pub mod overlay;
+pub mod panel;
 pub mod prompt;
 pub mod tape;
 pub mod text;

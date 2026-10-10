@@ -153,6 +153,11 @@ impl Canvas<'_> {
         self.pixels[i + 3] = (a + under * (255 - a) / 255) as u8;
     }
 
+    /// Clears to nothing at all, for a frame laid over another.
+    pub fn clear_transparent(&mut self) {
+        self.pixels.fill(0);
+    }
+
     pub fn clear(&mut self, colour: Rgb) {
         self.pixels
             .as_chunks_mut::<4>()
@@ -163,6 +168,15 @@ impl Canvas<'_> {
     /// A filled rectangle with rounded corners, in logical pixels.
     pub fn round_rect(&mut self, x: f32, y: f32, w: f32, h: f32, radius: f32, colour: Rgb) {
         self.shape(x, y, w, h, radius, colour, 255, |_, _| true);
+    }
+
+    /// A see-through rectangle: `alpha` of `colour` over what is there.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "a rectangle, its colour and how much of it"
+    )]
+    pub fn shade(&mut self, x: f32, y: f32, w: f32, h: f32, colour: Rgb, alpha: u8) {
+        self.shape(x, y, w, h, 0.0, colour, alpha, |_, _| true);
     }
 
     /// The outline of a rounded rectangle, `thickness` logical pixels wide,

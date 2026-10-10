@@ -2,9 +2,12 @@
 //! (#66) and its sound (#67), or the screen that asks for the tape
 //! when none is found (#70).
 //!
-//! Usage: `robin [TAPE]`, or `robin [TAPE] --headless FRAMES [DIR]` to play a
-//! scripted run without a window and write screenshots and its sound to
-//! `DIR`.
+//! Usage: `robin [TAPE] [AIDS]`, or `robin [TAPE] --headless FRAMES [DIR]` to
+//! play a scripted run without a window and write screenshots and its sound
+//! to `DIR`. `AIDS` are the flags of the aids to start with (#92): `--map`,
+//! `--map-seen`, `--map-now`, `--objective`, `--hints`, `--infinite-energy`,
+//! `--infinite-lives`, `--no-witch`, `--saves`. F1 or Tab sets them in the
+//! window.
 
 mod frontend;
 
@@ -12,6 +15,7 @@ use std::path::PathBuf;
 
 fn main() {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
+    let aids = frontend::aids::Aids::from_args(&mut args);
     let headless = args.iter().position(|a| a == "--headless").map(|i| {
         let rest: Vec<String> = args.drain(i..).skip(1).collect();
         let frames = rest.first().and_then(|f| f.parse().ok()).unwrap_or(3000);
@@ -41,7 +45,7 @@ fn main() {
             )),
         },
         // In a window, no tape means asking for one.
-        None => frontend::video::run(tape),
+        None => frontend::video::run(tape, aids),
     };
     if let Err(e) = result {
         fail(&format!("error: {e}"));
