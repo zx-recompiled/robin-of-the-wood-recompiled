@@ -247,15 +247,16 @@ impl Checker {
             if let Step::Comparing(run, at, c) = &mut call.step {
                 let Some(c) = c.take() else { return };
                 let (run, at) = (Arc::clone(run), std::mem::take(at));
-                let scrambles = c.failure.is_none() && {
-                    let count = self.scrambling[job.routine]
-                        .entry(self.routines[job.routine].caller(&run))
-                        .or_default();
-                    *count < SCRAMBLE_PER_CALLER && {
-                        *count += 1;
-                        true
-                    }
-                };
+                let scrambles =
+                    c.failure.is_none() && self.routines[job.routine].scrambles_anything() && {
+                        let count = self.scrambling[job.routine]
+                            .entry(self.routines[job.routine].caller(&run))
+                            .or_default();
+                        *count < SCRAMBLE_PER_CALLER && {
+                            *count += 1;
+                            true
+                        }
+                    };
                 let done = if scrambles {
                     send(
                         &self.tasks,

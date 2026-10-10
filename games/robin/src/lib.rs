@@ -14,6 +14,7 @@ pub mod controls;
 pub mod fifth;
 pub mod fighting;
 pub mod game;
+pub mod interrupt;
 pub mod io;
 pub mod items;
 pub mod journeys;

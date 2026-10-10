@@ -135,12 +135,19 @@ trace never reached it.
   displacement is the next byte, which wraps round to the ROM's first byte
   (`0xF3`), landing at `0xFFF4`. That jumps to the handler at `0xDED3`.
   **read**; the jump at `0xFFFF` reading the ROM's first byte **confirmed** by
-  the census (every frame of play), the handler's address **provisional**.
+  the census (every frame of play), the handler's address **confirmed** (#62).
   That the game writes the table before the first interrupt is **confirmed**:
   every vector read in 20,000 frames found bytes it had written
   (`games/robin/tests/uninitialised.rs`).
 - So **the game depends on the ROM's first byte as data**, though it never
   runs the ROM's interrupt routine. **read**
+- **The handler** (`0:DED3`, **confirmed**): it saves every register, calls
+  three parts of the music player in bank 6 through the trampoline, and
+  restores them. **Rewritten (`games/robin/src/interrupt.rs`) and confirmed**
+  (#62):
+  1. **ENTER and the tune** (`6:C2CF`, through `6:C03C`, *Sound*);
+  2. **the wobble** (`6:C26F`, through `6:C030`);
+  3. **the effect** (`6:C1EB`, through `6:C015`).
 
 ## The screen
 
@@ -1320,7 +1327,32 @@ them once a frame, as it does the menu's.
     with the game standing still while they play.
   - The menu plays its samples through the same player (`0xC0AE` is its
     write to port `0xFE`).
-- The menu offers *ENTER = music on/off*. **provisional**
+- **The music player**, every frame from the interrupt (*Interrupts*).
+  **Rewritten (`sound.rs`) and confirmed** (#62), every instruction reached:
+  - **ENTER** (bit 0 of `0xBFFE`) toggles the music (`6:C2CD`, `0xFF` off),
+    once a count (`6:C2CE`) set to `0x32` at each toggle has run out. Back
+    on, the tune starts again from the entry kept at `0xCBD9`. Off,
+    registers 8 and 10 go to 0.
+  - **While it's on, the tune** (`6:C0A2`): a count kept in its code
+    (`6:C0A3`) runs down from the tune's speed (`6:C0A1`), and at each
+    end each part plays its next note. The first (`6:C9A0`) on tone A,
+    volume 12, its notes' bit 7 ignored. The second (`6:C9A2`) on tone C with
+    the envelope. A note is a period from the table at `6:C308`. 0 is a
+    rest, and `0xFF` loops the part to the address after it: 3 bytes after
+    for the first part, straight after for the second.
+  - **The wobble** (`6:C26F`): tone C's period read back from registers 4
+    and 5, a step kept in its code (`6:C27E`) added, and written back.
+    Every fourth frame (a count in its code, `6:C293`) the step changes
+    sign, as the code works it out: the low byte negated and the high byte
+    inverted, which is a true negation only when the low byte is 0.
+  - **The effect** (`6:C1EB`): while its count (`6:C190`) runs, tone B at
+    full volume, its period (`6:C18C`) swept by a step (`6:C18E`), the
+    low byte's top bit flipped first each frame. Otherwise (`6:C15B`), with
+    no meeting's sound (`6:C15A`), the mixer is set and tone B quiet. With
+    it, its count runs down, and every eighth frame tone B's volume is the
+    count over 8.
+- The menu offers *ENTER = music on/off*, and ENTER toggles it at any
+  time, in play too.
 
 ## Input
 

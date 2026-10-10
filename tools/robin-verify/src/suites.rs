@@ -2,8 +2,8 @@
 //! rewrite takes the original's registers (`docs/re/robin.md`).
 
 use robin::{
-    actions, characters, fifth, fighting, items, journeys, main_loop, map, movement, new_game,
-    print, scene, screen, sound, sprites, wanderer,
+    actions, characters, fifth, fighting, interrupt, items, journeys, main_loop, map, movement,
+    new_game, print, scene, screen, sound, sprites, wanderer,
 };
 
 use crate::capture::{Reg, Regs, Routine};
@@ -835,6 +835,106 @@ pub fn all() -> Vec<Routine> {
             preserves: &[],
             rewrite: |g, _, r, io| {
                 new_game::finish(g, io);
+                r
+            },
+        },
+        Routine {
+            name: "the interrupt (0:DED3)",
+            bank: Some(0),
+            entry: 0xDED3,
+            code: (0xDED3, 0xDF02),
+            outputs: &[],
+            exits: &[],
+            // It saves and restores every register.
+            preserves: &[
+                Reg::A,
+                Reg::F,
+                Reg::B,
+                Reg::C,
+                Reg::D,
+                Reg::E,
+                Reg::H,
+                Reg::L,
+                Reg::A_,
+                Reg::F_,
+                Reg::B_,
+                Reg::C_,
+                Reg::D_,
+                Reg::E_,
+                Reg::H_,
+                Reg::L_,
+                Reg::Ixh,
+                Reg::Ixl,
+                Reg::Iyh,
+                Reg::Iyl,
+            ],
+            rewrite: |g, _, r, io| {
+                interrupt::frame(g, io);
+                r
+            },
+        },
+        Routine {
+            name: "ENTER and the tune (6:C2CF)",
+            bank: Some(6),
+            entry: 0xC2CF,
+            code: (0xC2CF, 0xC307),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                sound::music(g, io);
+                r
+            },
+        },
+        Routine {
+            name: "the tune plays on (6:C0A2)",
+            bank: Some(6),
+            entry: 0xC0A2,
+            code: (0xC0A2, 0xC126),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                sound::step_tune(g, io);
+                r
+            },
+        },
+        Routine {
+            name: "the wobble (6:C26F)",
+            bank: Some(6),
+            entry: 0xC26F,
+            code: (0xC26F, 0xC2A8),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                sound::wobble(g, io);
+                r
+            },
+        },
+        Routine {
+            name: "the effect (6:C1EB)",
+            bank: Some(6),
+            entry: 0xC1EB,
+            code: (0xC1EB, 0xC21B),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                sound::effect(g, io);
+                r
+            },
+        },
+        Routine {
+            name: "no effect running (6:C15B)",
+            bank: Some(6),
+            entry: 0xC15B,
+            code: (0xC15B, 0xC18B),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                sound::quiet(g, io);
                 r
             },
         },
