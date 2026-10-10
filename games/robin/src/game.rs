@@ -467,8 +467,20 @@ pub struct Game {
     pub rom: std::collections::BTreeMap<u16, u8>,
     /// The screen as an animation leaves it at the end of each of its
     /// passes, while it runs (#57): for the checks, which compare them with
-    /// the original's, and for the window to show.
-    pub pictures: Vec<Box<[u8; 6912]>>,
+    /// the original's, and for the window to show at the original's pace
+    /// (#82).
+    pub pictures: Vec<Picture>,
+}
+
+/// The screen at the end of one of an animation's passes (#57).
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Picture {
+    /// The clock (`Io::t`) here. An animation moves it on by the T-states
+    /// each pass takes the original, measured in the reference machine, the
+    /// interrupt and contention included, so the window can show it at the
+    /// original's pace (#82).
+    pub at: u32,
+    pub screen: Box<[u8; 6912]>,
 }
 
 /// The bank and offset of `addr`, with bank 0 paged at `0xC000`.
@@ -535,9 +547,13 @@ impl Game {
             .unwrap_or(self.rest[bank][offset])
     }
 
-    /// The screen now, kept as an animation's picture (#57).
-    pub fn picture(&mut self) {
-        self.pictures.push(self.display.screen.clone());
+    /// The screen now, kept as an animation's picture (#57), with the clock
+    /// at it (#82).
+    pub fn picture(&mut self, at: u32) {
+        self.pictures.push(Picture {
+            at,
+            screen: self.display.screen.clone(),
+        });
     }
 
     /// Writes the byte at `addr`, with bank 0 paged at `0xC000`. Writes below

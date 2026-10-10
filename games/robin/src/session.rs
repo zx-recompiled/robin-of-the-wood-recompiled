@@ -7,10 +7,14 @@
 //! the original's average speed but not its unevenness (`README.md`,
 //! *Status*). Each frame, the interrupt runs first, as it does at the
 //! frame's start, unless the original has interrupts off.
+//!
+//! An animation inside one call (the reveal, the meeting's flash, a
+//! journey's wipe) is shown at the original's pace, a picture at a time,
+//! while the game stands still (#82).
 
 use crate::assets::{Assets, BANK};
 use crate::controls::Controls;
-use crate::game::Game;
+use crate::game::{Game, Picture};
 use crate::interrupt;
 use crate::io::{Io, Random};
 use crate::main_loop::{self, Pass};
@@ -28,6 +32,59 @@ pub const FRAME_T: u32 = 70_908;
 #[must_use]
 pub const fn held_for(t: u32) -> u32 {
     t / FRAME_T
+}
+
+/// Whether the interrupt runs at the start of the `since`th frame after a
+/// step, whose spans with interrupts off were `quiet`.
+fn interrupts_at(quiet: &[std::ops::Range<u32>], since: u32) -> bool {
+    let at = since.saturating_mul(FRAME_T);
+    !quiet.iter().any(|q| q.contains(&at))
+}
+
+/// An animation's pictures, shown at the original's pace (#82).
+#[derive(Clone, Debug, Default)]
+struct Animation {
+    /// The pictures still to come, each with the clock at it: the
+    /// T-states from the step's start, the sounds and animations before it
+    /// included.
+    due: Vec<(u32, Box<[u8; 6912]>)>,
+    /// The T-states shown so far.
+    shown: u32,
+    /// The screen on show: the last picture due, or, before the first, the
+    /// screen as it was before the step. None once the last is due, when the
+    /// screen the step left is shown.
+    showing: Option<Box<[u8; 6912]>>,
+}
+
+impl Animation {
+    /// `pictures`, from a step that started with `before` on the screen.
+    /// The step's clock runs past the last, so it holds the game for as
+    /// long as they take.
+    fn start(&mut self, before: Box<[u8; 6912]>, pictures: Vec<Picture>) {
+        self.due = pictures.into_iter().map(|p| (p.at, p.screen)).collect();
+        self.shown = 0;
+        self.showing = Some(before);
+    }
+
+    /// A frame shown: the screen is the last picture due by its end.
+    fn frame(&mut self) {
+        let Some(&(last, _)) = self.due.last() else {
+            self.showing = None;
+            return;
+        };
+        self.shown = self.shown.saturating_add(FRAME_T);
+        if self.shown >= last {
+            self.due.clear();
+            self.showing = None;
+            return;
+        }
+        let shown = self.shown;
+        if let Some(n) = self.due.iter().rposition(|&(at, _)| at <= shown) {
+            let later = self.due.split_off(n + 1);
+            self.showing = self.due.pop().map(|(_, screen)| screen);
+            self.due = later;
+        }
+    }
 }
 
 /// What the game is doing.
@@ -67,15 +124,24 @@ pub struct Session {
     pub border: u8,
     /// Frames played, which the picture's flashing goes by.
     pub frames: u64,
-    /// Frames still to stand still for, while a sound plays, and whether
-    /// the interrupt is off meanwhile.
+    /// Frames still to stand still for, while a sound or an animation
+    /// plays.
     pub held: u32,
-    pub held_quiet: bool,
+    /// Meanwhile, the frames since the step, and the step's spans with
+    /// interrupts off, in which no frame's interrupt runs.
+    since: u32,
+    quiet: Vec<std::ops::Range<u32>>,
+    /// An animation being shown.
+    animation: Animation,
+    /// Whether the first frame is still to come, which shows the menu.
+    fresh: bool,
 }
 
 impl Session {
     /// The game as the tape leaves it, started as the original starts: the
-    /// first start (`0:CC66`) and the menu. `seed` seeds its random numbers.
+    /// first start (`0:CC66`), then, in the first frame, the menu, so its
+    /// reveal and its sample play as every later menu's do. `seed` seeds its
+    /// random numbers.
     #[must_use]
     pub fn new(assets: &Assets, seed: u64) -> Session {
         let mut banks = Box::new([[0u8; BANK]; 8]);
@@ -88,7 +154,6 @@ impl Session {
             ..Io::default()
         };
         new_game::first_start(&mut game, &mut io);
-        new_game::show_menu(&mut game, &mut io);
         let mut session = Session {
             game,
             io,
@@ -96,7 +161,10 @@ impl Session {
             border: 0,
             frames: 0,
             held: 0,
-            held_quiet: false,
+            since: 0,
+            quiet: Vec::new(),
+            animation: Animation::default(),
+            fresh: true,
         };
         session.note_border();
         session
@@ -106,31 +174,45 @@ impl Session {
     /// wrote to the ports is in `io.writes`, from this frame alone.
     ///
     /// While a sound from an earlier frame still plays, the game stands
-    /// still, as the original does, and only the interrupt runs, unless the
-    /// sound plays with interrupts off.
+    /// still, as the original does, and only the interrupt runs, unless it
+    /// falls while interrupts are off, as they are while a sample plays. So
+    /// it does while an animation's pictures are shown (#82).
     pub fn frame(&mut self, assets: &Assets, controls: Controls) {
         self.io.controls = controls;
         self.io.writes.clear();
         self.io.beeps.clear();
         self.io.t = 0;
-        self.io.interrupts_off = false;
-        // An animation's pictures, which the window doesn't show yet (#57).
-        self.game.pictures.clear();
+        self.io.quiet.clear();
         self.frames += 1;
         if self.held > 0 {
             self.held -= 1;
-            if !self.held_quiet {
+            self.since += 1;
+            if interrupts_at(&self.quiet, self.since) {
                 interrupt::frame(&mut self.game, &mut self.io);
             }
+            self.animation.frame();
             return;
         }
         if !matches!(self.state, State::Ending(_)) {
             interrupt::frame(&mut self.game, &mut self.io);
         }
-        self.state = self.step(assets);
+        let before = self.game.display.screen.clone();
+        self.game.pictures.clear();
+        if self.fresh {
+            self.fresh = false;
+            new_game::show_menu(&mut self.game, &mut self.io);
+        } else {
+            self.state = self.step(assets);
+        }
         self.note_border();
         self.held = held_for(self.io.t);
-        self.held_quiet = self.io.interrupts_off;
+        self.since = 0;
+        self.quiet = std::mem::take(&mut self.io.quiet);
+        let pictures = std::mem::take(&mut self.game.pictures);
+        if !pictures.is_empty() {
+            self.animation.start(before, pictures);
+        }
+        self.animation.frame();
     }
 
     /// The border, from this frame's writes to the ULA's port (bit 0 of
@@ -145,12 +227,12 @@ impl Session {
     #[must_use]
     pub fn picture(&self) -> Vec<u32> {
         let mut out = vec![0; crate::picture::FULL_W * crate::picture::FULL_H];
-        crate::picture::draw(
-            &self.game.display.screen[..],
-            self.border,
-            self.frames,
-            &mut out,
-        );
+        let screen = self
+            .animation
+            .showing
+            .as_deref()
+            .unwrap_or(&self.game.display.screen);
+        crate::picture::draw(&screen[..], self.border, self.frames, &mut out);
         out
     }
 
@@ -164,7 +246,7 @@ impl Session {
                     State::Playing
                 }
                 Menu::Pick => match new_game::choose(g, io) {
-                    Choice::Redefine => State::Redefining(new_game::redefine(g)),
+                    Choice::Redefine => State::Redefining(new_game::redefine(g, io)),
                     Choice::Set(_) | Choice::Nothing => {
                         new_game::show_menu(g, io);
                         State::Menu
@@ -222,5 +304,40 @@ mod tests {
         assert_eq!(held_for(FRAME_T - 1), 0, "within the frame");
         assert_eq!(held_for(FRAME_T), 1);
         assert_eq!(held_for(10 * FRAME_T + 5), 10);
+    }
+
+    #[test]
+    fn only_a_samples_span_keeps_the_interrupt_off() {
+        // Two samples, each just past a frame's start, then an animation or
+        // another sound with interrupts on.
+        let quiet = [100..FRAME_T + 5, 2 * FRAME_T - 10..2 * FRAME_T + 5];
+        let runs: Vec<bool> = (1..=4).map(|n| interrupts_at(&quiet, n)).collect();
+        assert_eq!(runs, [false, false, true, true]);
+    }
+
+    fn screen(v: u8) -> Box<[u8; 6912]> {
+        Box::new([v; 6912])
+    }
+
+    #[test]
+    fn an_animation_shows_each_picture_once_it_is_due() {
+        let mut a = Animation::default();
+        // Due a little after 1, 1.25, 1.5 and 2.5 frames.
+        let pictures = [4, 5, 6, 10].map(|q| Picture {
+            at: q * FRAME_T / 4 + 10,
+            screen: screen(q as u8),
+        });
+        a.start(screen(0), pictures.to_vec());
+        let mut shown = Vec::new();
+        for _ in 0..4 {
+            a.frame();
+            shown.push(a.showing.as_ref().map(|s| s[0]));
+        }
+        assert_eq!(
+            shown,
+            [Some(0), Some(6), None, None],
+            "the screen before until the first is due; the last due by each \
+             frame's end; then the screen the step left"
+        );
     }
 }

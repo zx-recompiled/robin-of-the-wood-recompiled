@@ -48,6 +48,18 @@ fn hold(s: &mut Session, a: &Assets, keys: [u8; 8], n: usize) {
     }
 }
 
+/// A session past its first menu's reveal and sample, which hold the game,
+/// as on the machine (#82): keys pressed meanwhile are lost.
+fn started(a: &Assets, seed: u64) -> Session {
+    let mut s = Session::new(a, seed);
+    s.frame(a, controls(NONE));
+    assert!(s.held > 10, "held for the menu: {}", s.held);
+    while s.held > 0 {
+        s.frame(a, controls(NONE));
+    }
+    s
+}
+
 fn controls(keys: [u8; 8]) -> Controls {
     Controls {
         keys,
@@ -58,7 +70,7 @@ fn controls(keys: [u8; 8]) -> Controls {
 #[test]
 fn zero_at_the_menu_starts_a_game_and_break_ends_it() {
     let Some(a) = tape() else { return };
-    let mut s = Session::new(&a, 1);
+    let mut s = started(&a, 1);
     assert_eq!(s.state, State::Menu);
     hold(&mut s, &a, NONE, 50);
     assert_eq!(s.state, State::Menu, "nothing pressed, still the menu");
@@ -73,7 +85,7 @@ fn zero_at_the_menu_starts_a_game_and_break_ends_it() {
 #[test]
 fn two_at_the_menu_picks_kempston() {
     let Some(a) = tape() else { return };
-    let mut s = Session::new(&a, 2);
+    let mut s = started(&a, 2);
     hold(&mut s, &a, held(&[TWO]), 5);
     assert_eq!(s.state, State::Menu);
     assert_eq!(s.game.read(0xABEE), 1, "the method kept is Kempston");
@@ -82,9 +94,15 @@ fn two_at_the_menu_picks_kempston() {
 #[test]
 fn one_at_the_menu_redefines_five_keys_held_and_let_go() {
     let Some(a) = tape() else { return };
-    let mut s = Session::new(&a, 3);
+    let mut s = started(&a, 3);
     hold(&mut s, &a, held(&[ONE]), 5);
     assert!(matches!(s.state, State::Redefining(_)));
+    // Its screen's reveal holds the game for about 20 frames, as on the
+    // machine (#82): keys pressed meanwhile are lost.
+    assert!(s.held > 10, "held for the reveal: {}", s.held);
+    while s.held > 0 {
+        s.frame(&a, controls(NONE));
+    }
     // Q, A, O, P, M: each held a few frames, then let go.
     let picks = [(2, 0), (1, 0), (5, 1), (5, 0), (7, 2)];
     for (n, &key) in picks.iter().enumerate() {
@@ -103,7 +121,7 @@ fn one_at_the_menu_redefines_five_keys_held_and_let_go() {
 #[test]
 fn a_long_game_under_random_keys_plays_on() {
     let Some(a) = tape() else { return };
-    let mut s = Session::new(&a, 4);
+    let mut s = started(&a, 4);
     hold(&mut s, &a, held(&[ZERO]), 5);
     let mut rng = common::XorShift(0x2545_F491);
     let ways = [(2, 0), (1, 0), (7, 3), (7, 2), (3, 0)];
@@ -135,7 +153,7 @@ fn a_long_game_under_random_keys_plays_on() {
 #[test]
 fn the_menu_shows_on_a_black_border() {
     let Some(a) = tape() else { return };
-    let mut s = Session::new(&a, 5);
+    let mut s = started(&a, 5);
     hold(&mut s, &a, NONE, 10);
     let picture = s.picture();
     let corner = picture[0];

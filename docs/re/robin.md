@@ -244,6 +244,11 @@ from nothing but their own arithmetic.
   copies nothing, their first byte becomes 0, leaving a `NOP` and an `OR B`.
   The next reveal makes them `LDIR` and `LDDR` again.
 
+  Its passes take 191,163 T-states down to 47,800 as the slide narrows,
+  about 20 frames in all. These are the means over 94 reveals in the
+  reference machine, each within 2%, the interrupt and contention included
+  (#82). **confirmed**.
+
 ### The text printer
 
 One routine with three ways in. It prints a string of characters, then
@@ -927,7 +932,9 @@ instruction of the meeting. **confirmed**, unless marked.
   - the play area flashes: its attributes' ink goes up by one, 16 times over
     (`0xBDD3`), checked picture by picture (#57). Its count runs from
     `0x240` down past 0, so it moves one cell more than the play area, the
-    first of the lower panel's, whose ink comes back round after the 16;
+    first of the lower panel's, whose ink comes back round after the 16. A
+    pass takes 48,068 to 50,882 T-states, 11.1 frames in all, measured
+    over the one flash play reaches (#82);
   - the lower panel's colours are reset (`0xBE0F`, *Robin's actions*);
   - his energy goes up (`0:D7F7`, *Robin's actions*);
   - it's marked met, so it happens once a game.
@@ -1062,7 +1069,11 @@ with what each needs (#79). **confirmed**, unless marked.
   Then he walks back out, the way he came, unless he's being sent.
 - **A journey** (`0:C3CA`, when `0xDAD6` says so) enters the new location
   much as the entry does: the play area cleared, drawn, recoloured
-  (`0:C306`), then a diagonal wipe onto the screen (`0:C40F`). The third
+  (`0:C306`), then a diagonal wipe onto the screen (`0:C40F`): 63 passes,
+  23.6 frames in all, each taking 15,888 T-states and 687 more for each
+  cell it marks, one more each pass up to 18. That is fitted to two wipes
+  in the reference machine, within 0.2 frames of the measured total (#82).
+  The third
   item (`0xD47C`) is taken back if he has it (`0:C3AE`). Then the items,
   the copy to the screen, and the characters' set-up. It ends by jumping
   back to the main loop's start, not returning.

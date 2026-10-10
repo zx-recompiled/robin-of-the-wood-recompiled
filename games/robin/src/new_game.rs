@@ -25,7 +25,7 @@ const TABLES: [u16; 3] = [0xD06E, 0xD07F, 0xD088];
 
 /// The menu (`0xAB28`): the play area cleared to white on black, a
 /// highlight at the chosen method's line, its five lines, and revealed.
-pub fn menu(g: &mut Game) {
+pub fn menu(g: &mut Game, io: &mut Io) {
     screen::clear_play_area(g, 0x47);
     let line = (g.read(METHOD) + 1).wrapping_mul(0x20);
     print::print_message(g, 0x40, 0x10, line);
@@ -38,12 +38,12 @@ pub fn menu(g: &mut Game) {
     ] {
         print::print_message(g, message, x, y);
     }
-    screen::reveal(g);
+    screen::reveal(g, io);
 }
 
 /// The menu shown, with its sample and its tune (`0:CCAB`).
 pub fn show_menu(g: &mut Game, io: &mut Io) {
-    menu(g);
+    menu(g, io);
     actions::banked_call(g, io, sound::PLAYER_BANK as u8, sound::menu_sample);
     actions::banked_call(g, io, sound::MUSIC_BANK, |g, io| {
         sound::start_tune(g, io, sound::MENU);
@@ -132,9 +132,9 @@ pub struct Redefine {
 }
 
 /// The redefinition's screen and its first prompt (`0:CFDC`).
-pub fn redefine(g: &mut Game) -> Redefine {
+pub fn redefine(g: &mut Game, io: &mut Io) -> Redefine {
     screen::clear_play_area(g, 0x45);
-    screen::reveal(g);
+    screen::reveal(g, io);
     print::print_replacing(g, HEADING);
     print::print_replacing(g, PROMPTS);
     Redefine {
@@ -310,7 +310,7 @@ pub fn first_location(g: &mut Game, assets: &Assets, io: &mut Io) {
     screen::clear_play_area(g, 0);
     g.printer.replace = 0x4F;
     print::print_message(g, 0x4F, 0x24, 0x40);
-    screen::reveal(g);
+    screen::reveal(g, io);
     screen::clear_play_area(g, 0);
     map::draw_location(g, assets.map());
     map::draw_special(g, assets.map());
@@ -325,7 +325,7 @@ pub fn first_location(g: &mut Game, assets: &Assets, io: &mut Io) {
 /// The set-up's end, after the warble (`0:CD51`): the reveal, no cell
 /// marked changed, and the arrival's tune.
 pub fn finish(g: &mut Game, io: &mut Io) {
-    screen::reveal(g);
+    screen::reveal(g, io);
     screen::clear_changed(g);
     actions::banked_call(g, io, sound::MUSIC_BANK, sound::arrival_tune);
 }
