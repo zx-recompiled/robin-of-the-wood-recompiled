@@ -87,8 +87,10 @@ pub fn menu_keys(io: &Io) -> Menu {
 pub enum Choice {
     /// 1: the keys are to be redefined, then the method set to keys.
     Redefine,
-    /// 2 or 3, that method set; or 4, nothing.
-    Chosen,
+    /// 2 or 3: that method set, 1 Kempston or 2 Interface II.
+    Set(u8),
+    /// 4: nothing.
+    Nothing,
 }
 
 /// The method the menu's keys pick (`0:CFB2`): 1 keys, after they're
@@ -103,10 +105,10 @@ pub fn choose(g: &mut Game, io: &Io) -> Choice {
     } else if row & 4 == 0 {
         2
     } else {
-        return Choice::Chosen;
+        return Choice::Nothing;
     };
     set_method(g, method);
-    Choice::Chosen
+    Choice::Set(method)
 }
 
 /// The method chosen: its number, and its table (`0:CFD5`).
@@ -179,7 +181,13 @@ impl Redefine {
 /// Whether any key is held, read from every half-row at once (`0:D028`).
 #[must_use]
 pub fn any_key(io: &Io) -> bool {
-    !io.input(0x00FE) & 0x1F != 0
+    held(io) != 0
+}
+
+/// The keys held on any half-row, a bit for each of the five (`0:D028`).
+#[must_use]
+pub fn held(io: &Io) -> u8 {
+    !io.input(0x00FE) & 0x1F
 }
 
 /// What a scan of the keyboard found (`0:D033`).

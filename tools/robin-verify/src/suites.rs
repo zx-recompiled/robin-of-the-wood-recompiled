@@ -645,28 +645,27 @@ pub fn all() -> Vec<Routine> {
             bank: Some(0),
             entry: 0xCCBB,
             code: (0xCCBB, 0xCCCC),
-            outputs: &[],
+            // Its answer is in which way it leaves, so in A and F (#61).
+            outputs: &[Reg::A, Reg::F],
             // Polled again, the game started, or a pick to make.
             exits: &[0xCCBB, 0xCCD2, 0xCCCD],
             preserves: &[],
-            rewrite: |_, _, r, io| {
-                let _ = new_game::menu_keys(io);
-                r
-            },
+            rewrite: |_, _, r, io| poll_regs(io, r, new_game::menu_keys(io)),
         },
         Routine {
             name: "the menu's pick (0:CFB2)",
             bank: Some(0),
             entry: 0xCFB2,
             code: (0xCFB2, 0xCFDB),
-            outputs: &[],
+            // Which key it took is in which way it leaves, so in A and F.
+            outputs: &[Reg::A, Reg::F],
             // Back to the menu; or, for 1, at the redefinition, whose waits
             // are checked piece by piece.
             exits: &[0xCCD0, 0xCFBA],
             preserves: &[],
             rewrite: |g, _, r, io| {
-                new_game::choose(g, io);
-                r
+                let choice = new_game::choose(g, io);
+                pick_regs(io, r, choice)
             },
         },
         Routine {
@@ -688,12 +687,16 @@ pub fn all() -> Vec<Routine> {
             bank: Some(0),
             entry: 0xD028,
             code: (0xD028, 0xD032),
-            outputs: &[],
+            // The keys held, and whether any are, by the Z flag.
+            outputs: &[Reg::A, Reg::F],
             // Polled again, or let go.
             exits: &[0xD028, 0xCFFB],
             preserves: &[],
-            rewrite: |_, _, r, io| {
-                let _ = new_game::any_key(io);
+            rewrite: |_, _, mut r, io| {
+                let held = new_game::held(io);
+                let f = and_flags(held, new_game::any_key(io));
+                r.set(Reg::A, held);
+                r.set(Reg::F, f);
                 r
             },
         },
@@ -1694,6 +1697,80 @@ fn scan_regs(io: &robin::io::Io, mut r: Regs) -> Regs {
     }
     r.set(Reg::D, d);
     r.set(Reg::F, flags::cp(a, a));
+    r
+}
+
+/// `AND n`'s flags for the result `a`, with Z from the decision `nonzero`
+/// the rewrite made, so a wrong one shows: H set, C and N clear, P/V the
+/// parity, bits 5 and 3 from the result.
+fn and_flags(a: u8, nonzero: bool) -> u8 {
+    let mut f = 0x10 | (a & 0x80) | (a & 0x28);
+    if !nonzero {
+        f |= 0x40;
+    }
+    if a.count_ones().is_multiple_of(2) {
+        f |= 0x04;
+    }
+    f
+}
+
+/// `IN A,(C)`'s flags for the byte `v`: S, Z, P/V and bits 5 and 3 from it,
+/// H and N clear, the carry `f`'s.
+fn in_flags(v: u8, f: u8) -> u8 {
+    let mut fl = (v & 0x80) | (v & 0x28) | (f & 1);
+    if v == 0 {
+        fl |= 0x40;
+    }
+    if v.count_ones().is_multiple_of(2) {
+        fl |= 0x04;
+    }
+    fl
+}
+
+/// `RRA`: the result, and the flags with the carry `carry` (the rewrite's
+/// decision, so a wrong one shows); S, Z and P/V as they were.
+fn rra(a: u8, f: u8, carry: bool) -> (u8, u8) {
+    let r = a >> 1 | (f & 1) << 7;
+    (r, (f & 0xC4) | (r & 0x28) | u8::from(carry))
+}
+
+/// The registers `0:CCBB` leaves. For 0, its `IN` and `RRA` of the half-row
+/// with 0 on it, carry clear. Otherwise the `CPL : AND 0x0F` of the half-row with
+/// 1 to 5, Z set if it's waiting.
+fn poll_regs(io: &robin::io::Io, mut r: Regs, poll: new_game::Menu) -> Regs {
+    let (a, f) = if poll == new_game::Menu::Start {
+        let v = io.input(0xEFFE);
+        rra(v, in_flags(v, r.get(Reg::F)), false)
+    } else {
+        let a = !io.input(0xF7FE) & 0x0F;
+        (a, and_flags(a, poll == new_game::Menu::Pick))
+    };
+    r.set(Reg::A, a);
+    r.set(Reg::F, f);
+    r
+}
+
+/// The registers `0:CFB2` leaves: an `IN` of the half-row with 1 to 5, an
+/// `RRA` for
+/// each key it looks at, the carry clear at the one it took; then the
+/// method's number in A, if it set one.
+fn pick_regs(io: &robin::io::Io, mut r: Regs, choice: new_game::Choice) -> Regs {
+    let looked = match choice {
+        new_game::Choice::Redefine => 1,
+        new_game::Choice::Set(m) => m + 1,
+        new_game::Choice::Nothing => 3,
+    };
+    let row = io.input(0xF7FE);
+    let (mut a, mut f) = (row, in_flags(row, r.get(Reg::F)));
+    for n in 1..=looked {
+        let took = n == looked && choice != new_game::Choice::Nothing;
+        (a, f) = rra(a, f, !took);
+    }
+    if let new_game::Choice::Set(m) = choice {
+        a = m;
+    }
+    r.set(Reg::A, a);
+    r.set(Reg::F, f);
     r
 }
 
