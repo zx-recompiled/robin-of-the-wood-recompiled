@@ -18,6 +18,7 @@ mod methods;
 mod robbery;
 mod suites;
 mod tour;
+mod trade;
 mod travel;
 
 use std::path::PathBuf;
@@ -210,6 +211,10 @@ fn run() -> Result<bool, String> {
     let robberies = robbery::run(&rom, &tape, &assets, &mut v)?;
     println!(
         "robin-verify: played a game with the fifth character put in front of Robin (a supplement): it was robbed {robberies} time(s)"
+    );
+    let trades = trade::run(&rom, &tape, &assets, &mut v)?;
+    println!(
+        "robin-verify: played a game sent to the trade with three kind-2 items (a supplement): it traded {trades} time(s)"
     );
     let travelled = travel::run(&rom, &tape, &assets, &mut v)?;
     println!(
