@@ -68,7 +68,13 @@ struct App {
 
 /// What the overlay is drawn from: the aids' and the journal's versions,
 /// the objective, and the size.
-type Drawn = (u64, u64, Option<robin::objective::Objective>, (u32, u32));
+type Drawn = (
+    u64,
+    u64,
+    Option<robin::objective::Objective>,
+    bool,
+    (u32, u32),
+);
 
 /// The window's width in the Spectrum's pixels: the picture and the panel
 /// beside it (#95).
@@ -173,10 +179,12 @@ impl ApplicationHandler for App {
                     let clip = p.context().scaling_renderer.clip_rect();
                     let objective = (session.state == robin::session::State::Playing)
                         .then(|| robin::objective::Objective::of(&session.game));
+                    let hermit_met = robin::places::hermit_met(&session.game);
                     let key = (
                         self.aids.version(),
                         self.journal.version(),
                         objective,
+                        hermit_met,
                         (clip.2, clip.3),
                     );
                     if self.drawn != Some(key)
@@ -187,6 +195,7 @@ impl ApplicationHandler for App {
                         let view = panel::View {
                             journal: Some(&self.journal),
                             objective,
+                            hermit_met,
                             trade: robin::places::trade(&session.game),
                             doorways: robin::places::doorways(&session.game),
                         };

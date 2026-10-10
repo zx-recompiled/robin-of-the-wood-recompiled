@@ -130,6 +130,35 @@ impl Fonts {
         self.fonts[weight as usize].metrics(c, size).advance_width
     }
 
+    /// The height `spans` take wrapped at `max_width`, laid out at `scale`
+    /// as a canvas that scale would draw them, in logical pixels.
+    pub fn height_at(
+        &mut self,
+        scale: f32,
+        max_width: f32,
+        line_height: f32,
+        spans: &[Span],
+    ) -> f32 {
+        self.layout.reset(&LayoutSettings {
+            max_width: Some(max_width * scale),
+            wrap_style: WrapStyle::Word,
+            line_height: line_height / 1.21,
+            ..LayoutSettings::default()
+        });
+        for span in spans {
+            self.layout.append(
+                &self.fonts,
+                &TextStyle::with_user_data(
+                    span.text,
+                    span.size * scale,
+                    span.weight as usize,
+                    span.colour,
+                ),
+            );
+        }
+        self.layout.height() / scale
+    }
+
     /// The width `spans` take on one line, in logical pixels.
     pub fn measure(&mut self, spans: &[Span]) -> f32 {
         self.text(None, 0.0, 0.0, None, 1.0, spans).0

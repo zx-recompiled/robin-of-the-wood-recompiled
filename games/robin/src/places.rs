@@ -48,8 +48,15 @@ const BISHOP: u16 = 0xBA4F;
 const OUT: u16 = 0xBA61;
 /// Where the scene is, picked when a game starts and after it plays.
 const SHERIFF_AT: u16 = 0xD295;
-/// The wanderer's location word.
+/// The wanderer's location word, and its flags: bit 6 set once met.
 const HERMIT_AT: u16 = 0xBB26;
+const HERMIT_FLAGS: u16 = 0xBB29;
+
+/// Whether Robin has met the hermit this game, which gives energy once.
+#[must_use]
+pub fn hermit_met(g: &Game) -> bool {
+    g.read(HERMIT_FLAGS) & 0x40 != 0
+}
 
 /// Where `who` is now, if he's anywhere: the bishop only while he's out.
 #[must_use]
