@@ -3,6 +3,7 @@
 //! the session each frame, never by the game.
 
 use robin::map::LOCATIONS;
+use robin::places::{self, CHARACTERS, Character};
 use robin::session::{Session, State};
 
 #[derive(Clone, Debug)]
@@ -12,6 +13,10 @@ pub struct Journal {
     count: usize,
     /// Where he is, while a game is being played.
     pub here: Option<u16>,
+    /// Where he last shared a location with each character (#97), and where
+    /// each is now.
+    last_seen: [Option<u16>; 3],
+    now: [Option<u16>; 3],
     /// Counts every change, so the panel is redrawn only then.
     version: u64,
     playing: bool,
@@ -23,6 +28,8 @@ impl Default for Journal {
             visited: Box::new([false; LOCATIONS]),
             count: 0,
             here: None,
+            last_seen: [None; 3],
+            now: [None; 3],
             version: 0,
             playing: false,
         }
@@ -53,6 +60,31 @@ impl Journal {
             self.count += 1;
             self.version += 1;
         }
+        for (n, who) in CHARACTERS.into_iter().enumerate() {
+            let now = playing
+                .then(|| places::whereabouts(&session.game, who))
+                .flatten();
+            if now != self.now[n] {
+                self.now[n] = now;
+                self.version += 1;
+            }
+            if now.is_some() && now == here && self.last_seen[n] != now {
+                self.last_seen[n] = now;
+                self.version += 1;
+            }
+        }
+    }
+
+    /// Where Robin last shared a location with `who` this game.
+    #[must_use]
+    pub fn last_seen(&self, who: Character) -> Option<u16> {
+        self.last_seen[who as usize]
+    }
+
+    /// Where `who` is now.
+    #[must_use]
+    pub fn now(&self, who: Character) -> Option<u16> {
+        self.now[who as usize]
     }
 
     /// Whether Robin has been to `location` this game.
@@ -89,5 +121,12 @@ impl Journal {
         }
         j.here = Some(here);
         j
+    }
+
+    /// The same, having last seen and now seeing the characters where given.
+    pub fn with(mut self, last_seen: [Option<u16>; 3], now: [Option<u16>; 3]) -> Journal {
+        self.last_seen = last_seen;
+        self.now = now;
+        self
     }
 }

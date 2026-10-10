@@ -10,7 +10,7 @@ use super::aids::{ALL, Aid, Aids};
 use super::journal::Journal;
 use super::text::{Canvas, Fonts, Rgb, Span, Weight};
 use robin::map::{COLUMNS, ROWS};
-use robin::places;
+use robin::places::{self, CHARACTERS, Character};
 
 /// The picture's width with its border, and the panel's beside it. The
 /// window is a whole multiple of both, so the picture scales exactly.
@@ -82,6 +82,62 @@ impl View<'_> {
     }
 }
 
+/// Each character's colour and name on the map (#97).
+fn character(who: Character) -> (Rgb, &'static str) {
+    match who {
+        Character::Bishop => ([0xF0, 0x6B, 0xA8], "bishop"),
+        Character::Sheriff => ([0xF0, 0x86, 0x4B], "Sheriff"),
+        Character::Hermit => ([0x5F, 0xD6, 0xC8], "hermit"),
+    }
+}
+
+/// Which characters' marks the map shows: where last seen, and where now.
+#[derive(Clone, Copy, Default)]
+struct Marks {
+    seen: bool,
+    now: bool,
+}
+
+/// The characters' marks `aids` asks for.
+fn marks(aids: &Aids) -> Marks {
+    Marks {
+        seen: aids.is_on(Aid::Seen),
+        now: aids.is_on(Aid::Now),
+    }
+}
+
+/// How far `to` is from `from`, the shortest way round the forest, in
+/// words: "here", or "3 east, 2 north".
+fn direction(from: u16, to: u16) -> String {
+    let short = |d: i32, n: i32| {
+        let d = d.rem_euclid(n);
+        if d > n / 2 { d - n } else { d }
+    };
+    let (cols, rows) = (i32::from(COLUMNS), i32::from(ROWS));
+    let dx = short(i32::from(to % COLUMNS) - i32::from(from % COLUMNS), cols);
+    let dy = short(i32::from(to / COLUMNS) - i32::from(from / COLUMNS), rows);
+    let mut parts = Vec::new();
+    if dx != 0 {
+        parts.push(format!(
+            "{} {}",
+            dx.abs(),
+            if dx > 0 { "east" } else { "west" }
+        ));
+    }
+    if dy != 0 {
+        parts.push(format!(
+            "{} {}",
+            dy.abs(),
+            if dy > 0 { "south" } else { "north" }
+        ));
+    }
+    if parts.is_empty() {
+        "here".to_string()
+    } else {
+        parts.join(", ")
+    }
+}
+
 const UNSEEN: Rgb = [0x1A, 0x1D, 0x24];
 const SEEN: Rgb = [0x2B, 0x3B, 0x5C];
 
@@ -139,7 +195,7 @@ impl Panel {
         if aids.picker_open() {
             self.picker(canvas, aids);
         } else if aids.full_map_open() {
-            self.full_map(canvas, view);
+            self.full_map(canvas, view, marks(aids));
         }
     }
 
@@ -151,6 +207,7 @@ impl Panel {
         &mut self,
         canvas: &mut Canvas,
         view: &View,
+        marks: Marks,
         x: f32,
         y: f32,
         cell: f32,
@@ -192,12 +249,105 @@ impl Panel {
                 }
             }
         }
+        // The characters, in a corner of their cell: a ring where last
+        // seen, filled where they are now.
+        let d = tall.min(cell) * 0.5;
+        for (n, who) in CHARACTERS.into_iter().enumerate() {
+            let colour = character(who).0;
+            let corner = |at: u16| {
+                (
+                    x + f32::from(at % COLUMNS) * (cell + gap) + cell
+                        - d
+                        - 0.3
+                        - n as f32 * (d * 0.6),
+                    y + f32::from(at / COLUMNS) * (tall + gap) + 0.3,
+                )
+            };
+            if marks.seen
+                && let Some(at) = journal.last_seen(who)
+            {
+                let (cx, cy) = corner(at);
+                canvas.outline(cx, cy, d, d, d / 2.0, d * 0.25, None, colour);
+            }
+            if marks.now
+                && let Some(at) = journal.now(who)
+            {
+                let (cx, cy) = corner(at);
+                canvas.round_rect(cx, cy, d, d, d / 2.0, colour);
+            }
+        }
+    }
+
+    /// Who Robin has seen, and where they are now, in words (#97).
+    fn seen_list(
+        &mut self,
+        canvas: &mut Canvas,
+        view: &View,
+        marks: Marks,
+        left: f32,
+        y: f32,
+    ) -> f32 {
+        let Some(journal) = view.journal else {
+            return y;
+        };
+        self.spaced(canvas, left, y, "SEEN ON THE MAP", DIM);
+        let mut row = y + 5.5;
+        for who in CHARACTERS {
+            let (colour, name) = character(who);
+            let d = 2.2;
+            canvas.round_rect(left, row + 1.1, d, d, d / 2.0, colour);
+            let name = format!("{}{}", name[..1].to_uppercase(), &name[1..]);
+            self.fonts.text(
+                Some(canvas),
+                left + 3.6,
+                row,
+                None,
+                1.0,
+                &[span(&name, 4.0, Weight::Regular, TEXT)],
+            );
+            let seen = match (journal.last_seen(who), journal.here) {
+                (Some(at), Some(here)) => direction(here, at),
+                (Some(_), None) => "seen".to_string(),
+                (None, _) => "not seen this game".to_string(),
+            };
+            let mut spans = vec![span(&seen, 4.0, Weight::Regular, DIM)];
+            let now = match (marks.now, journal.now(who), journal.here) {
+                (true, Some(at), Some(here)) => Some(format!(" · now {}", direction(here, at))),
+                (true, None, _) => Some(" · not about".to_string()),
+                _ => None,
+            };
+            if let Some(now) = &now {
+                spans.push(span(now, 4.0, Weight::Regular, colour));
+            }
+            self.fonts.text(
+                Some(canvas),
+                left + 22.0,
+                row,
+                Some(PANEL_W - 2.0 * PAD - 22.0),
+                1.2,
+                &spans,
+            );
+            row += 6.0;
+        }
+        row + 2.0
     }
 
     /// The map's key, from `x` at `y`, wrapping at `width`. Where it ends.
-    fn legend(&mut self, canvas: &mut Canvas, x: f32, y: f32, width: f32, size: f32) -> f32 {
+    #[allow(clippy::too_many_arguments, reason = "where, how big, and what's on")]
+    fn legend(
+        &mut self,
+        canvas: &mut Canvas,
+        marks: Marks,
+        x: f32,
+        y: f32,
+        width: f32,
+        size: f32,
+    ) -> f32 {
         let mut entries = vec![(WHITE, "you")];
         entries.extend(PLACES);
+        if marks.seen {
+            entries.extend(CHARACTERS.map(character));
+        }
         let (mut cx, mut cy) = (x, y);
         for (colour, name) in entries {
             let s = [span(name, size, Weight::Regular, [0xA8, 0xAE, 0xBB])];
@@ -216,7 +366,7 @@ impl Panel {
     }
 
     /// The whole map, large, with the game paused (#92, Decision 9).
-    fn full_map(&mut self, canvas: &mut Canvas, view: &View) {
+    fn full_map(&mut self, canvas: &mut Canvas, view: &View, marks: Marks) {
         canvas.shade(0.0, 0.0, WINDOW_W, WINDOW_H, [0x05, 0x06, 0x09], 160);
         let (cell, tall, gap) = (12.0, 8.6, 1.0);
         let grid_w = f32::from(COLUMNS) * (cell + gap) - gap;
@@ -240,8 +390,8 @@ impl Panel {
         let pw = self.fonts.measure(&paused);
         self.fonts
             .text(Some(canvas), x + w - 9.0 - pw, y + 8.0, None, 1.0, &paused);
-        self.grid(canvas, view, x + 9.0, y + 16.0, cell, tall, gap);
-        self.legend(canvas, x + 9.0, y + 19.0 + grid_h, grid_w, 3.9);
+        self.grid(canvas, view, marks, x + 9.0, y + 16.0, cell, tall, gap);
+        self.legend(canvas, marks, x + 9.0, y + 19.0 + grid_h, grid_w, 3.9);
         let foot = y + h - 9.0;
         self.fonts.text(
             Some(canvas),
@@ -293,14 +443,19 @@ impl Panel {
             let (cell, tall, gap) = (6.4, 4.0, 0.6);
             let grid_w = f32::from(COLUMNS) * (cell + gap) - gap;
             let gx = left + (width - grid_w) / 2.0;
-            self.grid(canvas, view, gx, y + 12.0, cell, tall, gap);
+            let m = marks(aids);
+            self.grid(canvas, view, m, gx, y + 12.0, cell, tall, gap);
             y = self.legend(
                 canvas,
+                m,
                 left,
                 y + 15.0 + f32::from(ROWS) * (tall + gap),
                 width,
                 3.5,
             ) + 3.0;
+            if m.seen {
+                y = self.seen_list(canvas, view, m, left, y + 1.0) + 2.0;
+            }
         }
         let coming = [
             (Aid::Objective, "OBJECTIVE", "The objective comes with #98."),
@@ -579,6 +734,15 @@ mod tests {
     }
 
     #[test]
+    fn directions_go_the_short_way_round() {
+        assert_eq!(direction(0x105, 0x105), "here");
+        assert_eq!(direction(0x105, 0x108), "3 east");
+        assert_eq!(direction(0x100, 0x10F), "1 west", "round the edge");
+        assert_eq!(direction(0x005, 0x135), "1 north", "round the top");
+        assert_eq!(direction(0x105, 0x0E7), "2 east, 2 north");
+    }
+
+    #[test]
     fn the_picker_dims_the_picture() {
         let mut aids = Aids::default();
         aids.open_or_close();
@@ -648,13 +812,22 @@ mod pictures {
             .flat_map(|r| (2..12).map(move |c| r * 16 + c))
             .chain([0x9C, 0x8C, 0x7C])
             .collect();
-        let journal = Journal::of(walk, 0x105);
+        let journal = Journal::of(walk, 0x105).with(
+            [Some(0x10B), None, Some(0x0F2)],
+            [Some(0x0EC), Some(0x043), Some(0x0F4)],
+        );
+        let mut seen_args: Vec<String> = ["--map-now", "--objective"].map(String::from).to_vec();
+        let seen = Aids::from_args(&mut seen_args);
         let view = View {
             journal: Some(&journal),
             trade: 0x109,
             doorways: [0x0F4, 0x10B, 0, 0, 0, 0, 0, 0, 0],
         };
         png_with(&aids, &view, "map");
+        png_with(&seen, &view, "seen");
+        let mut full = seen.clone();
+        full.open_or_close_map();
+        png_with(&full, &view, "seen-full");
         aids.open_or_close_map();
         png_with(&aids, &view, "full-map");
         aids.open_or_close_map();
