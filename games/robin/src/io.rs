@@ -10,11 +10,13 @@
 
 use crate::controls::Controls;
 
-/// Random numbers, drawn in order.
+/// Random numbers, drawn in order: given, in the checks, or the game's own.
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct Random {
     values: Vec<u8>,
     drawn: usize,
+    /// The game's own generator's state, once seeded.
+    state: Option<u64>,
 }
 
 impl Random {
@@ -22,7 +24,22 @@ impl Random {
     /// original read from R.
     #[must_use]
     pub fn given(values: Vec<u8>) -> Random {
-        Random { values, drawn: 0 }
+        Random {
+            values,
+            drawn: 0,
+            state: None,
+        }
+    }
+
+    /// The game's own random numbers, as it plays (#37, Decision 2): a
+    /// xorshift from `seed`, seven bits a draw, as R counts.
+    #[must_use]
+    pub fn seeded(seed: u64) -> Random {
+        Random {
+            values: Vec::new(),
+            drawn: 0,
+            state: Some(seed | 1),
+        }
     }
 
     /// The next value, as the original's `LD A,R` gives it.
@@ -32,6 +49,12 @@ impl Random {
     /// If more are drawn than were given: the rewrite read R where the
     /// original did not.
     pub fn r(&mut self) -> u8 {
+        if let Some(x) = &mut self.state {
+            *x ^= *x << 13;
+            *x ^= *x >> 7;
+            *x ^= *x << 17;
+            return (*x >> 32) as u8 & 0x7F;
+        }
         let v = *self.values.get(self.drawn).unwrap_or_else(|| {
             panic!(
                 "drew random value {} where the original read {}",
