@@ -43,6 +43,7 @@ Each rewritten routine is run beside the original's, which runs in the reference
 - **The ending.** A last game sends the original into the ending's location from the one beside it, through its own step, since play never gets that far, then holds BREAK in the new game that follows, which play never does (#60).
 - **Taken around the map.** A game plays 10,000 frames under random keys and is sent into a random location every 300, with Robin's energy topped up, so the routines are seen in places play and the tour don't reach them. It found a flag the entry reads that only differs when Robin arrives drawn as a character figure (#8).
 - **The main loop whole.** Besides each routine it calls, every pass of the main loop is checked as one, from its start back to its start, so the order of the calls and the passes that end early are checked too (#60).
+- **Animations, picture by picture.** Where a routine animates inside one call, the reveal that opens a location and the flash on meeting the wanderer, the screen at the end of each pass is compared too. What a call leaves can hide what it showed (#57).
 - **The report** lists every instruction of a routine that no call reached: code play and the tour never ran, checked only by reading.
 
 Each part of this was shown to fail on a planted bug, and the verifier's own tests check it on a made-up program in CI.
