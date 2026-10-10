@@ -10,6 +10,9 @@ const INVENTORY: u16 = 0xD472;
 const SWORD: u16 = 0xD47A;
 const BOW: u16 = 0xD47B;
 const PIECES: u16 = 0xD47E;
+/// How many times he's robbed the bishop's guard, less three for each trade:
+/// the pair stop coming at six (*The fifth character*).
+const ROBBED: u16 = 0xD482;
 /// An item of kind 2 is a bag of gold, as the trade takes three.
 const GOLD: u8 = 2;
 /// What the trade takes each time, and how many trades there are: the
@@ -35,6 +38,12 @@ pub struct Objective {
     pub sword: bool,
     pub bow: bool,
     pub pieces: u8,
+    /// The robberies' count, which stops the bishop coming at six.
+    pub robbed: u8,
+    /// Whether all eight of his inventory's slots hold something.
+    pub full: bool,
+    /// His arrows.
+    pub arrows: u8,
 }
 
 impl Objective {
@@ -45,6 +54,9 @@ impl Objective {
             sword: g.read(SWORD) != 0,
             bow: g.read(BOW) != 0,
             pieces: g.read(PIECES).min(3),
+            robbed: g.read(ROBBED),
+            full: (0..8).all(|n| g.read(INVENTORY + n) != 0xFF),
+            arrows: g.robin.arrows,
         }
     }
 

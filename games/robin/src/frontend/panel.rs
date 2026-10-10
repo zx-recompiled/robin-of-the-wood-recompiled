@@ -53,6 +53,8 @@ pub struct View<'a> {
     pub journal: Option<&'a Journal>,
     /// His gold and what the trade has given him, in a game (#98).
     pub objective: Option<Objective>,
+    /// Whether he's met the hermit this game (#99).
+    pub hermit_met: bool,
     pub trade: u16,
     pub doorways: [u16; 9],
 }
@@ -463,21 +465,8 @@ impl Panel {
         if aids.is_on(Aid::Objective) {
             y = self.objective(canvas, view, left, width, y);
         }
-        let coming = [(Aid::Hints, "HINTS", "Rule hints come with #99.")];
-        for (aid, title, note) in coming {
-            if !aids.is_on(aid) {
-                continue;
-            }
-            self.spaced(canvas, left, y, title, DIM);
-            let (_, h) = self.fonts.text(
-                Some(canvas),
-                left,
-                y + 5.0,
-                Some(width),
-                1.3,
-                &[span(note, 4.2, Weight::Regular, FAINT)],
-            );
-            y += 9.0 + h;
+        if aids.is_on(Aid::Hints) {
+            y = self.hint(canvas, view, left, width, y);
         }
         let assists: Vec<Aid> = ALL
             .into_iter()
@@ -514,6 +503,45 @@ impl Panel {
                 )],
             );
         }
+    }
+
+    /// The rule that applies here, if one does (#99), in a box. Where it
+    /// ends.
+    fn hint(&mut self, canvas: &mut Canvas, view: &View, left: f32, width: f32, y: f32) -> f32 {
+        let journal = view.journal;
+        let facts = super::hints::Facts {
+            here: journal.and_then(|j| j.here),
+            trade: view.trade,
+            doorways: &view.doorways,
+            now: CHARACTERS.map(|who| journal.and_then(|j| j.now(who))),
+            hermit_met: view.hermit_met,
+            objective: view.objective,
+        };
+        let Some(text) = super::hints::hint(&facts) else {
+            self.spaced(canvas, left, y, "HINT", DIM);
+            self.fonts.text(
+                Some(canvas),
+                left,
+                y + 5.0,
+                Some(width),
+                1.3,
+                &[span("None here.", 4.0, Weight::Regular, FAINT)],
+            );
+            return y + 14.0;
+        };
+        let s = [span(&text, 4.0, Weight::Regular, TEXT)];
+        let h = self.fonts.height_at(canvas.scale, width - 7.0, 1.35, &s);
+        canvas.round_rect(left, y, width, h + 6.0, 1.3, [0x1A, 0x1F, 0x2B]);
+        canvas.round_rect(left, y, 1.0, h + 6.0, 0.0, BLUE);
+        self.fonts.text(
+            Some(canvas),
+            left + 4.0,
+            y + 3.0,
+            Some(width - 7.0),
+            1.35,
+            &s,
+        );
+        y + h + 11.0
     }
 
     /// The objective (#98): his gold, how much more the next trade needs and
@@ -940,7 +968,11 @@ mod pictures {
                 sword: true,
                 bow: false,
                 pieces: 0,
+                robbed: 2,
+                full: false,
+                arrows: 0,
             }),
+            hermit_met: false,
             trade: 0x109,
             doorways: [0x0F4, 0x10B, 0, 0, 0, 0, 0, 0, 0],
         };
@@ -949,6 +981,16 @@ mod pictures {
         let mut full = seen.clone();
         full.open_or_close_map();
         png_with(&full, &view, "seen-full");
+        let at_ent = Journal::of([0x108], 0x109);
+        let mut hint_args: Vec<String> = ["--map", "--objective", "--hints"]
+            .map(String::from)
+            .to_vec();
+        let hinting = Aids::from_args(&mut hint_args);
+        let hint_view = View {
+            journal: Some(&at_ent),
+            ..view
+        };
+        png_with(&hinting, &hint_view, "hint");
         aids.open_or_close_map();
         png_with(&aids, &view, "full-map");
         aids.open_or_close_map();

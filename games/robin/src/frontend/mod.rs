@@ -6,6 +6,7 @@ pub mod aids;
 pub mod audio;
 pub mod gamepad;
 pub mod headless;
+pub mod hints;
 pub mod input;
 pub mod journal;
 pub mod overlay;
