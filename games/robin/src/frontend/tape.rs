@@ -67,6 +67,12 @@ pub fn folders() -> Vec<PathBuf> {
     out
 }
 
+/// The program's own folder in the data folder, where a located tape is
+/// kept, and the save states (#101).
+pub fn data_folder() -> Option<PathBuf> {
+    data_dir().map(|d| d.join(APP))
+}
+
 /// Where this system keeps application data a user installed themselves: on
 /// Linux and the other unices, `$XDG_DATA_HOME`, or `~/.local/share`.
 #[cfg(all(unix, not(target_os = "macos")))]

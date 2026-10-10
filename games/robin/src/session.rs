@@ -87,6 +87,18 @@ impl Animation {
     }
 }
 
+/// A game in play, as a save state holds it (#101): its memory, its random
+/// numbers' state, the AY's registers, the border and the frame count.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Saved {
+    pub memory: Box<[[u8; BANK]; 8]>,
+    pub random: u64,
+    pub ay: [u8; 16],
+    pub ay_latch: u8,
+    pub border: u8,
+    pub frames: u64,
+}
+
 /// What the game is doing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum State {
@@ -168,6 +180,44 @@ impl Session {
         };
         session.note_border();
         session
+    }
+
+    /// The game in play, as a save state holds it (#101), between frames:
+    /// `None` outside play, or while a sound or an animation holds the game,
+    /// whose state isn't kept.
+    #[must_use]
+    pub fn saved(&self) -> Option<Saved> {
+        (self.state == State::Playing && self.held == 0 && !self.fresh).then(|| Saved {
+            memory: self.game.to_memory(),
+            random: self.io.random.state().unwrap_or(1),
+            ay: self.io.ay.regs,
+            ay_latch: self.io.ay.latch,
+            border: self.border,
+            frames: self.frames,
+        })
+    }
+
+    /// The game a save state holds, in play again (#101).
+    #[must_use]
+    pub fn resume(saved: &Saved) -> Session {
+        let mut io = Io {
+            random: Random::resumed(saved.random),
+            ..Io::default()
+        };
+        io.ay.regs = saved.ay;
+        io.ay.latch = saved.ay_latch;
+        Session {
+            game: Game::from_memory(&saved.memory),
+            io,
+            state: State::Playing,
+            border: saved.border,
+            frames: saved.frames,
+            held: 0,
+            since: 0,
+            quiet: Vec::new(),
+            animation: Animation::default(),
+            fresh: false,
+        }
     }
 
     /// One frame, with `controls` held: the interrupt, then a step. What it

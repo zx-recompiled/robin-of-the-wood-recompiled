@@ -106,6 +106,36 @@ impl Journal {
     pub const fn version(&self) -> u64 {
         self.version
     }
+
+    /// Its bytes, for a save (#101): each location seen, then where each
+    /// character was last seen.
+    #[must_use]
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut out: Vec<u8> = self.visited.iter().map(|&v| u8::from(v)).collect();
+        for seen in self.last_seen {
+            let [lo, hi] = seen.unwrap_or(0).to_le_bytes();
+            out.extend_from_slice(&[u8::from(seen.is_some()), lo, hi]);
+        }
+        out
+    }
+
+    /// A journal from a save's bytes, for a game in play.
+    #[must_use]
+    pub fn from_bytes(bytes: &[u8]) -> Option<Journal> {
+        let (visited, rest) = bytes.split_at_checked(LOCATIONS)?;
+        let mut j = Journal {
+            playing: true,
+            ..Journal::default()
+        };
+        for (to, &v) in j.visited.iter_mut().zip(visited) {
+            *to = v != 0;
+        }
+        j.count = j.visited.iter().filter(|&&v| v).count();
+        for (n, seen) in rest.as_chunks::<3>().0.iter().take(3).enumerate() {
+            j.last_seen[n] = (seen[0] != 0).then(|| u16::from_le_bytes([seen[1], seen[2]]));
+        }
+        Some(j)
+    }
 }
 
 #[cfg(test)]

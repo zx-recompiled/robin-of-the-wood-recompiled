@@ -12,6 +12,7 @@ pub mod journal;
 pub mod overlay;
 pub mod panel;
 pub mod prompt;
+pub mod saves;
 pub mod tape;
 pub mod text;
 pub mod video;

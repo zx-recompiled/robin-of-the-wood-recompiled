@@ -197,7 +197,9 @@ impl Panel {
                 );
             }
         }
-        if aids.picker_open() {
+        if aids.offer_open() {
+            self.offer(canvas);
+        } else if aids.picker_open() {
             self.picker(canvas, aids);
         } else if aids.full_map_open() {
             self.full_map(canvas, view, marks(aids));
@@ -496,7 +498,12 @@ impl Panel {
                     row + 9.0,
                     Some(width),
                     1.3,
-                    &[span("Saves come with #101.", 3.6, Weight::Regular, FAINT)],
+                    &[span(
+                        aids.notice().unwrap_or("F5 saves, F9 restores."),
+                        3.6,
+                        Weight::Regular,
+                        FAINT,
+                    )],
                 );
             }
         }
@@ -651,6 +658,61 @@ impl Panel {
             x += w + 1.6;
         }
         row + 9.0
+    }
+
+    /// The offer of the game saved on quit (#101), with the game paused.
+    fn offer(&mut self, canvas: &mut Canvas) {
+        canvas.shade(0.0, 0.0, WINDOW_W, WINDOW_H, [0x05, 0x06, 0x09], 160);
+        let (w, h) = (170.0, 44.0);
+        let (x, y) = ((WINDOW_W - w) / 2.0, (WINDOW_H - h) / 2.0);
+        canvas.round_rect(x, y, w, h, 4.0, CARD_EDGE);
+        canvas.round_rect(x + 0.4, y + 0.4, w - 0.8, h - 0.8, 3.7, CARD);
+        self.fonts.text(
+            Some(canvas),
+            x + 9.0,
+            y + 7.0,
+            None,
+            1.0,
+            &[span(
+                "Continue where you left off?",
+                6.0,
+                Weight::SemiBold,
+                WHITE,
+            )],
+        );
+        self.fonts.text(
+            Some(canvas),
+            x + 9.0,
+            y + 16.0,
+            Some(w - 18.0),
+            1.3,
+            &[span(
+                "The game you were playing when you quit was saved.",
+                4.2,
+                Weight::Regular,
+                DIM,
+            )],
+        );
+        let foot = y + h - 10.0;
+        let end = self.key_cap_at(canvas, x + 9.0, foot, "Enter");
+        let s = [span("continue", 4.0, Weight::Regular, DIM)];
+        self.fonts
+            .text(Some(canvas), end + 2.0, foot + 0.8, None, 1.0, &s);
+        let other = [span(
+            "any other key: start afresh",
+            4.0,
+            Weight::Regular,
+            DIM,
+        )];
+        let ow = self.fonts.measure(&other);
+        self.fonts.text(
+            Some(canvas),
+            x + w - 9.0 - ow,
+            foot + 0.8,
+            None,
+            1.0,
+            &other,
+        );
     }
 
     /// The picker: a window in the middle over the dimmed game, which stands
