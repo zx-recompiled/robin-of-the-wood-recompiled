@@ -135,10 +135,13 @@ pub fn enter(g: &mut Game, assets: &Assets, io: &mut Io, direction: u8) {
 }
 
 /// The flags the characters' entry leaves, which placing the items reads
-/// (*Items*, *Restocking*). It ends by drawing Robin, and the frame drawing
-/// (`0:C5CE`) returns with F taken from a word it pushed: the low byte of
-/// his frame's address in its table, plus 2. The table is indexed by the
-/// frame doubled in one byte, so its bit 7, the way he faces, drops out.
+/// (*Items*, *Restocking*). It ends by drawing Robin, and how the frame
+/// drawing (`0:C5CE`) returns depends on the frame. A pixel frame returns
+/// with F taken from a word it pushed: the low byte of the frame's address
+/// in its table, plus 2. A character figure (its header's low nibble 4 or
+/// more) returns straight to the caller after a `DEC C` reaching 0, so with
+/// Z set (#8). The table is indexed by the frame doubled in one byte, so its
+/// bit 7, the way he faces, drops out.
 fn drawn_flags(g: &Game) -> u8 {
     let frame = g.read(ROBIN + 8);
     let entry = g
@@ -146,6 +149,10 @@ fn drawn_flags(g: &Game) -> u8 {
         .table
         .wrapping_add(u16::from(frame.wrapping_mul(2)));
     let at = u16::from_le_bytes([g.read(entry), g.read(entry.wrapping_add(1))]);
+    if g.read(at) & 0x0F >= 4 {
+        // A character figure: `DEC C` to 0 leaves Z and N set.
+        return 0x42;
+    }
     at.wrapping_add(2) as u8
 }
 
