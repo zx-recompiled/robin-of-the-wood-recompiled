@@ -461,6 +461,10 @@ pub struct Game {
     /// The rest of RAM, banks 0 to 7, as it was read: what the rewrite does
     /// not model yet, and the blocks' bytes, which the game mirrors in place.
     rest: Box<[[u8; BANK]; 8]>,
+    /// Bytes of the ROM, which the game has none of: empty in play, where
+    /// reads below `0x4000` give 0, and in the checks the bytes the original
+    /// read, given as R's values are (#21, #37 Decision 2).
+    pub rom: std::collections::BTreeMap<u16, u8>,
 }
 
 /// The bank and offset of `addr`, with bank 0 paged at `0xC000`.
@@ -505,13 +509,12 @@ impl Game {
 
     /// The byte the processor sees at `addr` with bank 0 paged at `0xC000`,
     /// as it is whenever the screen and map code runs. Below `0x4000`, where
-    /// the original has its ROM, it's 0: the game has none (#21, #66). The
-    /// original reads the ROM in three places, and the checks skip every
-    /// call that does.
+    /// the original has its ROM, it's the byte [`Game::rom`] gives, which in
+    /// play is 0: the game has none (#21, #66).
     #[must_use]
     pub fn read(&self, addr: u16) -> u8 {
         if addr < 0x4000 {
-            return 0;
+            return self.rom.get(&addr).copied().unwrap_or(0);
         }
         let (bank, offset) = place(addr);
         self.display
@@ -587,6 +590,7 @@ impl Game {
             wanderer: Wanderer::zeroed(),
             fighting: Fighting::zeroed(),
             rest: Box::new(*banks),
+            rom: std::collections::BTreeMap::new(),
         };
         g.display.read_parts(&read);
         g.play.read_parts(&read);

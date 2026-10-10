@@ -177,8 +177,12 @@ const VARIED: [&str; 4] = [
 /// that make them and nothing else on that port (#67). Elsewhere code the
 /// rewrite doesn't time can come between two writes.
 const TIMED: &[u16] = &[
-    0xBE2C, 0xD8C6, 0xC090, 0xC012, 0xBECE, 0xBC0B, 0xBD19, 0xBC6C,
+    0xBE2C, 0xD8C6, 0xC090, 0xC012, 0xBECE, 0xBC0B, 0xBD19, 0xBC6C, 0x8B32,
 ];
+
+/// The main loop's start, where the scrambling check stops following a
+/// caller that never returns.
+const PASS_START: u16 = 0xBE62;
 
 /// How many distinct calls from each caller get the scrambling check.
 pub(crate) const SCRAMBLE_PER_CALLER: u32 = 20;
@@ -259,7 +263,6 @@ impl Routine {
                 poke(&mut poisoned, n, i, !v);
             }
             match self.run_original(&poisoned) {
-                Ok(run2) if run2.rom_read.is_some() => c.rom_reads += 1,
                 Ok(run2) => {
                     let differ = self.compare(&poisoned, &run2, play);
                     if !differ.is_empty() {
@@ -301,7 +304,6 @@ impl Routine {
                 poke(&mut varied, n, i, v ^ flip);
             }
             match self.run_original(&varied) {
-                Ok(run3) if run3.rom_read.is_some() => c.rom_reads += 1,
                 Ok(run3) => {
                     c.varied += 1;
                     let differ = self.compare(&varied, &run3, play);
@@ -354,6 +356,7 @@ impl Routine {
         let mut executed = Vec::new();
         let mut read: BTreeSet<(usize, usize)> = BTreeSet::new();
         let mut rom_read = None;
+        let mut rom = BTreeMap::new();
         let mut blind: BTreeSet<(usize, usize)> = BTreeSet::new();
         let mut steps = 0u64;
         // An exit counts only once the run has begun, so a stretch can end
@@ -390,8 +393,9 @@ impl Routine {
                 match cy.kind {
                     bus::Kind::Read => {
                         (cy.at, c.read(cy.at)).hash(&mut key);
-                        if cy.at < 0x4000 && rom_read.is_none() {
-                            rom_read = Some((pc, cy.at));
+                        if cy.at < 0x4000 {
+                            rom_read.get_or_insert((pc, cy.at));
+                            rom.entry(cy.at).or_insert(c.read(cy.at));
                         }
                         if let Some(p) = ram_place(&c, cy.at) {
                             read.insert(p);
@@ -439,6 +443,7 @@ impl Routine {
             blind,
             read,
             rom_read,
+            rom,
             random,
             beeps,
             banks: banks(&c),
@@ -451,6 +456,7 @@ impl Routine {
     fn compare(&self, entry: &Zx, run: &Run, play: &Play) -> Vec<String> {
         let before = Regs::of(entry);
         let mut g = Game::from_memory(&banks(entry));
+        g.rom = run.rom.clone();
         // A rewrite that panics where the original carries on is a
         // difference like any other: reported, not the end of the run.
         let rewrite = self.rewrite;
@@ -630,12 +636,20 @@ impl Routine {
                 odd.pc, same.pc
             ))
         };
-        // Until the caller returns...
+        // Until the caller returns, or the main loop starts its next pass,
+        // where a caller that never returns, as the entry jumps back to it,
+        // ends: past there, the random routine can read the stack's stale
+        // bytes, a scrambled register among them, at R × 0x101 (#21)...
+        let mut passed = false;
         for _ in 0..FOLLOW {
             if same.pc != odd.pc {
                 return diverged(&same, &odd);
             }
             if same.sp > level {
+                break;
+            }
+            if same.pc == PASS_START && same.memory.slot(3) == Memory::bank(0) {
+                passed = true;
                 break;
             }
             step(&mut same, &mut odd);
@@ -644,7 +658,7 @@ impl Routine {
         // ...then until the stack is back at its level, so that what a later
         // routine saved there, a scrambled register among it, is popped.
         let mut back = same.sp >= level;
-        for _ in 0..FOLLOW {
+        for _ in 0..if passed { 0 } else { FOLLOW } {
             if same.pc != odd.pc {
                 return diverged(&same, &odd);
             }
@@ -741,6 +755,8 @@ pub(crate) struct Run {
     read: BTreeSet<(usize, usize)>,
     /// The first read of the ROM, if it made one: where, and what.
     pub(crate) rom_read: Option<(u16, u16)>,
+    /// The ROM's bytes it read, which the rewrite is given (#21).
+    pub(crate) rom: BTreeMap<u16, u8>,
     /// The time of each write to the ULA's port, without contention.
     pub(crate) beeps: Vec<u32>,
     /// What R gave each `LD A,R`, in order.
@@ -948,13 +964,29 @@ mod tests {
     }
 
     #[test]
-    fn a_call_that_reads_the_rom_is_skipped_and_counted_not_compared() {
-        // `LD A,(0x1000) : RET`: the rewrite has no ROM to match it with.
-        let z = machine(&[0x3A, 0x00, 0x10, 0xC9], &[]);
-        let r = routine(&[], |_, _, _, _| panic!("never run: the call is skipped"));
-        let t = check_calls(&r, &[z]);
-        assert_eq!((t.calls, t.compared, t.rom_reads), (1, 0, 1));
+    fn a_call_that_reads_the_rom_is_given_its_bytes_and_counted() {
+        // `LD A,(0x1000) : RET`, the caller storing A: the rewrite reads the
+        // byte it's given, as the original read it (#21).
+        let mut z = machine(&[0x3A, 0x00, 0x10, 0xC9], STORES_A);
+        let byte = z.read(0x1000);
+        z.memory.poke(0x9000, !byte);
+        let reads = routine(&[Reg::A], |g, _, mut r, _| {
+            r.set(Reg::A, g.read(0x1000));
+            r
+        });
+        let t = check_calls(&reads, std::slice::from_ref(&z));
+        assert_eq!((t.calls, t.compared, t.rom_reads), (1, 1, 1));
         assert!(t.failures.is_empty(), "{:?}", t.failures);
+        let ignores = routine(&[Reg::A], |g, _, mut r, _| {
+            r.set(Reg::A, !g.read(0x1000));
+            r
+        });
+        assert!(
+            !check_calls(&ignores, std::slice::from_ref(&z))
+                .failures
+                .is_empty()
+        );
+        let t = check_calls(&reads, &[z]);
         assert!(
             t.first_rom_read
                 .as_deref()
