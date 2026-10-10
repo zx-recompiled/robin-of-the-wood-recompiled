@@ -58,8 +58,9 @@ music player (#62). The plan, in order, is the board's Backlog.
   behaviour: paging, the lock, the shadow screen, contention by bank, the AY.
 - `cargo test -p zx-runtime --test hardware -- --nocapture` runs both machines
   against test programs measured on real ones (`minfo`, Fuse Test, Rak's
-  Timing Test against a real +2's photographs, Butler's), booting the real
-  ROMs and loading each program from its tape. Needs the files in `assets/`.
+  Timing Test against a real +2's photographs, Butler's, and the zxtests
+  raster programs through `zx_runtime::raster`, #15), booting the real ROMs
+  and loading each program from its tape. Needs the files in `assets/`.
 - `cargo run --release -p zx-recomp -- tools/re/robin.toml --listing target/re/robin.lst`
   traces the original as it plays and writes its disassembly, a section per
   page (`docs/re/robin.md`, *Making a listing*). Needs the tape and ROM in
@@ -102,7 +103,8 @@ music player (#62). The plan, in order, is the board's Backlog.
   whose results were measured on real machines, never against another emulator
   (`tests/hardware.rs`): every known difference is listed by name, with its
   ticket, and the test checks exactly those differ (#14 the end of a contended
-  line, #16 Butler's tests, the floating bus out of scope).
+  line, #16 Butler's tests, #90 the raster tests against Alford's machine,
+  the floating bus out of scope).
 - **Fidelity first, and say so when it is not.** Where the rewrite cannot match
   the original exactly, the reason is written down (`README.md`, *Status*)
   rather than left to be discovered.

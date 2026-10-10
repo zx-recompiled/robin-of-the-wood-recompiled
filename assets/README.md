@@ -11,7 +11,7 @@ ignored by git):
 | `48.rom` | ZX Spectrum 48K ROM, SHA-1 `5ea7c2b824672e914525d1d5c419d71b84a426a2` | development tools only (the 48K reference machine) |
 | `tests.in`, `tests.expected` | The Fuse project's Z80 test corpus | development tools only (the processor conformance test) |
 | `z80full.tap`, `z80ccf.tap`, `z80memptr.tap` | Patrik Rak's z80test, v1.2a | development tools only (the processor conformance test) |
-| `minfo.tap`, `timingtest.tap` | Patrik Rak's zxtests `minfo` and Timing Test v0.3 | development tools only (the machines' timing) |
+| `minfo.tap`, `btime.tap`, `ptime.tap`, `stime.tap`, `atime.tap`, `timingtest.tap` | zxtests (Jan Bobrowski and Patrik Rak): `minfo`, the raster programs, and Rak's Timing Test v0.3 | development tools only (the machines' timing) |
 | `fusetest.tap` | Philip Kendall's Fuse Test (2008-03-28) | development tools only (the machines' timing) |
 | `butler-128k.szx` | Richard and Tim Butler's ZX Spectrum Timing Tests 128K v1.0 | development tools only (reported, not judged) |
 
@@ -79,7 +79,7 @@ their authors' or a mirror's archives:
 curl -LO http://zxds.raxoft.cz/taps/misc/zxtests-3p.zip
 curl -LO http://zxds.raxoft.cz/taps/misc/timingtest-0.3.zip
 curl -L -o fusetest.zip 'https://zxe.io/depot/software/ZX%20Spectrum/Fuse%20Test%20(2008-03-28)(Kendall,%20Philip)%5B!%5D.zip'
-unzip -j zxtests-3p.zip minfo.tap -d assets
+unzip -j zxtests-3p.zip minfo.tap btime.tap ptime.tap stime.tap atime.tap -d assets
 unzip -p timingtest-0.3.zip timingtest-0.3/timing.tap > assets/timingtest.tap
 unzip -p fusetest.zip fusetest/fusetest.tap > assets/fusetest.tap
 ```

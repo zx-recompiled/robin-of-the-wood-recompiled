@@ -608,3 +608,186 @@ fn butler_128k() {
     }
     assert!(!verdicts.is_empty(), "Butler's tests printed no verdicts");
 }
+
+// --- The raster tests (zxtests) ------------------------------------------------
+//
+// `btime`, `ptime`, `stime` and `atime` (Jan Bobrowski and Patrik Rak, GPL)
+// each make one change at a T-state set with Q and A, every frame: the
+// border (`btime`), the shown bank (`ptime`), a bitmap byte (`stime`) or an
+// attribute (`atime`), and the picture says when it landed. They're judged
+// here from the picture the beam draws (`zx_runtime::raster`, #15), timed
+// only from written references, against what Brendan Alford saw on a real
+// 128K (World of Spectrum forums, comment 757503). The T-state is set in
+// the program's BASIC variable `t`, as Q and A would set it.
+
+/// Sets the BASIC numeric variable named by the one letter `name` to `v`,
+/// walking the variables area from `VARS`.
+fn set_var(z: &mut Zx, name: u8, v: u16) {
+    let mut at = z.read16(23627);
+    loop {
+        let b = z.read(at);
+        assert_ne!(b, 0x80, "no variable {}", name as char);
+        match b >> 5 {
+            0b011 if b == name => {
+                let [lo, hi] = v.to_le_bytes();
+                for (i, x) in [0, 0, lo, hi, 0].into_iter().enumerate() {
+                    z.write(at + 1 + i as u16, x);
+                }
+                return;
+            }
+            // A one-letter number; a longer name, then its number; a FOR
+            // loop's control; an array or a string, by its length.
+            0b011 => at += 6,
+            0b101 => {
+                at += 1;
+                while z.read(at) & 0x80 == 0 {
+                    at += 1;
+                }
+                at += 6;
+            }
+            0b111 => at += 19,
+            _ => at += 3 + z.read16(at + 1),
+        }
+    }
+}
+
+/// Loads the zxtests program `tape`, then for each T-state in `ts` sets its
+/// `t`, lets it pick it up (a key it ignores makes it return to BASIC, which
+/// starts it again with the new value), runs a second, and hands the frame
+/// the beam drew to `look`. `None` if a file is missing.
+fn raster_sweep(
+    tape: &str,
+    ts: std::ops::RangeInclusive<u16>,
+    mut look: impl FnMut(u16, &[u32]),
+) -> Option<()> {
+    let mut z = power_on(Model::Spectrum128)?;
+    let tape = file(tape)?;
+    let mut feeder = Some(TapeFeeder::from_tap(&tape).expect("a .tap"));
+    let mut misses = Misses::default();
+    let mut frame = |z: &mut Zx, keys: &[&str]| {
+        for k in ["z", "enter"] {
+            z.set_key(Key::by_name(k).expect("a key"), keys.contains(&k));
+        }
+        z.run_frame(
+            |z: &mut Zx| feeder.as_mut().is_some_and(|t| t.on_step(z)),
+            &mut misses,
+        );
+    };
+    for f in 0..3000 {
+        frame(
+            &mut z,
+            if (150..154).contains(&f) {
+                &["enter"]
+            } else {
+                &[]
+            },
+        );
+    }
+    z.raster = Some(Box::new(zx_runtime::raster::Raster::new(z.border)));
+    for t in ts {
+        set_var(&mut z, b't', t);
+        for f in 0..64 {
+            frame(&mut z, if f < 4 { &["z"] } else { &[] });
+        }
+        look(t, &z.raster.as_ref().expect("on").picture);
+    }
+    Some(())
+}
+
+/// A pixel of the picture: `x` across the 320, `y` down the 256.
+fn px(p: &[u32], x: usize, y: usize) -> u32 {
+    p[y * screen::WIDTH + x]
+}
+
+/// The picture's top screen line, and where its first cell starts.
+const TOP: usize = screen::BORDER;
+const LEFT: usize = screen::BORDER;
+
+#[test]
+fn btime_the_border_bar_lines_up_with_the_first_cell() {
+    // Alford: "14134 + 228 = 14362", the red bar starting right above the
+    // blue block in the top-left cell, a line before the screen's first.
+    let mut at = None;
+    let ran = raster_sweep("btime.tap", 14134..=14134, |_, p| {
+        at = (0..screen::WIDTH).find(|&x| px(p, x, TOP - 1) == zx_core::screen::PALETTE[2]);
+    });
+    if ran.is_none() {
+        return;
+    }
+    println!("btime 14134: the red bar starts at x = {at:?}");
+    assert_eq!(at, Some(LEFT), "the red bar starts above the first cell");
+}
+
+/// What Alford saw of `ptime`'s black bar over the top line's first cells,
+/// in pixels, at each T-state from 14,358.
+const PTIME_ALFORD: [usize; 19] = [
+    0, 16, 32, 32, 32, 32, 32, 32, 32, 32, 48, 48, 48, 48, 48, 48, 48, 48, 64,
+];
+
+/// The T-states where this machine's bar differs from Alford's (#90): it
+/// switches the bank a cell at a time where his switches a pair, and a
+/// T-state later.
+const PTIME_KNOWN_DIFFERENT: std::ops::RangeInclusive<u16> = 14359..=14376;
+
+#[test]
+fn ptime_the_shown_bank_switches_as_on_the_real_128k() {
+    let mut differ = Vec::new();
+    let ran = raster_sweep("ptime.tap", 14358..=14376, |t, p| {
+        let black = |c: usize| {
+            let paper = px(p, LEFT + c * 8, TOP);
+            paper == zx_core::screen::PALETTE[0] || paper == zx_core::screen::PALETTE[8]
+        };
+        let ours = (0..8).take_while(|&c| black(c)).count() * 8;
+        let theirs = PTIME_ALFORD[usize::from(t - 14358)];
+        println!("ptime {t}: a bar of {ours} pixels; on Alford's 128K, {theirs}");
+        if ours != theirs {
+            differ.push(t);
+        }
+    });
+    if ran.is_none() {
+        return;
+    }
+    assert_eq!(
+        differ,
+        PTIME_KNOWN_DIFFERENT.collect::<Vec<_>>(),
+        "the T-states that differ from Alford's are not the known ones (#90)"
+    );
+}
+
+#[test]
+fn stime_a_bitmap_write_lands_as_on_the_real_128k() {
+    // Alford: the red bar at the top is last there at 14,361, and gone at
+    // 14,362. Here it's gone a T-state later (#90).
+    let mut seen = Vec::new();
+    let ran = raster_sweep("stime.tap", 14360..=14363, |t, p| {
+        let red = (0..8).all(|b| px(p, LEFT + b, TOP) == zx_core::screen::PALETTE[2]);
+        println!(
+            "stime {t}: the red bar is {}",
+            if red { "there" } else { "gone" }
+        );
+        seen.push(red);
+    });
+    if ran.is_none() {
+        return;
+    }
+    assert_eq!(
+        seen,
+        [true, true, true, false],
+        "there at 14,361 as on Alford's; still there at 14,362, the known difference (#90)"
+    );
+}
+
+#[test]
+fn atime_an_attribute_write_is_reported() {
+    // Never measured on a real machine, so reported, not judged.
+    let mut first = None;
+    let ran = raster_sweep("atime.tap", 14355..=14370, |t, p| {
+        if first.is_none() && px(p, LEFT, TOP) == zx_core::screen::PALETTE[2] {
+            first = Some(t);
+        }
+    });
+    if ran.is_some() {
+        println!("atime: the attribute is too late for the first cell from {first:?}");
+        assert!(first.is_some(), "atime's attribute never changed colour");
+    }
+}

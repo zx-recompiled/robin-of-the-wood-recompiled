@@ -125,6 +125,9 @@ pub struct Zx {
     /// Execution/write tracing used by the recompiler's analysis pass.
     pub trace: Option<Box<crate::trace::Trace>>,
 
+    /// The picture as the beam draws it, when a test asks for it (#15).
+    pub raster: Option<Box<crate::raster::Raster>>,
+
     /// Replaces the ULA for port reads.
     ///
     /// What a port read returns is the machine's business, not the
@@ -184,6 +187,7 @@ impl Zx {
             int_pending: false,
             frame: 0,
             trace: None,
+            raster: None,
             port_in_hook: None,
         }
     }
@@ -394,6 +398,10 @@ impl Zx {
     /// loaded; with none, the bottom 16K is just memory.
     #[inline(always)]
     pub fn write(&mut self, addr: u16, v: u8) {
+        if let Some(r) = self.raster.as_deref_mut() {
+            let end = r.write_end(self.t);
+            self.raster_catch_up(end);
+        }
         if self.memory.write(addr, v)
             && let Some(trace) = &mut self.trace
         {
@@ -476,6 +484,13 @@ impl Zx {
     }
 
     pub fn port_out(&mut self, port: u16, v: u8) {
+        if let Some(r) = self.raster.as_deref_mut() {
+            let end = r.write_end(self.t);
+            if port & 1 == 0 {
+                r.border(end, v);
+            }
+            self.raster_catch_up(end);
+        }
         if port & 1 == 0 {
             self.border = v & 7;
             self.ear = v & 0x10 != 0;
