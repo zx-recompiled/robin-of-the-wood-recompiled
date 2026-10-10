@@ -330,6 +330,15 @@ pub fn finish(g: &mut Game, io: &mut Io) {
     actions::banked_call(g, io, sound::MUSIC_BANK, sound::arrival_tune);
 }
 
+/// The very first start, from the program's own (`0:CC66`): the screen
+/// cleared, its colours `0x44`, no cell marked changed, then the start.
+pub fn first_start(g: &mut Game, io: &mut Io) {
+    screen::clear_screen(g);
+    screen::fill_attrs(g, 0x44);
+    screen::clear_changed(g);
+    start(g, io);
+}
+
 /// Once, from the hand-over (`0:CC72`): the AY reset, the mirror and row
 /// tables, the interrupt's table, the lower panel cleared, its five
 /// strings, the border black, and Robin's state cleared. Then the menu.

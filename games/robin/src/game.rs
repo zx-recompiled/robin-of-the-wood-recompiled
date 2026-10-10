@@ -504,13 +504,15 @@ impl Game {
     }
 
     /// The byte the processor sees at `addr` with bank 0 paged at `0xC000`,
-    /// as it is whenever the screen and map code runs.
-    ///
-    /// # Panics
-    ///
-    /// Below `0x4000`, where the original has its ROM: the game has none.
+    /// as it is whenever the screen and map code runs. Below `0x4000`, where
+    /// the original has its ROM, it's 0: the game has none (#21, #66). The
+    /// original reads the ROM in three places, and the checks skip every
+    /// call that does.
     #[must_use]
     pub fn read(&self, addr: u16) -> u8 {
+        if addr < 0x4000 {
+            return 0;
+        }
         let (bank, offset) = place(addr);
         self.display
             .get_part(addr)

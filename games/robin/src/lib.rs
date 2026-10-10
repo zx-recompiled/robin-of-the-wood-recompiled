@@ -26,6 +26,7 @@ pub mod new_game;
 pub mod print;
 pub mod scene;
 pub mod screen;
+pub mod session;
 pub mod sound;
 pub mod sprites;
 pub mod wanderer;
