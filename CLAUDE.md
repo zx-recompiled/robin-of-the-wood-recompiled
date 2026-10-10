@@ -26,8 +26,8 @@ Robin's movement and controls (#34), the four characters on each row
 fighting (#40), and the rest of the main loop's routines (#41: the second
 group, items, the fifth character, the trade, doorways and journeys, BREAK
 and the game over), checked as far as play reaches them, the scripted
-scene (#42), and the main loop itself, a pass at a time, with the entry and
-the ending (#60). The plan, in order, is the board's Backlog.
+scene (#42), the main loop itself, a pass at a time, with the entry and
+the ending (#60), and the menu and a new game (#61). The plan, in order, is the board's Backlog.
 
 ## Commands
 
