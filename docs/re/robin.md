@@ -1462,6 +1462,18 @@ rewrite could start differently.
 ## Credits and date
 
 - The program's own menu says "© 1986 Odin Computer Graphics". **provisional**
-- The individual credits (Steve Wetheril, Paul Salmon, Fred Gray) come only
-  from the dump's archive-info block, not from the inlay or the program. The
-  maintainer accepted that as the README's source (#1).
+- The dump's archive-info block credits Steve Wetheril, Paul Salmon and Fred
+  Gray. The inlay and the program don't name anyone. The lead programmer's
+  own account is Steve Wetherill's memoir, *Chapter 8: the clone, the flan
+  and the forest*
+  (https://stevewetherill.substack.com/p/chapter-8-the-clone-the-flan-and-the-forest):
+  - Wetherill: the Spectrum version's programming, and the port of his AY
+    music player for the 128K.
+  - Paul Salmon: art and design.
+  - Andy Walker: the sound, and the voice in the speech.
+  - Keith Robinson: some of the characters, the bishop among them.
+  - Marc Wilding: the C64 version.
+
+  It doesn't mention Fred Gray. World of Spectrum credits Wetherill, Salmon,
+  Walker and Gerry Fisher. The README gives the memoir's account, and says the
+  archive's differs (#93).
