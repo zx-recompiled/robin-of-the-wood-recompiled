@@ -10,6 +10,7 @@ use super::aids::{ALL, Aid, Aids};
 use super::journal::Journal;
 use super::text::{Canvas, Fonts, Rgb, Span, Weight};
 use robin::map::{COLUMNS, ROWS};
+use robin::objective::{self, Next, Objective};
 use robin::places::{self, CHARACTERS, Character};
 
 /// The picture's width with its border, and the panel's beside it. The
@@ -50,6 +51,8 @@ fn span(text: &str, size: f32, weight: Weight, colour: Rgb) -> Span<'_> {
 #[derive(Default)]
 pub struct View<'a> {
     pub journal: Option<&'a Journal>,
+    /// His gold and what the trade has given him, in a game (#98).
+    pub objective: Option<Objective>,
     pub trade: u16,
     pub doorways: [u16; 9],
 }
@@ -457,10 +460,10 @@ impl Panel {
                 y = self.seen_list(canvas, view, m, left, y + 1.0) + 2.0;
             }
         }
-        let coming = [
-            (Aid::Objective, "OBJECTIVE", "The objective comes with #98."),
-            (Aid::Hints, "HINTS", "Rule hints come with #99."),
-        ];
+        if aids.is_on(Aid::Objective) {
+            y = self.objective(canvas, view, left, width, y);
+        }
+        let coming = [(Aid::Hints, "HINTS", "Rule hints come with #99.")];
         for (aid, title, note) in coming {
             if !aids.is_on(aid) {
                 continue;
@@ -511,6 +514,118 @@ impl Panel {
                 )],
             );
         }
+    }
+
+    /// The objective (#98): his gold, how much more the next trade needs and
+    /// what it gives, and what he has. Where it ends.
+    fn objective(
+        &mut self,
+        canvas: &mut Canvas,
+        view: &View,
+        left: f32,
+        width: f32,
+        y: f32,
+    ) -> f32 {
+        self.spaced(canvas, left, y, "OBJECTIVE", DIM);
+        let Some(o) = view.objective else {
+            self.fonts.text(
+                Some(canvas),
+                left,
+                y + 5.0,
+                None,
+                1.0,
+                &[span("When a game starts.", 4.0, Weight::Regular, FAINT)],
+            );
+            return y + 14.0;
+        };
+        let next = match o.next() {
+            Next::Sword => "the sword".to_string(),
+            Next::Bow => "the bow".to_string(),
+            Next::Piece(n) => format!("magic arrow {n}"),
+            Next::Done => String::new(),
+        };
+        let bags = |n: u8| {
+            if n == 1 {
+                "1 bag".to_string()
+            } else {
+                format!("{n} bags")
+            }
+        };
+        let line = match o.next() {
+            Next::Done => "Every trade made: on to the tournament.".to_string(),
+            _ if o.gold >= objective::PER_TRADE => {
+                format!("{}: enough for {next}, at the Ent", bags(o.gold))
+            }
+            _ => format!(
+                "{} · {} more for {next}",
+                bags(o.gold),
+                objective::PER_TRADE - o.gold
+            ),
+        };
+        let (_, h) = self.fonts.text(
+            Some(canvas),
+            left,
+            y + 5.0,
+            Some(width),
+            1.2,
+            &[span(&line, 4.2, Weight::SemiBold, WHITE)],
+        );
+        let mut row = y + 6.0 + h;
+        // All the gold the trades want, and how much of it he's brought.
+        let want = f32::from(objective::PER_TRADE * objective::TRADES);
+        let had = f32::from(o.traded() * objective::PER_TRADE + o.gold).min(want);
+        canvas.round_rect(left, row, width, 2.0, 1.0, [0x1F, 0x23, 0x2B]);
+        canvas.round_rect(left, row, width * had / want, 2.0, 1.0, [0xE3, 0xC0, 0x6B]);
+        row += 3.2;
+        self.fonts.text(
+            Some(canvas),
+            left,
+            row,
+            None,
+            1.0,
+            &[span(
+                &format!(
+                    "{} of the {} bags the Ent wants in all",
+                    had as u8, want as u8
+                ),
+                3.5,
+                Weight::Regular,
+                FAINT,
+            )],
+        );
+        row += 6.0;
+        let got = [
+            ("Sword", o.sword),
+            ("Bow", o.bow),
+            ("Arrow 1", o.pieces >= 1),
+            ("Arrow 2", o.pieces >= 2),
+            ("Arrow 3", o.pieces >= 3),
+        ];
+        let mut x = left;
+        for (name, has) in got {
+            let text = if has {
+                format!("✓ {name}")
+            } else {
+                name.to_string()
+            };
+            let colour = if has { [0x7F, 0xE0, 0xA6] } else { DIM };
+            let s = [span(&text, 3.6, Weight::Regular, colour)];
+            let w = self.fonts.measure(&s) + 3.4;
+            if x + w > left + width {
+                x = left;
+                row += 6.6;
+            }
+            let back = if has {
+                [0x17, 0x35, 0x28]
+            } else {
+                [0x1C, 0x20, 0x28]
+            };
+            canvas.round_rect(x, row, w, 5.6, 1.3, back);
+            self.fonts
+                .text(Some(canvas), x + 1.7, row + 0.8, None, 1.0, &s);
+            x += w + 1.6;
+        }
+        row + 9.0
     }
 
     /// The picker: a window in the middle over the dimmed game, which stands
@@ -820,6 +935,12 @@ mod pictures {
         let seen = Aids::from_args(&mut seen_args);
         let view = View {
             journal: Some(&journal),
+            objective: Some(Objective {
+                gold: 2,
+                sword: true,
+                bow: false,
+                pieces: 0,
+            }),
             trade: 0x109,
             doorways: [0x0F4, 0x10B, 0, 0, 0, 0, 0, 0, 0],
         };

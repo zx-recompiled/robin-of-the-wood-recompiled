@@ -57,13 +57,18 @@ struct App {
     overlay: Option<Overlay>,
     panel: Panel,
     /// What the overlay was last drawn from: the aids' and the journal's
-    /// versions and the size. It's redrawn only when that changes.
-    drawn: Option<(u64, u64, (u32, u32))>,
+    /// versions, the objective and the size. It's redrawn only when that
+    /// changes.
+    drawn: Option<Drawn>,
     /// When the next frame is due.
     next: Instant,
     period: Duration,
     error: Option<String>,
 }
+
+/// What the overlay is drawn from: the aids' and the journal's versions,
+/// the objective, and the size.
+type Drawn = (u64, u64, Option<robin::objective::Objective>, (u32, u32));
 
 /// The window's width in the Spectrum's pixels: the picture and the panel
 /// beside it (#95).
@@ -166,9 +171,12 @@ impl ApplicationHandler for App {
                         row[FULL_W..].fill([0, 0, 0, 0xFF]);
                     }
                     let clip = p.context().scaling_renderer.clip_rect();
+                    let objective = (session.state == robin::session::State::Playing)
+                        .then(|| robin::objective::Objective::of(&session.game));
                     let key = (
                         self.aids.version(),
                         self.journal.version(),
+                        objective,
                         (clip.2, clip.3),
                     );
                     if self.drawn != Some(key)
@@ -178,6 +186,7 @@ impl ApplicationHandler for App {
                         let mut canvas = overlay.canvas(clip.2, clip.3, scale);
                         let view = panel::View {
                             journal: Some(&self.journal),
+                            objective,
                             trade: robin::places::trade(&session.game),
                             doorways: robin::places::doorways(&session.game),
                         };
