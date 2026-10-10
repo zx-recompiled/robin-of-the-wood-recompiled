@@ -181,6 +181,7 @@ impl Session {
         self.io.controls = controls;
         self.io.writes.clear();
         self.io.beeps.clear();
+        self.io.ay_writes.clear();
         self.io.t = 0;
         self.io.quiet.clear();
         self.frames += 1;

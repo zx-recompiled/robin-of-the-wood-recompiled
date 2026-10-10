@@ -45,7 +45,10 @@ wildcards = "deny"
 allow-wildcard-paths = true
 
 [sources]
-# Nothing but crates.io. A git dependency would be a supply chain nobody is
-# watching.
+# crates.io, and one git repository: the maintainer's own zx-sidekick, for
+# the AY synthesiser, `aym` (#7, #67). Any other git dependency would be a
+# supply chain nobody is watching. The dependency pins a commit, and
+# bumping it is a deliberate change.
 unknown-registry = "deny"
 unknown-git = "deny"
+allow-git = ["https://github.com/zx-sidekick/zx-sidekick"]

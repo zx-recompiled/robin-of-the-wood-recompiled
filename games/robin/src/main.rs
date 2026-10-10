@@ -1,5 +1,5 @@
 //! The playable program: the rewritten game in a window, with the keyboard
-//! (#66) and the beeper's sound (#67), or the screen that asks for the tape
+//! (#66) and its sound (#67), or the screen that asks for the tape
 //! when none is found (#70).
 //!
 //! Usage: `robin [TAPE]`, or `robin [TAPE] --headless FRAMES [DIR]` to play a

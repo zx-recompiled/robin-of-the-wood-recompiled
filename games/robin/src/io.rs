@@ -140,6 +140,9 @@ pub struct Io {
     /// The clock at each write to the ULA's port (`0xFE`: the beeper and the
     /// border), in order.
     pub beeps: Vec<u32>,
+    /// The clock at each write to one of the AY's sound registers (0 to
+    /// 13), with the register and the value it keeps, in order (#67).
+    pub ay_writes: Vec<(u32, u8, u8)>,
     /// The spans of the clock with interrupts off, as each sample and the
     /// ending's border flash have them: no interrupt, and so no music,
     /// falls in them.
@@ -183,7 +186,14 @@ impl Io {
         }
         match Ay::decode(port) {
             Some(true) => self.ay.latch = v,
-            Some(false) => self.ay.write(v),
+            Some(false) => {
+                self.ay.write(v);
+                if self.ay.latch < 14 {
+                    let r = self.ay.latch;
+                    self.ay_writes
+                        .push((self.t, r, self.ay.regs[usize::from(r)]));
+                }
+            }
             None => {}
         }
     }
@@ -222,6 +232,9 @@ mod tests {
         io.wait(5);
         io.out(0x00FE, 0);
         assert_eq!(io.ula_writes().collect::<Vec<_>>(), [(10, 0x18), (15, 0)]);
+        assert!(io.ay_writes.is_empty(), "a register selected, none written");
+        io.out(0xBFFD, 0xFF);
+        assert_eq!(io.ay_writes, [(15, 7, 0xFF)]);
     }
 
     #[test]

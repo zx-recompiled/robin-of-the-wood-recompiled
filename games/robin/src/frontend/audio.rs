@@ -1,6 +1,7 @@
-//! Sound (#67): the beeper, from the game's writes to the ULA's port at
-//! their times, played through the sound card, adapted from
-//! starquake-recompiled's (`REUSED.md`). The AY is still to come (#67).
+//! Sound (#67): the beeper and the AY, from the game's writes to their
+//! ports at their times, mixed and played through the sound card, adapted
+//! from starquake-recompiled's (`REUSED.md`). The AY is RustZX's `aym`,
+//! from the maintainer's copy in zx-sidekick.
 //!
 //! The beeper's level is EAR, bit 4. MIC, bit 3, which the 128K mixes in
 //! far quieter, is left out (`README.md`, *Status*).
@@ -8,17 +9,35 @@
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
+use aym::{AyMode, AySample, AymBackend, AymPrecise, SoundChip};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
 use robin::session::FRAME_T;
 
 const CPU_HZ: f64 = zx_core::timing::SPECTRUM_128.cpu_hz as f64;
+/// The AY's clock on the 128K: half the processor's.
+const AY_HZ: usize = zx_core::timing::SPECTRUM_128.cpu_hz as usize / 2;
 const VOLUME: f32 = 0.25;
+/// The AY's part of the mix: one channel at full volume swings a little
+/// over half as far as the beeper, as Fuse balances them. The machine's
+/// own balance isn't measured: a **guess** (`README.md`, *Status*).
+const AY_VOLUME: f32 = 0.2;
 
-/// Turns the speaker's levels over time, in T-states, into samples.
-pub struct Beeper {
+/// A write the sound plays, at its time.
+#[derive(Clone, Copy, Debug)]
+enum Write {
+    /// The ULA's port: the beeper's EAR.
+    Ula(u8),
+    /// An AY register and its value.
+    Ay(u8, u8),
+}
+
+/// Turns the speaker's levels and the AY's registers over time, in
+/// T-states, into samples.
+pub struct Mixer {
     rate: f64,
     level: bool,
+    ay: AymPrecise,
     /// T-states into the current sample, and the level summed over it.
     sample_t: f64,
     acc: f64,
@@ -26,20 +45,24 @@ pub struct Beeper {
     /// A DC blocker, so a speaker left high doesn't sit off centre.
     dc_in: f32,
     dc_out: f32,
-    /// Changes still to play, from a sound that ran past its frame's end,
+    /// Writes still to play, from a sound that ran past its frame's end,
     /// timed from the start of the next frame to be played.
-    later: Vec<(u32, bool)>,
+    later: Vec<(u32, Write)>,
 }
 
-impl Beeper {
-    pub fn new(rate: u32) -> Beeper {
-        Beeper {
+impl Mixer {
+    pub fn new(rate: u32) -> Mixer {
+        let mut ay = AymPrecise::new(SoundChip::AY, AyMode::Mono, AY_HZ, rate as usize);
+        ay.enable_dc_filter();
+        Mixer {
             rate: f64::from(rate),
             level: false,
+            ay,
             sample_t: 0.0,
             acc: 0.0,
             samples: Vec::new(),
-            dc_in: 0.0,
+            // The speaker starts low: that's silence, not a click.
+            dc_in: -VOLUME,
             dc_out: 0.0,
             later: Vec::new(),
         }
@@ -59,37 +82,51 @@ impl Beeper {
                 let y = x - self.dc_in + 0.995 * self.dc_out;
                 self.dc_in = x;
                 self.dc_out = y;
-                self.samples.push(y);
+                let ay = self.ay.next_sample();
+                let ay = (ay.left.to_f32() + ay.right.to_f32()) / 2.0 * AY_VOLUME;
+                self.samples.push(y + ay);
                 self.sample_t = 0.0;
                 self.acc = 0.0;
             }
         }
     }
 
-    /// Plays a frame of the 128K. `writes` are its writes to the ULA's port
-    /// (`robin::io::Io::ula_writes`), timed from its start. A sound that
+    /// Plays a frame of the 128K: its writes to the ULA's port
+    /// (`robin::io::Io::ula_writes`) and to the AY's registers
+    /// (`robin::io::Io::ay_writes`), timed from its start. A sound that
     /// holds the game runs past the frame's end, and what's past it is
-    /// played in the frames that follow, while the game stands still.
-    pub fn frame(&mut self, writes: impl IntoIterator<Item = (u32, u8)>) {
-        let mut changes = std::mem::take(&mut self.later);
-        changes.extend(writes.into_iter().map(|(t, v)| (t, v & 0x10 != 0)));
+    /// played in the frames that follow, while the game stands still, in
+    /// time with what they write.
+    pub fn frame(
+        &mut self,
+        ula: impl IntoIterator<Item = (u32, u8)>,
+        ay: impl IntoIterator<Item = (u32, u8, u8)>,
+    ) {
+        let mut writes = std::mem::take(&mut self.later);
+        writes.extend(ula.into_iter().map(|(t, v)| (t, Write::Ula(v))));
+        writes.extend(ay.into_iter().map(|(t, r, v)| (t, Write::Ay(r, v))));
+        // Stable, so writes at the same time keep their order.
+        writes.sort_by_key(|&(t, _)| t);
         let mut now = 0;
-        for (n, &(at, level)) in changes.iter().enumerate() {
+        for (n, &(at, write)) in writes.iter().enumerate() {
             if at >= FRAME_T {
-                self.later = changes[n..]
+                self.later = writes[n..]
                     .iter()
-                    .map(|&(at, level)| (at - FRAME_T, level))
+                    .map(|&(at, write)| (at - FRAME_T, write))
                     .collect();
                 break;
             }
             self.advance(f64::from(at.saturating_sub(now)));
             now = now.max(at);
-            self.level = level;
+            match write {
+                Write::Ula(v) => self.level = v & 0x10 != 0,
+                Write::Ay(r, v) => self.ay.write_register(r, v),
+            }
         }
         self.advance(f64::from(FRAME_T - now));
     }
 
-    /// The samples made since the last [`Beeper::clear_samples`], kept so
+    /// The samples made since the last [`Mixer::clear_samples`], kept so
     /// the buffer is reused rather than a new one made every frame.
     pub fn samples(&self) -> &[f32] {
         &self.samples
@@ -123,7 +160,7 @@ pub fn wav(samples: &[f32], rate: u32) -> Vec<u8> {
 }
 
 /// Builds the output stream for whatever sample format the device wants,
-/// converting from the mono f32 the beeper makes.
+/// converting from the mono f32 the mixer makes.
 fn build<T>(
     device: &cpal::Device,
     config: cpal::StreamConfig,
@@ -208,10 +245,10 @@ mod tests {
 
     #[test]
     fn every_frame_is_a_frame_of_sound() {
-        let mut b = Beeper::new(RATE);
-        b.frame([(100, 0x10), (FRAME_T * 3, 0)]);
+        let mut b = Mixer::new(RATE);
+        b.frame([(100, 0x10), (FRAME_T * 3, 0)], []);
         for _ in 0..4 {
-            b.frame([]);
+            b.frame([], []);
         }
         let per_frame = f64::from(RATE) * f64::from(FRAME_T) / CPU_HZ;
         let made = b.samples().len() as f64;
@@ -220,14 +257,14 @@ mod tests {
 
     #[test]
     fn a_sound_past_the_frames_end_plays_in_the_frames_after() {
-        let mut b = Beeper::new(RATE);
-        b.frame([(FRAME_T + FRAME_T / 2, 0x10)]);
+        let mut b = Mixer::new(RATE);
+        b.frame([(FRAME_T + FRAME_T / 2, 0x10)], []);
         assert!(
             b.samples().iter().all(|&s| s <= 0.0),
             "low all the first frame"
         );
         b.clear_samples();
-        b.frame([]);
+        b.frame([], []);
         let half = b.samples().len() / 2;
         // The sample the change falls in is between the two.
         assert!(b.samples()[..half - 2].iter().all(|&s| s <= 0.0));
@@ -235,9 +272,41 @@ mod tests {
     }
 
     #[test]
+    fn the_ay_plays_a_tone_from_its_writes() {
+        let mut b = Mixer::new(RATE);
+        b.frame([], []);
+        assert!(
+            b.samples().iter().all(|&s| s.abs() < 1e-3),
+            "silent at first"
+        );
+        b.clear_samples();
+        // Channel A's tone at about 440 Hz, on, at full volume, from halfway.
+        let half = FRAME_T / 2;
+        b.frame(
+            [],
+            [
+                (half, 0, 0xFC),
+                (half, 1, 0),
+                (half, 7, 0x3E),
+                (half, 8, 0x0F),
+            ],
+        );
+        let n = b.samples().len();
+        let quiet = b.samples()[..n / 2 - 1].iter().all(|&s| s.abs() < 1e-3);
+        let loud = b.samples()[n / 2 + 1..]
+            .iter()
+            .fold(0f32, |m, &s| m.max(s.abs()));
+        assert!(quiet, "nothing before the writes");
+        assert!(loud > 0.05, "a tone after them: {loud}");
+    }
+
+    #[test]
     fn mic_alone_is_silent() {
-        let mut b = Beeper::new(RATE);
-        b.frame((0..100).map(|n| (n * 500, if n % 2 == 0 { 0x08 } else { 0 })));
+        let mut b = Mixer::new(RATE);
+        b.frame(
+            (0..100).map(|n| (n * 500, if n % 2 == 0 { 0x08 } else { 0 })),
+            [],
+        );
         assert!(b.samples().iter().all(|&s| s <= 0.0));
     }
 }

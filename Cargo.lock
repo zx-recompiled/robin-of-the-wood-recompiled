@@ -139,6 +139,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
+name = "aym"
+version = "0.16.0"
+source = "git+https://github.com/zx-sidekick/zx-sidekick?rev=ad04d3fb5946c4b80357b45e05770a3eb2e1b631#ad04d3fb5946c4b80357b45e05770a3eb2e1b631"
+dependencies = [
+ "libm",
+ "num-traits",
+]
+
+[[package]]
 name = "bit-set"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1741,6 +1750,7 @@ dependencies = [
 name = "robin"
 version = "0.1.0"
 dependencies = [
+ "aym",
  "cpal",
  "fontdue",
  "gilrs",
