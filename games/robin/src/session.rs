@@ -20,6 +20,16 @@ use crate::new_game::{self, Choice, Menu, Redefine};
 /// loop of 26 T-states.
 const ENDING_DELAY: u8 = 12;
 
+/// A frame of the 128K, in T-states.
+pub const FRAME_T: u32 = 70_908;
+
+/// The frames after this one a sound of `t` T-states holds the game for:
+/// the original stands still while it plays (#67).
+#[must_use]
+pub const fn held_for(t: u32) -> u32 {
+    t / FRAME_T
+}
+
 /// What the game is doing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum State {
@@ -57,6 +67,10 @@ pub struct Session {
     pub border: u8,
     /// Frames played, which the picture's flashing goes by.
     pub frames: u64,
+    /// Frames still to stand still for, while a sound plays, and whether
+    /// the interrupt is off meanwhile.
+    pub held: u32,
+    pub held_quiet: bool,
 }
 
 impl Session {
@@ -81,6 +95,8 @@ impl Session {
             state: State::Menu,
             border: 0,
             frames: 0,
+            held: 0,
+            held_quiet: false,
         };
         session.note_border();
         session
@@ -88,15 +104,31 @@ impl Session {
 
     /// One frame, with `controls` held: the interrupt, then a step. What it
     /// wrote to the ports is in `io.writes`, from this frame alone.
+    ///
+    /// While a sound from an earlier frame still plays, the game stands
+    /// still, as the original does, and only the interrupt runs, unless the
+    /// sound plays with interrupts off.
     pub fn frame(&mut self, assets: &Assets, controls: Controls) {
         self.io.controls = controls;
         self.io.writes.clear();
+        self.io.beeps.clear();
+        self.io.t = 0;
+        self.io.interrupts_off = false;
+        self.frames += 1;
+        if self.held > 0 {
+            self.held -= 1;
+            if !self.held_quiet {
+                interrupt::frame(&mut self.game, &mut self.io);
+            }
+            return;
+        }
         if !matches!(self.state, State::Ending(_)) {
             interrupt::frame(&mut self.game, &mut self.io);
         }
         self.state = self.step(assets);
         self.note_border();
-        self.frames += 1;
+        self.held = held_for(self.io.t);
+        self.held_quiet = self.io.interrupts_off;
     }
 
     /// The border, from this frame's writes to the ULA's port (bit 0 of
@@ -175,5 +207,18 @@ impl Session {
         new_game::start(&mut self.game, &mut self.io);
         new_game::show_menu(&mut self.game, &mut self.io);
         State::Menu
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_sound_holds_the_game_for_the_frames_it_takes() {
+        assert_eq!(held_for(0), 0);
+        assert_eq!(held_for(FRAME_T - 1), 0, "within the frame");
+        assert_eq!(held_for(FRAME_T), 1);
+        assert_eq!(held_for(10 * FRAME_T + 5), 10);
     }
 }

@@ -154,9 +154,13 @@ fn drawn_flags(g: &Game) -> u8 {
 /// flashed with R, `0x960` times. The waits for the keys are the caller's.
 pub fn ending(g: &mut Game, io: &mut Io) {
     ending_message(g);
-    for _ in 0..0x960 {
+    io.wait(4 + 10); // DI, LD BC,0x960
+    for n in 0..0x960 {
+        io.wait(9); // LD A,R
         let a = io.random.r();
         io.out(u16::from(a) << 8 | 0xFE, a);
+        // OUT, DEC BC, LD A,B, OR C, JR NZ.
+        io.wait(11 + 6 + 4 + 4 + if n + 1 == 0x960 { 7 } else { 12 });
     }
 }
 
