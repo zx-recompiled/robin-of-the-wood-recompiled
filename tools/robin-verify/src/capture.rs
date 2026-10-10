@@ -558,6 +558,14 @@ impl Routine {
     /// then until the stack is back at the caller's level; then all of
     /// memory but the dead stack. Any difference means a caller reads one of
     /// those registers.
+    /// Whether the scrambling check has anything to scramble: a routine
+    /// whose every register is an output or preserved, as an interrupt's
+    /// handler is, would only run its caller on unchanged (#62).
+    pub(crate) fn scrambles_anything(&self) -> bool {
+        ALL.iter()
+            .any(|r| !self.outputs.contains(r) && !self.preserves.contains(r))
+    }
+
     pub(crate) fn scramble(&self, returned: &Zx, level: u16, play: &Play) -> Scrambled {
         let mut same = returned.clone();
         let mut odd = returned.clone();

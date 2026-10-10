@@ -23,14 +23,6 @@ const CONTROLS: u16 = 0xD152;
 /// Each method's table, in its order.
 const TABLES: [u16; 3] = [0xD06E, 0xD07F, 0xD088];
 
-/// The menu's tune (`6:C003`).
-const MENU_TUNE: sound::Tune = sound::Tune {
-    start: 0xC058,
-    speed: 0x06,
-    notes: 0xC4EC,
-    other: 0xC37F,
-};
-
 /// The menu (`0xAB28`): the play area cleared to white on black, a
 /// highlight at the chosen method's line, its five lines, and revealed.
 pub fn menu(g: &mut Game) {
@@ -54,7 +46,7 @@ pub fn show_menu(g: &mut Game, io: &mut Io) {
     menu(g);
     actions::banked_call(g, io, sound::PLAYER_BANK as u8, sound::menu_sample);
     actions::banked_call(g, io, sound::MUSIC_BANK, |g, io| {
-        sound::start_tune(g, io, MENU_TUNE);
+        sound::start_tune(g, io, sound::MENU);
     });
 }
 

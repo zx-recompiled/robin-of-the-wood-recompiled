@@ -168,6 +168,14 @@ pub const ARRIVAL: Tune = Tune {
     other: 0xC657,
 };
 
+/// The menu's tune (`6:C003`).
+pub const MENU: Tune = Tune {
+    start: 0xC058,
+    speed: 0x06,
+    notes: 0xC4EC,
+    other: 0xC37F,
+};
+
 /// The tune the game over plays (`6:C006`).
 pub const GAME_OVER: Tune = Tune {
     start: 0xC065,
@@ -306,4 +314,201 @@ pub fn warble(g: &mut Game, io: &mut Io) {
 /// The sample the menu plays (`4:C00F`).
 pub fn menu_sample(g: &mut Game, io: &mut Io) {
     play(g, io, 3, 0x1644, 0xDF80, 0xDFE0);
+}
+
+/// Where the player keeps whether the music is off (`0xFF`) or on (0), and
+/// the count before ENTER can toggle it again.
+const MUSIC_OFF: u16 = 0xC2CD;
+const DEBOUNCE: u16 = 0xC2CE;
+/// The tone periods, a word for each note.
+const PERIODS: u16 = 0xC308;
+
+/// ENTER and the tune, each frame, from the interrupt (`6:C2CF`, through
+/// `6:C03C`). ENTER held, once the count since the last toggle has run out,
+/// toggles the music: back on, the tune starts again; off, two volumes go to
+/// 0. While the music is on, the tune plays on.
+///
+/// # Panics
+///
+/// If the tune to start again is none of the four the game starts.
+pub fn music(g: &mut Game, io: &mut Io) {
+    let bank = usize::from(MUSIC_BANK);
+    let count = g.read_in(bank, DEBOUNCE);
+    if count != 0 {
+        g.write_in(bank, DEBOUNCE, count - 1);
+    }
+    let enter = io.input(0xBFFE) & 1 == 0;
+    if enter && g.read_in(bank, DEBOUNCE) == 0 {
+        g.write_in(bank, DEBOUNCE, 0x32);
+        let off = !g.read_in(bank, MUSIC_OFF);
+        g.write_in(bank, MUSIC_OFF, off);
+        if off == 0 {
+            let start =
+                u16::from_le_bytes([g.read_in(bank, TUNE_START), g.read_in(bank, TUNE_START + 1)]);
+            let tune = match start {
+                0xC04B => ARRIVAL,
+                0xC058 => MENU,
+                0xC065 => GAME_OVER,
+                s => panic!("the tune to start again, at 0xCBD9, is {s:#06x}, none of the game's"),
+            };
+            start_tune(g, io, tune);
+        } else {
+            ay(io, 8, 0);
+            ay(io, 10, 0);
+        }
+        return;
+    }
+    if g.read_in(bank, MUSIC_OFF) == 0 {
+        step_tune(g, io);
+    }
+}
+
+/// The tune, on (`6:C0A2`): every so many frames, by its speed, each of its
+/// two parts plays its next note.
+pub fn step_tune(g: &mut Game, io: &mut Io) {
+    let bank = usize::from(MUSIC_BANK);
+    let mut count = g.read_in(bank, TUNE_COUNT).wrapping_sub(1);
+    let play = count == 0;
+    if play {
+        count = g.read_in(bank, TUNE_SPEED);
+    }
+    g.write_in(bank, TUNE_COUNT, count);
+    if play {
+        first_part(g, io);
+        second_part(g, io);
+    }
+}
+
+fn read_word(g: &Game, at: u16) -> u16 {
+    let bank = usize::from(MUSIC_BANK);
+    u16::from_le_bytes([g.read_in(bank, at), g.read_in(bank, at + 1)])
+}
+
+fn write_word(g: &mut Game, at: u16, v: u16) {
+    let bank = usize::from(MUSIC_BANK);
+    let [lo, hi] = v.to_le_bytes();
+    g.write_in(bank, at, lo);
+    g.write_in(bank, at + 1, hi);
+}
+
+/// The next note of a part from its pointer at `pointer`: `0xFF` loops it
+/// to the address `skip` bytes after; 0 is a rest.
+fn next_note(g: &mut Game, pointer: u16, skip: u16) -> Option<u8> {
+    let bank = usize::from(MUSIC_BANK);
+    let at = read_word(g, pointer).wrapping_add(1);
+    write_word(g, pointer, at);
+    let mut note = g.read_in(bank, at);
+    if note == 0xFF {
+        let to = read_word(g, at.wrapping_add(skip));
+        write_word(g, pointer, to);
+        note = g.read_in(bank, to);
+    }
+    (note != 0).then_some(note)
+}
+
+/// The note's period, from the table.
+fn period(g: &Game, note: u8) -> (u8, u8) {
+    let bank = usize::from(MUSIC_BANK);
+    let at = PERIODS.wrapping_add(u16::from(note) * 2);
+    (g.read_in(bank, at), g.read_in(bank, at + 1))
+}
+
+/// The tune's first part (`6:C0B5`), on tone A with a fixed volume: its
+/// loop's address 3 bytes after the `0xFF`, and its notes' bit 7 ignored.
+fn first_part(g: &mut Game, io: &mut Io) {
+    let Some(note) = next_note(g, TUNE_OTHER, 3) else {
+        return;
+    };
+    let (lo, hi) = period(g, note & 0x7F);
+    ay(io, 0, lo);
+    ay(io, 1, hi);
+    ay(io, 8, 0x0C);
+}
+
+/// The tune's second part (`6:C0EC`), on tone C with the envelope: its
+/// loop's address straight after the `0xFF`.
+fn second_part(g: &mut Game, io: &mut Io) {
+    let Some(note) = next_note(g, TUNE_NOTES, 1) else {
+        return;
+    };
+    let (lo, hi) = period(g, note);
+    ay(io, 4, lo);
+    ay(io, 5, hi);
+    ay(io, 10, 0x1F);
+    ay(io, 13, 0);
+}
+
+/// The wobble's step and its counter, kept in its code.
+const WOBBLE_STEP: u16 = 0xC27E;
+const WOBBLE_COUNT: u16 = 0xC293;
+
+/// The wobble, each frame (`6:C26F`, through `6:C030`): tone C's period,
+/// read back from registers 4 and 5, moved on by a step and written back.
+/// Every fourth frame the step changes sign, as the code works it out: the
+/// low byte negated, the high byte inverted.
+pub fn wobble(g: &mut Game, io: &mut Io) {
+    io.out(0xFFFD, 4);
+    let lo = io.input(0xFFFD);
+    io.out(0xFFFD, 5);
+    let hi = io.input(0xFFFD);
+    let step = read_word(g, WOBBLE_STEP);
+    let [lo, hi] = u16::from_le_bytes([lo, hi])
+        .wrapping_add(step)
+        .to_le_bytes();
+    io.out(0xBFFD, hi);
+    io.out(0xFFFD, 4);
+    io.out(0xBFFD, lo);
+    let bank = usize::from(MUSIC_BANK);
+    let count = g.read_in(bank, WOBBLE_COUNT).wrapping_sub(1);
+    g.write_in(bank, WOBBLE_COUNT, count);
+    if count & 3 != 0 {
+        return;
+    }
+    let [l, h] = step.to_le_bytes();
+    write_word(g, WOBBLE_STEP, u16::from_le_bytes([l.wrapping_neg(), !h]));
+}
+
+/// The effect's sweep: tone B's period, and what's added each frame.
+const SWEEP: u16 = 0xC18C;
+const SWEEP_STEP: u16 = 0xC18E;
+
+/// The effect, each frame (`6:C1EB`, through `6:C015`): while its count
+/// runs, tone B at full volume, its period swept, the low byte's top bit
+/// flipped each time. Once it's run out, the other sound (`6:C15B`).
+pub fn effect(g: &mut Game, io: &mut Io) {
+    let bank = usize::from(MUSIC_BANK);
+    let count = g.read_in(bank, PLAYING);
+    if count == 0 {
+        quiet(g, io);
+        return;
+    }
+    g.write_in(bank, PLAYING, count - 1);
+    ay(io, 9, 0x0F);
+    let [lo, hi] = read_word(g, SWEEP).to_le_bytes();
+    let at = u16::from_le_bytes([lo ^ 0x80, hi]).wrapping_add(read_word(g, SWEEP_STEP));
+    write_word(g, SWEEP, at);
+    let [lo, hi] = at.to_le_bytes();
+    ay(io, 2, lo);
+    ay(io, 3, hi);
+}
+
+/// With no effect running (`6:C15B`): with no meeting's sound either, the
+/// mixer set and tone B quiet. With it, it counts down, and every eighth
+/// frame tone B's volume is set from the count.
+pub fn quiet(g: &mut Game, io: &mut Io) {
+    let bank = usize::from(MUSIC_BANK);
+    let n = g.read_in(bank, EFFECT);
+    if n == 0 {
+        ay(io, 7, 0x38);
+        ay(io, 9, 0);
+        ay(io, 2, 0);
+        ay(io, 3, 0);
+        return;
+    }
+    let n = n - 1;
+    g.write_in(bank, EFFECT, n);
+    if n & 7 != 0 {
+        return;
+    }
+    ay(io, 9, n >> 3 & 0x0F);
 }
