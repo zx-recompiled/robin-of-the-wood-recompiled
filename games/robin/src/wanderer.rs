@@ -157,13 +157,15 @@ pub fn meet(g: &mut Game, io: &mut Io) {
 }
 
 /// The meeting's sound, then the play area's ink moved on by one, 16 times
-/// over (`0xBDCD`).
+/// over (`0xBDCD`). Its count runs from `0x240` down past 0, so it moves one
+/// cell more than the play area: the first of the lower panel's.
 pub fn flash(g: &mut Game, io: &mut Io) {
     actions::banked_call(g, io, sound::MUSIC_BANK, sound::meeting);
     for _ in 0..16 {
-        for at in PLAY_ATTRIBUTES..PLAY_ATTRIBUTES + PLAY_CELLS {
+        for at in PLAY_ATTRIBUTES..=PLAY_ATTRIBUTES + PLAY_CELLS {
             let a = g.read(at);
             g.write(at, a & 0xF8 | (a.wrapping_add(1) & 7));
         }
+        g.picture();
     }
 }

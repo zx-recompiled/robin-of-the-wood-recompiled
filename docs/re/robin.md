@@ -229,10 +229,10 @@ from nothing but their own arithmetic.
 - **The whole play area's attributes**, `0:C086`: the attribute buffer's 18
   rows of 28 to the screen, bit 7 masked off.
 - **The reveal**, `0:CD73`, when a new game starts and at the scripted
-  scene's end (#42). What it leaves is **confirmed** (every instruction
-  reached, at each new game). How it slides is **read**: the last pass
-  overwrites every column the slide moved, so a check of the state it
-  leaves can't see the slide, only a look at the frames while it runs:
+  scene's end (#42). **confirmed**, every instruction reached at each new
+  game, and picture by picture: the checks compare the screen at the end
+  of each of its passes with the original's (#57), which is the only way to
+  see the slide, since the last pass overwrites every column it moved:
   1. every set colour in the attribute buffer is copied into the
      changed-cell map;
   2. in 14 passes, each half of the play area (columns 2 to 15, and 16 to
@@ -925,7 +925,9 @@ instruction of the meeting. **confirmed**, unless marked.
     sets a flag (`0xC15A`) and two AY registers for the interrupt's music
     player, unless one is already playing (`0xC190`);
   - the play area flashes: its attributes' ink goes up by one, 16 times over
-    (`0xBDD3`);
+    (`0xBDD3`), checked picture by picture (#57). Its count runs from
+    `0x240` down past 0, so it moves one cell more than the play area, the
+    first of the lower panel's, whose ink comes back round after the 16;
   - the lower panel's colours are reset (`0xBE0F`, *Robin's actions*);
   - his energy goes up (`0:D7F7`, *Robin's actions*);
   - it's marked met, so it happens once a game.

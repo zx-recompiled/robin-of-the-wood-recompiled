@@ -180,6 +180,10 @@ const TIMED: &[u16] = &[
     0xBE2C, 0xD8C6, 0xC090, 0xC012, 0xBECE, 0xBC0B, 0xBD19, 0xBC6C, 0x8B32,
 ];
 
+/// The animations whose pictures are compared (#57): a routine's entry, and
+/// where its code ends each pass, at which the original's screen is taken.
+const PICTURES: &[(u16, u16)] = &[(0xCD73, 0xCE16), (0xBDCD, 0xBDED)];
+
 /// The main loop's start, where the scrambling check stops following a
 /// caller that never returns.
 const PASS_START: u16 = 0xBE62;
@@ -372,6 +376,11 @@ impl Routine {
         // The time, in T-states without contention, and at each write to
         // the ULA's port (#67).
         let (mut clock, mut beeps) = (0u32, Vec::new());
+        let at_end = PICTURES
+            .iter()
+            .find(|(e, _)| *e == self.entry)
+            .map(|&(_, end)| end);
+        let mut pictures = Vec::new();
         while !done(&c, steps) {
             steps += 1;
             if steps > STEP_LIMIT {
@@ -383,6 +392,12 @@ impl Routine {
             let pc = c.pc;
             if self.in_code(&c, pc) {
                 executed.push(pc);
+                if at_end == Some(pc) {
+                    let screen = &c.memory.page(Memory::bank(5))[..6912];
+                    let mut picture = Box::new([0u8; 6912]);
+                    picture.copy_from_slice(screen);
+                    pictures.push(picture);
+                }
             }
             let d = interp::decode_at(&c, pc);
             for cy in bus::cycles(&c, &d, pc).iter() {
@@ -446,6 +461,7 @@ impl Routine {
             rom,
             random,
             beeps,
+            pictures,
             banks: banks(&c),
             after: c,
         })
@@ -491,6 +507,22 @@ impl Routine {
         };
         let after = Regs::of(&run.after);
         let mut differ = Vec::new();
+        if PICTURES.iter().any(|(e, _)| *e == self.entry) {
+            let (orig, new) = (&run.pictures, &g.pictures);
+            if let Some(n) = (0..orig.len().max(new.len())).find(|&n| orig.get(n) != new.get(n)) {
+                let cell = match (orig.get(n), new.get(n)) {
+                    (Some(a), Some(b)) => a.iter().zip(b.iter()).position(|(x, y)| x != y),
+                    _ => None,
+                };
+                differ.push(format!(
+                    "the pictures differ: {} in the original, {} in the rewrite; first at picture {}{}",
+                    orig.len(),
+                    new.len(),
+                    n + 1,
+                    cell.map_or(String::new(), |c| format!(", screen byte {c:#06x}"))
+                ));
+            }
+        }
         if TIMED.contains(&self.entry) {
             let from = |b: &[u32]| b.iter().map(|&t| t.wrapping_sub(b[0])).collect::<Vec<_>>();
             let (orig, new) = (from(&run.beeps), from(&io.beeps));
@@ -759,6 +791,8 @@ pub(crate) struct Run {
     pub(crate) rom: BTreeMap<u16, u8>,
     /// The time of each write to the ULA's port, without contention.
     pub(crate) beeps: Vec<u32>,
+    /// The screen at the end of each of an animation's passes (#57).
+    pub(crate) pictures: Vec<Box<[u8; 6912]>>,
     /// What R gave each `LD A,R`, in order.
     random: Vec<u8>,
     banks: Box<[[u8; BANK]; 8]>,

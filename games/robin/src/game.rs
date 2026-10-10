@@ -465,6 +465,10 @@ pub struct Game {
     /// reads below `0x4000` give 0, and in the checks the bytes the original
     /// read, given as R's values are (#21, #37 Decision 2).
     pub rom: std::collections::BTreeMap<u16, u8>,
+    /// The screen as an animation leaves it at the end of each of its
+    /// passes, while it runs (#57): for the checks, which compare them with
+    /// the original's, and for the window to show.
+    pub pictures: Vec<Box<[u8; 6912]>>,
 }
 
 /// The bank and offset of `addr`, with bank 0 paged at `0xC000`.
@@ -531,6 +535,11 @@ impl Game {
             .unwrap_or(self.rest[bank][offset])
     }
 
+    /// The screen now, kept as an animation's picture (#57).
+    pub fn picture(&mut self) {
+        self.pictures.push(self.display.screen.clone());
+    }
+
     /// Writes the byte at `addr`, with bank 0 paged at `0xC000`. Writes below
     /// `0x4000`, to the ROM, go nowhere, as on the machine.
     pub fn write(&mut self, addr: u16, v: u8) {
@@ -591,6 +600,7 @@ impl Game {
             fighting: Fighting::zeroed(),
             rest: Box::new(*banks),
             rom: std::collections::BTreeMap::new(),
+            pictures: Vec::new(),
         };
         g.display.read_parts(&read);
         g.play.read_parts(&read);

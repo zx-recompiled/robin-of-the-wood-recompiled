@@ -114,6 +114,8 @@ impl Session {
         self.io.beeps.clear();
         self.io.t = 0;
         self.io.interrupts_off = false;
+        // An animation's pictures, which the window doesn't show yet (#57).
+        self.game.pictures.clear();
         self.frames += 1;
         if self.held > 0 {
             self.held -= 1;

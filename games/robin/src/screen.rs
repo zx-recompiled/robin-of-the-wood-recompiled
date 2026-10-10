@@ -164,6 +164,7 @@ pub fn reveal(g: &mut Game) {
                 }
             }
         }
+        g.picture();
     }
 }
 
