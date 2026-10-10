@@ -22,6 +22,7 @@ against z80test), copied 2026-10-06.
 | `.github/workflows/ci.yml` | Builds `robin`. Without the Intel Mac job and the frontend's Linux libraries, which come back with the frontend. |
 | `Cargo.toml` (workspace), `deny.toml`, `about.toml`, `rust-toolchain.toml`, `LICENSE-MIT`, `LICENSE-APACHE`, `.gitignore` | Workspace members; the toolchain note names the gate. |
 | `about.hbs`, `CONTRIBUTING.md` | Rewritten for Robin. |
+| `games/starquake/src/frontend/input.rs`, the window in `frontend/video.rs`, and `frontend/headless.rs`, at `84237d7` (#66) | Into `games/robin/src/frontend/`. The keyboard's map as it was, with Escape for BREAK and without Backspace and the cursor keys' digits. The window without the guidance panel, the overlay or the tape prompt, on one thread: it steps a `robin::session::Session` a frame at a time, where Starquake's game ran on its own thread. The picture's drawing moved into the library (`robin::picture`), the same border and palette. The headless run without its effect tallies. |
 
 Not copied, and why:
 

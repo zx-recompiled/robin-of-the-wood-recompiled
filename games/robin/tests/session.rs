@@ -8,6 +8,7 @@
 mod common;
 
 use robin::assets::Assets;
+use robin::controls::Controls;
 use robin::session::{Session, State};
 
 fn tape() -> Option<Assets> {
@@ -43,7 +44,14 @@ const SPACE: (usize, u8) = (7, 0);
 /// `n` frames with `keys` held.
 fn hold(s: &mut Session, a: &Assets, keys: [u8; 8], n: usize) {
     for _ in 0..n {
-        s.frame(a, keys);
+        s.frame(a, controls(keys));
+    }
+}
+
+fn controls(keys: [u8; 8]) -> Controls {
+    Controls {
+        keys,
+        ..Controls::default()
     }
 }
 
@@ -113,7 +121,7 @@ fn a_long_game_under_random_keys_plays_on() {
         if s.state != State::Playing && frame % 200 == 0 {
             keys = held(&[ZERO]);
         }
-        s.frame(&a, keys);
+        s.frame(&a, controls(keys));
         if s.state == State::Playing {
             playing += 1;
             seen.insert(s.game.map.location);
@@ -122,4 +130,16 @@ fn a_long_game_under_random_keys_plays_on() {
     println!("{playing} frames in play, {} locations", seen.len());
     assert!(playing > 10_000, "mostly in play: {playing}");
     assert!(seen.len() > 3, "Robin got about: {} locations", seen.len());
+}
+
+#[test]
+fn the_menu_shows_on_a_black_border() {
+    let Some(a) = tape() else { return };
+    let mut s = Session::new(&a, 5);
+    hold(&mut s, &a, NONE, 10);
+    let picture = s.picture();
+    let corner = picture[0];
+    assert_eq!(corner, zx_core::screen::PALETTE[0], "the border is black");
+    let lit = picture.iter().filter(|&&p| p != corner).count();
+    assert!(lit > 1000, "the menu is drawn: {lit} pixels not black");
 }

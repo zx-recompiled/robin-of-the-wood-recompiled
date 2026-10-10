@@ -9,6 +9,7 @@
 //! frame's start, unless the original has interrupts off.
 
 use crate::assets::{Assets, BANK};
+use crate::controls::Controls;
 use crate::game::Game;
 use crate::interrupt;
 use crate::io::{Io, Random};
@@ -52,6 +53,10 @@ pub struct Session {
     pub game: Game,
     pub io: Io,
     pub state: State,
+    /// The border's colour, as last written to the ULA's port.
+    pub border: u8,
+    /// Frames played, which the picture's flashing goes by.
+    pub frames: u64,
 }
 
 impl Session {
@@ -70,22 +75,49 @@ impl Session {
         };
         new_game::first_start(&mut game, &mut io);
         new_game::show_menu(&mut game, &mut io);
-        Session {
+        let mut session = Session {
             game,
             io,
             state: State::Menu,
-        }
+            border: 0,
+            frames: 0,
+        };
+        session.note_border();
+        session
     }
 
-    /// One frame, with `keys` held: the interrupt, then a step. What it
+    /// One frame, with `controls` held: the interrupt, then a step. What it
     /// wrote to the ports is in `io.writes`, from this frame alone.
-    pub fn frame(&mut self, assets: &Assets, keys: [u8; 8]) {
-        self.io.controls.keys = keys;
+    pub fn frame(&mut self, assets: &Assets, controls: Controls) {
+        self.io.controls = controls;
         self.io.writes.clear();
         if !matches!(self.state, State::Ending(_)) {
             interrupt::frame(&mut self.game, &mut self.io);
         }
         self.state = self.step(assets);
+        self.note_border();
+        self.frames += 1;
+    }
+
+    /// The border, from this frame's writes to the ULA's port (bit 0 of
+    /// the port clear): bits 0 to 2.
+    fn note_border(&mut self) {
+        if let Some(&(_, v)) = self.io.writes.iter().rev().find(|(p, _)| p & 1 == 0) {
+            self.border = v & 7;
+        }
+    }
+
+    /// The picture now, `picture::FULL_W` by `picture::FULL_H`, as 0RGB.
+    #[must_use]
+    pub fn picture(&self) -> Vec<u32> {
+        let mut out = vec![0; crate::picture::FULL_W * crate::picture::FULL_H];
+        crate::picture::draw(
+            &self.game.display.screen[..],
+            self.border,
+            self.frames,
+            &mut out,
+        );
+        out
     }
 
     fn step(&mut self, assets: &Assets) -> State {
