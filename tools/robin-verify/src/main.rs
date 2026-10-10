@@ -17,6 +17,7 @@ mod ending;
 mod methods;
 mod suites;
 mod tour;
+mod travel;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -204,6 +205,11 @@ fn run() -> Result<bool, String> {
         } else {
             "and BREAK never started one"
         }
+    );
+    let travelled = travel::run(&rom, &tape, &assets, &mut v)?;
+    println!(
+        "robin-verify: played a game taken around the map (a supplement): it entered {} locations",
+        travelled.len()
     );
     let Verifier {
         routines,
