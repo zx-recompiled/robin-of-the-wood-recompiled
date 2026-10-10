@@ -211,18 +211,18 @@ impl Checker {
                     t.repeats += 1;
                     Step::Settled
                 }
-                Ok(run) if run.rom_read.is_some() => {
-                    let read = run.rom_read.expect("just matched");
-                    t.rom_reads += 1;
-                    t.first_rom_read.get_or_insert(format!(
-                        "the instruction at {:04x} read {:04x}, in a call from {:04x}",
-                        read.0,
-                        read.1,
-                        run.ret.wrapping_sub(3)
-                    ));
-                    Step::Settled
-                }
                 Ok(run) => {
+                    // The ROM's bytes it read are given to the rewrite, as
+                    // R's are (#21); counted, to say how often.
+                    if let Some(read) = run.rom_read {
+                        t.rom_reads += 1;
+                        t.first_rom_read.get_or_insert(format!(
+                            "the instruction at {:04x} read {:04x}, in a call from {:04x}",
+                            read.0,
+                            read.1,
+                            run.ret.wrapping_sub(3)
+                        ));
+                    }
                     t.compared += 1;
                     t.executed.extend(run.executed.iter().copied());
                     let at = r.at(&run, t.compared);

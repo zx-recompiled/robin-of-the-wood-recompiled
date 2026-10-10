@@ -269,7 +269,7 @@ fn run() -> Result<bool, String> {
         );
         if t.rom_reads > 0 {
             println!(
-                "    SKIPPED {} run(s) in which the original read the ROM, which the rewrite has none of (#21); first: {}",
+                "    {} run(s) in which the original read the ROM, given its bytes (#21); first: {}",
                 t.rom_reads,
                 t.first_rom_read
                     .as_deref()
