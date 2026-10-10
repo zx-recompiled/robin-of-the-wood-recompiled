@@ -20,8 +20,11 @@ use robin::picture::{FULL_H, FULL_W};
 use robin::session::{Session, State};
 
 use super::FRAMES_PER_SECOND;
+use super::aids::Aids;
 use super::audio::{Mixer, Output};
 use super::gamepad::Gamepad;
+use super::overlay::Overlay;
+use super::panel::{self, Panel};
 use super::prompt::{self, Outcome, Prompt};
 use super::text::Canvas;
 
@@ -45,11 +48,23 @@ struct App {
     /// The sound card, if there is one, and the mixer making its samples.
     audio: Option<Output>,
     mixer: Mixer,
+    /// The aids asked for, the panel that shows them and the picker that
+    /// sets them, laid over the window at its own resolution (#92, #95).
+    aids: Aids,
+    overlay: Option<Overlay>,
+    panel: Panel,
+    /// What the overlay was last drawn from: the aids' version and the size.
+    /// It's redrawn only when that changes.
+    drawn: Option<(u64, (u32, u32))>,
     /// When the next frame is due.
     next: Instant,
     period: Duration,
     error: Option<String>,
 }
+
+/// The window's width in the Spectrum's pixels: the picture and the panel
+/// beside it (#95).
+const WINDOW_W: usize = FULL_W + panel::PANEL_W as usize;
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
@@ -62,10 +77,10 @@ impl ApplicationHandler for App {
             // border.
             .with_theme(Some(Theme::Dark))
             .with_inner_size(LogicalSize::new(
-                FULL_W as f64 * SCALE,
+                WINDOW_W as f64 * SCALE,
                 FULL_H as f64 * SCALE,
             ))
-            .with_min_inner_size(LogicalSize::new(FULL_W as f64, FULL_H as f64));
+            .with_min_inner_size(LogicalSize::new(WINDOW_W as f64, FULL_H as f64));
         let window = match event_loop.create_window(attrs) {
             Ok(w) => Arc::new(w),
             Err(e) => {
@@ -81,6 +96,7 @@ impl ApplicationHandler for App {
         let (bw, bh) = self.buffer_size();
         match Pixels::new(bw, bh, surface) {
             Ok(mut p) => {
+                self.overlay = Some(Overlay::new(&p.context().device, p.render_texture_format()));
                 if self.prompt.is_some() {
                     p.clear_color(clear_colour(prompt::BACKGROUND));
                 }
@@ -111,6 +127,9 @@ impl ApplicationHandler for App {
                     return;
                 }
                 let pressed = event.state == ElementState::Pressed;
+                if pressed && self.picker_key(code) {
+                    return;
+                }
                 if code == KeyCode::F11 {
                     if pressed {
                         self.toggle_fullscreen();
@@ -130,10 +149,39 @@ impl ApplicationHandler for App {
             WindowEvent::RedrawRequested => {
                 if let (Some(p), Some((_, session))) = (&mut self.pixels, &self.game) {
                     let picture = session.picture();
-                    for (out, c) in p.frame_mut().as_chunks_mut::<4>().0.iter_mut().zip(picture) {
-                        *out = [(c >> 16) as u8, (c >> 8) as u8, c as u8, 0xFF];
+                    // The picture on the left; the overlay covers the rest.
+                    let frame = p.frame_mut().as_chunks_mut::<4>().0;
+                    for (row, from) in frame
+                        .as_chunks_mut::<WINDOW_W>()
+                        .0
+                        .iter_mut()
+                        .zip(picture.chunks(FULL_W))
+                    {
+                        for (out, &c) in row.iter_mut().zip(from) {
+                            *out = [(c >> 16) as u8, (c >> 8) as u8, c as u8, 0xFF];
+                        }
+                        row[FULL_W..].fill([0, 0, 0, 0xFF]);
                     }
-                    if let Err(e) = p.render() {
+                    let clip = p.context().scaling_renderer.clip_rect();
+                    let key = (self.aids.version(), (clip.2, clip.3));
+                    if self.drawn != Some(key)
+                        && let Some(overlay) = &mut self.overlay
+                    {
+                        let scale = clip.2 as f32 / panel::WINDOW_W;
+                        let mut canvas = overlay.canvas(clip.2, clip.3, scale);
+                        self.panel.draw(&mut canvas, &self.aids);
+                        self.drawn = Some(key);
+                    }
+                    let overlay = &mut self.overlay;
+                    let rendered = p.render_with(|encoder, target, context| {
+                        context.scaling_renderer.render(encoder, target);
+                        if let Some(overlay) = overlay {
+                            let clip = context.scaling_renderer.clip_rect();
+                            overlay.render(&context.device, &context.queue, encoder, target, clip);
+                        }
+                        Ok(())
+                    });
+                    if let Err(e) = rendered {
                         self.error = Some(e.to_string());
                         event_loop.exit();
                     }
@@ -150,6 +198,12 @@ impl ApplicationHandler for App {
             return;
         };
         let now = Instant::now();
+        // The game stands still while the picker is open (#92, Decision 7).
+        if self.aids.picker_open() {
+            self.next = now + self.period;
+            event_loop.set_control_flow(ControlFlow::WaitUntil(self.next));
+            return;
+        }
         if self.window.is_some() && now >= self.next {
             let mut controls = super::input::build(&self.held);
             let pad = self.gamepad.poll();
@@ -212,8 +266,32 @@ impl App {
                 (f64::from(prompt::HEIGHT) * self.scale).round() as u32,
             )
         } else {
-            (FULL_W as u32, FULL_H as u32)
+            (WINDOW_W as u32, FULL_H as u32)
         }
+    }
+
+    /// The picker's keys (#95): F1 or Tab opens and closes it, neither a
+    /// Spectrum key; while it's open, the arrows choose and Enter switches,
+    /// and it has the keyboard to itself. Whether the key was the picker's.
+    fn picker_key(&mut self, code: KeyCode) -> bool {
+        let open = self.aids.picker_open();
+        match code {
+            KeyCode::F1 | KeyCode::Tab => {
+                self.aids.open_or_close();
+                // What was held is let go, since the game won't see the
+                // key-ups while the picker has the keyboard.
+                self.held.clear();
+            }
+            _ if !open => return false,
+            KeyCode::ArrowUp => self.aids.move_focus(false),
+            KeyCode::ArrowDown => self.aids.move_focus(true),
+            KeyCode::Enter | KeyCode::NumpadEnter | KeyCode::Space => self.aids.toggle_focus(),
+            _ => {}
+        }
+        if let Some(w) = &self.window {
+            w.request_redraw();
+        }
+        true
     }
 
     fn prompt_event(&mut self, event_loop: &ActiveEventLoop, event: WindowEvent) {
@@ -344,12 +422,12 @@ fn clear_colour([r, g, b]: [u8; 3]) -> pixels::wgpu::Color {
 }
 
 /// Plays the game in a window from `tape`, or, with none, first asks for it,
-/// until the window is closed.
+/// until the window is closed, with `aids` on (#92).
 ///
 /// # Errors
 ///
 /// If the tape can't be read, or the window or its drawing can't be made.
-pub fn run(tape: Option<Vec<u8>>) -> Result<(), String> {
+pub fn run(tape: Option<Vec<u8>>, aids: Aids) -> Result<(), String> {
     let game = match tape {
         Some(bytes) => {
             let assets = robin::assets::read_tape(&bytes)?;
@@ -380,6 +458,10 @@ pub fn run(tape: Option<Vec<u8>>) -> Result<(), String> {
         gamepad: Gamepad::new(),
         audio,
         mixer,
+        aids,
+        overlay: None,
+        panel: Panel::new(),
+        drawn: None,
         next: Instant::now(),
         period: Duration::from_secs_f64(1.0 / FRAMES_PER_SECOND),
         error: None,

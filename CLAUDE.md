@@ -32,8 +32,9 @@ music player (#62). The plan, in order, is the board's Backlog.
 
 ## Commands
 
-- `cargo run --release -p robin -- [TAPE]` plays the rewrite in a window
-  (#66); `--headless FRAMES DIR` plays a scripted run and writes
+- `cargo run --release -p robin -- [TAPE] [AIDS]` plays the rewrite in a
+  window (#66), with the aids' flags (#92, `games/robin/src/main.rs`) and
+  F1 or Tab for their picker; `--headless FRAMES DIR` plays a scripted run and writes
   screenshots and its sound (`sound.wav`). `cargo test -p robin --test session` plays it on its own
   with held keys. Both need the tape.
 - `.claude/scripts/check.sh` is the pre-PR gate: build, tests, clippy, docs,
