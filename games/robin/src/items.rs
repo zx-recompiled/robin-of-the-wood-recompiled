@@ -288,3 +288,32 @@ pub fn drop(g: &mut Game, io: &mut Io) {
         return;
     }
 }
+
+/// Every item cleared and put out afresh, as a game starts (`0:D298`): the
+/// thirty places emptied, what he has and the counts cleared, the fifth
+/// character not out, the eleven and his inventory emptied. Then energy at
+/// the first place and five more, the kinds 5 and 7 restocked, and the two
+/// the game starts with.
+pub fn reset(g: &mut Game, random: &mut Random) {
+    for n in 0..30 {
+        g.write(WORLD + 4 + n * 5, 0);
+    }
+    for at in SWORD..SWORD + 10 {
+        g.write(at, 0);
+    }
+    g.write(0xBA61, 0);
+    for at in MORE..MORE + 0x37 {
+        g.write(at, 0xFF);
+    }
+    for at in INVENTORY..INVENTORY + 8 {
+        g.write(at, 0xFF);
+    }
+    g.write(WORLD + 4, 1);
+    for _ in 0..5 {
+        let at = free_place(g, random);
+        g.write(at, g.read(at).wrapping_add(1));
+    }
+    restock_kind(g, random, 6, WORLD_FIVES, 5);
+    restock_kind(g, random, 8, WORLD_SEVENS, 7);
+    crate::journeys::starting_items(g);
+}

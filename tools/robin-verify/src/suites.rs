@@ -2,8 +2,8 @@
 //! rewrite takes the original's registers (`docs/re/robin.md`).
 
 use robin::{
-    actions, characters, fifth, fighting, items, journeys, main_loop, map, movement, print, scene,
-    screen, sound, sprites, wanderer,
+    actions, characters, fifth, fighting, items, journeys, main_loop, map, movement, new_game,
+    print, scene, screen, sound, sprites, wanderer,
 };
 
 use crate::capture::{Reg, Regs, Routine};
@@ -611,6 +611,230 @@ pub fn all() -> Vec<Routine> {
             preserves: &[],
             rewrite: |g, _, r, io| {
                 main_loop::game_over(g, io);
+                r
+            },
+        },
+        Routine {
+            name: "the menu (0xAB28)",
+            bank: None,
+            entry: 0xAB28,
+            code: (0xAB28, 0xAB6A),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, _| {
+                new_game::menu(g);
+                r
+            },
+        },
+        Routine {
+            name: "the menu shown, with its sample and tune (0:CCAB)",
+            bank: Some(0),
+            entry: 0xCCAB,
+            code: (0xCCAB, 0xCCB9),
+            outputs: &[],
+            exits: &[0xCCBA],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                new_game::show_menu(g, io);
+                r
+            },
+        },
+        Routine {
+            name: "a poll of the menu's keys (0:CCBB)",
+            bank: Some(0),
+            entry: 0xCCBB,
+            code: (0xCCBB, 0xCCCC),
+            // Its answer is in which way it leaves, so in A and F (#61).
+            outputs: &[Reg::A, Reg::F],
+            // Polled again, the game started, or a pick to make.
+            exits: &[0xCCBB, 0xCCD2, 0xCCCD],
+            preserves: &[],
+            rewrite: |_, _, r, io| poll_regs(io, r, new_game::menu_keys(io)),
+        },
+        Routine {
+            name: "the menu's pick (0:CFB2)",
+            bank: Some(0),
+            entry: 0xCFB2,
+            code: (0xCFB2, 0xCFDB),
+            // Which key it took is in which way it leaves, so in A and F.
+            outputs: &[Reg::A, Reg::F],
+            // Back to the menu; or, for 1, at the redefinition, whose waits
+            // are checked piece by piece.
+            exits: &[0xCCD0, 0xCFBA],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                let choice = new_game::choose(g, io);
+                pick_regs(io, r, choice)
+            },
+        },
+        Routine {
+            name: "the redefinition's screen (0:CFDC)",
+            bank: Some(0),
+            entry: 0xCFDC,
+            code: (0xCFDC, 0xCFF7),
+            outputs: &[],
+            // To its first wait, for the keys to be let go.
+            exits: &[0xCFF8],
+            preserves: &[],
+            rewrite: |g, _, r, _| {
+                new_game::redefine(g);
+                r
+            },
+        },
+        Routine {
+            name: "wait for the keys to be let go (0:D028)",
+            bank: Some(0),
+            entry: 0xD028,
+            code: (0xD028, 0xD032),
+            // The keys held, and whether any are, by the Z flag.
+            outputs: &[Reg::A, Reg::F],
+            // Polled again, or let go.
+            exits: &[0xD028, 0xCFFB],
+            preserves: &[],
+            rewrite: |_, _, mut r, io| {
+                let held = new_game::held(io);
+                let f = and_flags(held, new_game::any_key(io));
+                r.set(Reg::A, held);
+                r.set(Reg::F, f);
+                r
+            },
+        },
+        Routine {
+            name: "a scan of the keyboard (0:D033)",
+            bank: Some(0),
+            entry: 0xD033,
+            code: (0xD033, 0xD052),
+            // The key in D, 0xFF for none; NZ if more than one is held.
+            outputs: &[Reg::D, Reg::F],
+            exits: &[],
+            preserves: &[],
+            rewrite: |_, _, r, io| scan_regs(io, r, new_game::scan(io)),
+        },
+        Routine {
+            name: "a key recorded and named (0:D000)",
+            bank: Some(0),
+            entry: 0xD000,
+            code: (0xD000, 0xD018),
+            // Where the next key and the next prompt go.
+            outputs: &[Reg::D, Reg::E, Reg::H, Reg::L],
+            exits: &[0xD019],
+            preserves: &[],
+            rewrite: |g, _, mut r, _| {
+                let keys = u16::from_be_bytes([r.get(Reg::D), r.get(Reg::E)]);
+                let prompt = u16::from_be_bytes([r.get(Reg::H), r.get(Reg::L)]);
+                new_game::record(g, (keys - 0xD154) as u8, r.get(Reg::A));
+                r.set_pair(Reg::D, Reg::E, keys + 1);
+                r.set_pair(Reg::H, Reg::L, prompt + 0x0E);
+                r
+            },
+        },
+        Routine {
+            name: "the keys set as the method (0:CFBD)",
+            bank: Some(0),
+            entry: 0xCFBD,
+            code: (0xCFBD, 0xCFDB),
+            outputs: &[],
+            exits: &[0xCCD0],
+            preserves: &[],
+            rewrite: |g, _, r, _| {
+                new_game::set_method(g, 0);
+                r
+            },
+        },
+        Routine {
+            name: "the interrupt's table and vector (0:CF6F)",
+            bank: Some(0),
+            entry: 0xCF6F,
+            code: (0xCF6F, 0xCF93),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, _| {
+                new_game::set_interrupt(g);
+                r
+            },
+        },
+        Routine {
+            name: "the special locations and the start (0:CE4B)",
+            bank: Some(0),
+            entry: 0xCE4B,
+            code: (0xCE4B, 0xCE8C),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                new_game::specials(g, &mut io.random);
+                r
+            },
+        },
+        Routine {
+            name: "every item afresh (0:D298)",
+            bank: Some(0),
+            entry: 0xD298,
+            code: (0xD298, 0xD2DE),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                items::reset(g, &mut io.random);
+                r
+            },
+        },
+        Routine {
+            name: "the start, once (0:CC72)",
+            bank: Some(0),
+            entry: 0xCC72,
+            code: (0xCC72, 0xCCAA),
+            outputs: &[],
+            // Up to the menu.
+            exits: &[0xCCAB],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                new_game::start(g, io);
+                r
+            },
+        },
+        Routine {
+            name: "a new game's set-up begun (0:CCD2)",
+            bank: Some(0),
+            entry: 0xCCD2,
+            code: (0xCCD2, 0xCCF5),
+            outputs: &[],
+            // Up to the sixteen entries, whose random values read the ROM
+            // in nearly every run (#21).
+            exits: &[0xCCF6],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                new_game::prepare(g, io);
+                r
+            },
+        },
+        Routine {
+            name: "a new game's first location (0:CD1B)",
+            bank: Some(0),
+            entry: 0xCD1B,
+            code: (0xCD1B, 0xCD4D),
+            outputs: &[],
+            // Up to the warble, whose pause reads the ROM.
+            exits: &[0xCD4E],
+            preserves: &[],
+            rewrite: |g, a, r, io| {
+                new_game::first_location(g, a, io);
+                r
+            },
+        },
+        Routine {
+            name: "a new game's set-up finished (0:CD51)",
+            bank: Some(0),
+            entry: 0xCD51,
+            code: (0xCD51, 0xCD5E),
+            outputs: &[],
+            // It returns from 0:CC72's call, to the main loop's start.
+            exits: &[0xBE61],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                new_game::finish(g, io);
                 r
             },
         },
@@ -1424,6 +1648,149 @@ fn overlap_regs(mut r: Regs) -> Regs {
 
 /// The flags of the Z80's 8-bit subtractions, as `SUB`, `CP` and `NEG`
 /// leave them.
+/// The registers `0:D033` leaves, from what the rewrite's scan found: D the
+/// key, or `0xFF` for none, and the Z flag set, from its closing `CP A`; A
+/// then is the last half-row's key, if it has one. For more than one held,
+/// Z clear and D as the code had it when it found the second: at a second
+/// half-row, its `INC D`; at a second key in one half-row, the `SRL H` that
+/// found the first. Those come from the keys; a scan that says "more than
+/// one" when there's one or none leaves Z set, so it shows.
+fn scan_regs(io: &robin::io::Io, mut r: Regs, found: new_game::Scan) -> Regs {
+    match found {
+        new_game::Scan::None => {
+            r.set(Reg::D, 0xFF);
+            r.set(Reg::F, flags::cp(0, 0));
+        }
+        new_game::Scan::One(code) => {
+            let last = (0x2F - code) % 8 == 7;
+            let a = if last { code } else { 0 };
+            r.set(Reg::D, code);
+            r.set(Reg::F, flags::cp(a, a));
+        }
+        new_game::Scan::Several => {
+            let (d, f) = several(io);
+            r.set(Reg::D, d);
+            r.set(Reg::F, f);
+        }
+    }
+    r
+}
+
+/// D and F where `0:D033` finds a second key; Z set if it never does.
+fn several(io: &robin::io::Io) -> (u8, u8) {
+    let mut d: u8 = 0xFF;
+    for (row, port) in new_game::SCAN_ROWS.into_iter().enumerate() {
+        let a = !io.input(port) & 0x1F;
+        if a == 0 {
+            continue;
+        }
+        d = d.wrapping_add(1);
+        if d != 0 {
+            let mut f = (d & 0x80) | (d & 0x28);
+            if d & 0x0F == 0 {
+                f |= 0x10;
+            }
+            if d == 0x80 {
+                f |= 0x04;
+            }
+            return (d, f);
+        }
+        let mut h = a;
+        let mut code = 0x2F - row as u8;
+        loop {
+            code = code.wrapping_sub(8);
+            let carry = h & 1;
+            h >>= 1;
+            if carry != 0 {
+                break;
+            }
+        }
+        if h != 0 {
+            let mut f = flags::C | (h & 0x28);
+            if h.count_ones().is_multiple_of(2) {
+                f |= 0x04;
+            }
+            return (d, f);
+        }
+        d = code;
+    }
+    (d, 0x40)
+}
+
+/// `AND n`'s flags for the result `a`, with Z from the decision `nonzero`
+/// the rewrite made, so a wrong one shows: H set, C and N clear, P/V the
+/// parity, bits 5 and 3 from the result.
+fn and_flags(a: u8, nonzero: bool) -> u8 {
+    let mut f = 0x10 | (a & 0x80) | (a & 0x28);
+    if !nonzero {
+        f |= 0x40;
+    }
+    if a.count_ones().is_multiple_of(2) {
+        f |= 0x04;
+    }
+    f
+}
+
+/// `IN A,(C)`'s flags for the byte `v`: S, Z, P/V and bits 5 and 3 from it,
+/// H and N clear, the carry `f`'s.
+fn in_flags(v: u8, f: u8) -> u8 {
+    let mut fl = (v & 0x80) | (v & 0x28) | (f & 1);
+    if v == 0 {
+        fl |= 0x40;
+    }
+    if v.count_ones().is_multiple_of(2) {
+        fl |= 0x04;
+    }
+    fl
+}
+
+/// `RRA`: the result, and the flags with the carry `carry` (the rewrite's
+/// decision, so a wrong one shows); S, Z and P/V as they were.
+fn rra(a: u8, f: u8, carry: bool) -> (u8, u8) {
+    let r = a >> 1 | (f & 1) << 7;
+    (r, (f & 0xC4) | (r & 0x28) | u8::from(carry))
+}
+
+/// The registers `0:CCBB` leaves. For 0, its `IN` and `RRA` of the half-row
+/// with 0 on it, carry clear. Otherwise the `CPL : AND 0x0F` of the half-row with
+/// 1 to 5, Z set if it's waiting.
+fn poll_regs(io: &robin::io::Io, mut r: Regs, poll: new_game::Menu) -> Regs {
+    let (a, f) = if poll == new_game::Menu::Start {
+        let v = io.input(0xEFFE);
+        rra(v, in_flags(v, r.get(Reg::F)), false)
+    } else {
+        let a = !io.input(0xF7FE) & 0x0F;
+        (a, and_flags(a, poll == new_game::Menu::Pick))
+    };
+    r.set(Reg::A, a);
+    r.set(Reg::F, f);
+    r
+}
+
+/// The registers `0:CFB2` leaves: an `IN` of the half-row with 1 to 5, an
+/// `RRA` for
+/// each key it looks at, the carry clear at the one it took; then the
+/// method's number in A, if it set one.
+fn pick_regs(io: &robin::io::Io, mut r: Regs, choice: new_game::Choice) -> Regs {
+    let looked = match choice {
+        new_game::Choice::Redefine => 1,
+        new_game::Choice::Set(m) => m + 1,
+        new_game::Choice::Nothing => 3,
+    };
+    let row = io.input(0xF7FE);
+    let (mut a, mut f) = (row, in_flags(row, r.get(Reg::F)));
+    for n in 1..=looked {
+        let took = n == looked && choice != new_game::Choice::Nothing;
+        (a, f) = rra(a, f, !took);
+    }
+    if let new_game::Choice::Set(m) = choice {
+        a = m;
+    }
+    r.set(Reg::A, a);
+    r.set(Reg::F, f);
+    r
+}
+
 mod flags {
     pub const C: u8 = 0x01;
     const N: u8 = 0x02;

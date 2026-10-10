@@ -207,11 +207,18 @@ pub fn start_tune(g: &mut Game, io: &mut Io, tune: Tune) {
     g.write_in(bank, TUNE_COUNT, 1);
     word(g, TUNE_NOTES, tune.notes);
     word(g, TUNE_OTHER, tune.other);
+    reset_ay(g, io);
+    ay(io, 12, 0x20);
+}
+
+/// The AY's registers 0 to 13 set from the music player's table
+/// (`6:C21C`, through `6:C045`).
+pub fn reset_ay(g: &mut Game, io: &mut Io) {
+    let bank = usize::from(MUSIC_BANK);
     for r in 0..14u8 {
         let v = g.read_in(bank, AY_RESET + u16::from(r));
         ay(io, r, v);
     }
-    ay(io, 12, 0x20);
 }
 
 /// The zap a hit plays there and then (`0xBC4C`): for each count from
@@ -294,4 +301,9 @@ pub fn warble(g: &mut Game, io: &mut Io) {
             }
         }
     }
+}
+
+/// The sample the menu plays (`4:C00F`).
+pub fn menu_sample(g: &mut Game, io: &mut Io) {
+    play(g, io, 3, 0x1644, 0xDF80, 0xDFE0);
 }

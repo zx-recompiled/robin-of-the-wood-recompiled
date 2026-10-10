@@ -1213,6 +1213,84 @@ sends the original into it from `0x68` through its own step (#60).
    starts a new game (`0xBE5A`). The rewrite leaves these waits to its
    caller. **read**
 
+## A new game
+
+`0:CC72`, from the hand-over and wherever a game ends (`0xBE5A`).
+**Rewritten (`games/robin/src/new_game.rs`) and confirmed**, piece by piece
+(#61). **confirmed**, unless marked.
+
+### The menu
+
+- **The menu** (`0xAB28`): the play area cleared to white ink on black
+  (`0x47`), stock message `0x40` as a highlight beside the chosen method's
+  line (at `0x10` across, and `0x20` times the method plus one down; the
+  method is kept at `0xABEE`), its five lines (`0x48` to `0x4C`), then the
+  reveal (`0:CD73`, *The screen*). It jumps into the reveal rather than
+  calling it.
+- **Shown** (`0:CCAB`): the menu, then a sample (`4:C00F`, *Sound*) and the
+  menu's tune (`6:C003`: speed 6, its parts at `6:C4EC` and `6:C37F`).
+- **Its keys**, polled with interrupts on, in a busy loop (`0:CCBB`): 0
+  starts the game; any of 1 to 4 is a pick (`0:CFB2`), and the menu is shown
+  again. The rewrite polls once a frame, which sees every press the busy loop
+  does, since the window's keys change once a frame.
+- **The pick** (`0:CFB2`): 1 redefines the keys, then sets the keyboard; 2
+  sets Kempston, 3 Interface II, 4 nothing. Setting a method keeps its
+  number at `0xABEE` and its table of ports and bits at `0xD152` (`0xD06E`,
+  `0xD07F`, `0xD088`, *The controls*).
+
+### Redefining the keys
+
+`0:CFDC`, from the pick's 1. Its waits are busy loops; the rewrite steps
+them once a frame, as it does the menu's.
+1. **Its screen**: the play area cleared to `0x45`, revealed, then a
+   heading (`0xD0E8`) and the first of five prompts (`0xD10C`, `0x0E`
+   bytes apart), printed replacing what's there (`0:CEBB`).
+2. **For each of the five**: it waits for every key to be let go (`0:D028`,
+   reading every half-row at once through port `0x00FE`), then for exactly
+   one to be held (`0:D01D`). It records the key's code at `0xD154` on, puts
+   its name from the table at `0xD159` into the prompt (at `+0x0B`), and
+   prints the prompt again. Then the next prompt.
+3. **Then the keyboard is the method** (`0:CFBD`).
+- **The scan** (`0:D033`) reads the eight half-rows from `0xFEFE` to
+  `0x7FFE`. A key's code is `0x27` for the first key of the first half-row,
+  down by one a key: `0x2F` less the half-row's number, less 8 for each key
+  up to and including it. It answers in D (`0xFF` for none) and the Z flag,
+  which is clear if more than one key is held. Then D is what it had when it
+  found the second.
+
+### The start and the set-up
+
+- **Once, first** (`0:CC72`): the AY's registers reset from the music
+  player's table (`6:C045`), the mirror and row tables (`0:CEC8`,
+  `0:CEDE`), the interrupt's table and vector (`0:CF6F`: `0xE200` to `0xE300`
+  all `0xFF`, I `0xE2`, mode 2, and the jumps at `0xFFFF` and `0xFFF4` to
+  `0:DED3`, *Interrupts*), the lower panel cleared, five strings printed,
+  the border black, and two of Robin's counters cleared. Then the menu.
+- **A new game's set-up** (`0:CCD2`), once 0 is pressed. It's checked in
+  three stretches around two pieces that read the ROM in nearly every run
+  (#21), which are rewritten from reading:
+  1. the AY reset, the lower panel cleared, Robin's record from its
+     template (`0xCB87`), his health's colour full (`0xBE47`), a flag
+     (`0xCB85`), and the hook cleared;
+  2. **read**: sixteen three-byte entries at `0x8B02` from `0:CD5F`'s random
+     values: one below 16, one whole, and one's bit 6 as bit 7;
+  3. the special locations and the start (`0:CE4B`, below), the scene's
+     place (`0:CE8D`), the wanderer (`0:CEA1`), a title (stock message
+     `0x4F`) revealed, then the first location drawn, its items afresh
+     (`0:D298`, below) and placed, and the characters' entry;
+  4. **read**: the warble (`0x8B32`, *What it uses from the ROM*);
+  5. the reveal, no cell marked changed, and the arrival's tune.
+- **The special locations and the start** (`0:CE4B`), each by R: the
+  trade's, one of four bytes at `0xD26B`; the wanderer's, one of four words
+  at `0xD26F`; and the start, one of four at `0xD277`. The third special is
+  the start, but `0xD2` for `0x9C`.
+- **Every item afresh** (`0:D298`): the thirty places emptied, what he has
+  and the counts cleared (`0xD47A` to `0xD483`), the fifth character not
+  out, the eleven and the inventory emptied. Then energy at the first place
+  and at five more free ones (`0:D35A`), the kinds 5 and 7 restocked
+  (*Restocking*), and the two the game starts with (`0:D331`). It ends with
+  the Z flag set, so placing the items next doesn't restock.
+
 ## Sound
 
 - **It uses the AY sound chip.** It selects registers through `0xFFFD` and
@@ -1246,7 +1324,7 @@ sends the original into it from `0x68` through its own step (#60).
 
 ## Input
 
-- The menu offers keyboard, Kempston and Interface II. **provisional**
+- The menu offers keyboard, Kempston and Interface II (*A new game*).
 - In play, with the keyboard, it reads the half-rows `0xF7FE` (1–5), `0xFBFE`
   (Q–T), `0xFDFE` (A–G), `0xFEFE` (Shift–V), `0xBFFE` (Enter–H) and `0x7FFE`
   (Space–B). It does not read the row with O and P. **provisional**
