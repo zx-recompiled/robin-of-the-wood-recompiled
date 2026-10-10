@@ -9,6 +9,7 @@
 
 pub mod actions;
 pub mod assets;
+pub mod assists;
 pub mod characters;
 pub mod controls;
 pub mod fifth;

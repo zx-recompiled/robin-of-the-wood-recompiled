@@ -20,7 +20,7 @@ use robin::picture::{FULL_H, FULL_W};
 use robin::session::{Session, State};
 
 use super::FRAMES_PER_SECOND;
-use super::aids::Aids;
+use super::aids::{Aid, Aids};
 use super::audio::{Mixer, Output};
 use super::gamepad::Gamepad;
 use super::journal::Journal;
@@ -54,6 +54,8 @@ struct App {
     aids: Aids,
     /// What the player has found this game, which the aids show (#96).
     journal: Journal,
+    /// What the assists have set aside in the game, to put back (#100).
+    set_aside: robin::assists::SetAside,
     overlay: Option<Overlay>,
     panel: Panel,
     /// What the overlay was last drawn from: the aids' and the journal's
@@ -251,6 +253,16 @@ impl ApplicationHandler for App {
                 controls.keys[4] &= !1;
             }
             session.frame(assets, controls);
+            // The assists, around the game rather than in it (#100): health
+            // and lives only in play; the witch's doorways put back
+            // whenever no witch is off.
+            let playing = session.state == State::Playing;
+            let on = robin::assists::Assists {
+                energy: playing && self.aids.is_on(Aid::Energy),
+                lives: playing && self.aids.is_on(Aid::Lives),
+                no_witch: self.aids.is_on(Aid::NoWitch),
+            };
+            robin::assists::apply(&mut session.game, on, &mut self.set_aside);
             self.journal.note(session);
             self.mixer.frame(
                 session.io.ula_writes(),
@@ -309,10 +321,7 @@ impl App {
     /// key was theirs.
     fn picker_key(&mut self, code: KeyCode) -> bool {
         let open = self.aids.picker_open();
-        if !open
-            && matches!(code, KeyCode::Backquote | KeyCode::F2)
-            && self.aids.is_on(super::aids::Aid::Map)
-        {
+        if !open && matches!(code, KeyCode::Backquote | KeyCode::F2) && self.aids.is_on(Aid::Map) {
             self.aids.open_or_close_map();
             self.held.clear();
             if let Some(w) = &self.window {
@@ -509,6 +518,7 @@ pub fn run(tape: Option<Vec<u8>>, aids: Aids) -> Result<(), String> {
         mixer,
         aids,
         journal: Journal::default(),
+        set_aside: robin::assists::SetAside::default(),
         overlay: None,
         panel: Panel::new(),
         drawn: None,
