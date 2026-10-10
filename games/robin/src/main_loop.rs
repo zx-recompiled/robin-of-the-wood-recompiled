@@ -107,7 +107,7 @@ pub fn leave(g: &mut Game, assets: &Assets, io: &mut Io, direction: u8) -> Pass 
     Pass::Next
 }
 
-/// Robin's sprite record, and its frame.
+/// Robin's sprite record; its frame is at `+8`.
 const ROBIN: u16 = 0xCB76;
 
 /// Entering the location Robin has stepped into, `direction` the way he

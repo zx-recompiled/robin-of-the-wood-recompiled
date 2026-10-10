@@ -191,13 +191,18 @@ fn run() -> Result<bool, String> {
     println!(
         "robin-verify: played a game with things to pick up where Robin starts (a supplement): he took {picked}"
     );
-    let reached = ending::run(&rom, &tape, &assets, &mut v)?;
+    let ended = ending::run(&rom, &tape, &assets, &mut v)?;
     println!(
-        "robin-verify: played a game sent into location 0x69 (a supplement): {}",
-        if reached {
+        "robin-verify: played a game sent into location 0x69 (a supplement): {}, {}",
+        if ended.ended {
             "the ending ran"
         } else {
             "the ending never ran"
+        },
+        if ended.broke {
+            "then BREAK started a new game"
+        } else {
+            "and BREAK never started one"
         }
     );
     let Verifier {
