@@ -11,15 +11,15 @@ use robin::session::{Session, State};
 /// tape's own (`docs/re/robin.md`, *The controls*).
 const WAYS: [(usize, u8); 5] = [(2, 0), (1, 0), (7, 3), (7, 2), (3, 0)];
 
-/// Plays `frames` frames from the tape at `path`, writing about 40
+/// Plays `frames` frames from `tape`, writing about 40
 /// screenshots to `dir`.
 ///
 /// # Errors
 ///
 /// If the tape can't be read, or a screenshot can't be written.
-pub fn run(path: &Path, frames: u64, dir: &Path) -> Result<(), String> {
+pub fn run(tape: &[u8], frames: u64, dir: &Path) -> Result<(), String> {
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-    let assets = robin::assets::read_game(path)?;
+    let assets = robin::assets::read_tape(tape)?;
     let mut session = Session::new(&assets, 0x1234_5678);
     let every = (frames / 40).max(1);
     let mut rng: u64 = 0x9E37_79B9;

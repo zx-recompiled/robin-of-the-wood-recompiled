@@ -9,11 +9,11 @@ holders, this project contains no part of it, and the program reads
 everything it needs from the player's own copy when it starts. The README
 says where to get one.
 
-- Apache License 2.0: 132 crates
-- MIT License: 45 crates
+- Apache License 2.0: 138 crates
+- MIT License: 49 crates
 - ISC License: 3 crates
+- zlib License: 3 crates
 - BSD 3-Clause "New" or "Revised" License: 2 crates
-- zlib License: 2 crates
 - BSD 2-Clause "Simplified" License: 1 crate
 - Creative Commons Zero v1.0 Universal: 1 crate
 - Unicode License v3: 1 crate
@@ -1297,7 +1297,7 @@ Used by `codespan-reporting 0.13.1`.
 
 ## Apache License 2.0
 
-Used by `foreign-types-macros 0.2.4`, `foreign-types-shared 0.3.1`, `foreign-types 0.5.0`, `serde_spanned 1.1.1`, `toml 1.1.6+spec-1.1.0`, `toml_datetime 1.1.1+spec-1.1.0`, `toml_parser 1.1.3+spec-1.1.0`, `toml_writer 1.1.2+spec-1.1.0`.
+Used by `crc32fast 1.5.2`, `foreign-types-macros 0.2.4`, `foreign-types-shared 0.3.1`, `foreign-types 0.5.0`, `serde_spanned 1.1.1`, `toml 1.1.6+spec-1.1.0`, `toml_datetime 1.1.1+spec-1.1.0`, `toml_parser 1.1.3+spec-1.1.0`, `toml_writer 1.1.2+spec-1.1.0`.
 
 ```
                                  Apache License
@@ -1925,7 +1925,7 @@ limitations under the License.
 
 ## Apache License 2.0
 
-Used by `ahash 0.8.12`, `arrayvec 0.7.8`, `autocfg 1.5.1`, `bitflags 1.3.2`, `bitflags 2.13.2`, `cc 1.7.0`, `cfg-if 1.0.5`, `core-foundation-sys 0.8.7`, `core-foundation 0.9.4`, `core-graphics-types 0.1.3`, `core-graphics 0.23.2`, `equivalent 1.0.2`, `errno 0.3.14`, `find-msvc-tools 0.1.14`, `fnv 1.0.7`, `gethostname 1.1.0`, `hashbrown 0.15.5`, `hashbrown 0.16.1`, `hashbrown 0.17.1`, `indexmap 2.14.2`, `khronos-egl 6.0.0`, `linux-raw-sys 0.12.1`, `linux-raw-sys 0.4.15`, `lock_api 0.4.14`, `log 0.4.34`, `num-traits 0.2.19`, `once_cell 1.21.4`, `parking_lot 0.12.5`, `parking_lot_core 0.9.12`, `percent-encoding 2.3.2`, `pkg-config 0.3.34`, `polling 3.11.0`, `pollster 0.4.0`, `renderdoc-sys 1.1.0`, `rustc-hash 1.1.0`, `rustix 0.38.44`, `rustix 1.1.5`, `scoped-tls 1.0.1`, `scopeguard 1.2.0`, `smallvec 1.16.3`, `smol_str 0.2.2`, `ttf-parser 0.25.1`, `unicode-width 0.2.2`, `uuid 1.28.0`, `version_check 0.9.5`.
+Used by `ahash 0.8.12`, `arrayvec 0.7.8`, `autocfg 1.5.1`, `bitflags 1.3.2`, `bitflags 2.13.2`, `cc 1.7.0`, `cfg-if 1.0.5`, `core-foundation-sys 0.8.7`, `core-foundation 0.9.4`, `core-graphics-types 0.1.3`, `core-graphics 0.23.2`, `equivalent 1.0.2`, `errno 0.3.14`, `find-msvc-tools 0.1.14`, `flate2 1.1.10`, `fnv 1.0.7`, `gethostname 1.1.0`, `hashbrown 0.15.5`, `hashbrown 0.16.1`, `hashbrown 0.17.1`, `indexmap 2.14.2`, `khronos-egl 6.0.0`, `linux-raw-sys 0.12.1`, `linux-raw-sys 0.4.15`, `lock_api 0.4.14`, `log 0.4.34`, `num-traits 0.2.19`, `once_cell 1.21.4`, `parking_lot 0.12.5`, `parking_lot_core 0.9.12`, `percent-encoding 2.3.2`, `pkg-config 0.3.34`, `polling 3.11.0`, `pollster 0.4.0`, `renderdoc-sys 1.1.0`, `rustc-hash 1.1.0`, `rustix 0.38.44`, `rustix 1.1.5`, `scoped-tls 1.0.1`, `scopeguard 1.2.0`, `smallvec 1.16.3`, `smol_str 0.2.2`, `ttf-parser 0.25.1`, `unicode-width 0.2.2`, `uuid 1.28.0`, `version_check 0.9.5`.
 
 ```
                               Apache License
@@ -3321,7 +3321,7 @@ limitations under the License.
 
 ## Apache License 2.0
 
-Used by `zx-core 0.1.0`, `zx-recomp 0.1.0`, `zx-runtime 0.1.0`, `robin 0.1.0`, `robin-verify 0.1.0`, `ab_glyph 0.2.32`, `ab_glyph_rasterizer 0.1.10`, `allocator-api2 0.2.21`, `document-features 0.2.12`, `gilrs-core 0.6.8`, `gilrs 0.11.2`, `gpu-descriptor-types 0.2.0`, `gpu-descriptor 0.3.2`, `half 2.7.1`, `libc 0.2.190`, `litrs 1.0.0`, `miniz_oxide 0.8.9`, `naga 29.0.4`, `objc2-core-foundation 0.3.2`, `objc2-io-kit 0.3.2`, `objc2-metal 0.3.2`, `objc2-quartz-core 0.3.2`, `owned_ttf_parser 0.25.1`, `pin-project-lite 0.2.17`, `proc-macro2 1.0.107`, `profiling 1.0.18`, `quote 1.0.47`, `raw-window-handle 0.6.2`, `serde 1.0.229`, `serde_core 1.0.229`, `serde_derive 1.0.229`, `shlex 2.0.1`, `spirv 0.4.0+sdk-1.4.341.0`, `syn 2.0.119`, `syn 3.0.5`, `thiserror-impl 1.0.69`, `thiserror-impl 2.0.21`, `thiserror 1.0.69`, `thiserror 2.0.21`, `ultraviolet 0.10.0`, `unicode-ident 1.0.24`, `wgpu-core-deps-apple 29.0.4`, `wgpu-core-deps-windows-linux-android 29.0.4`, `wgpu-core 29.0.4`, `wgpu-hal 29.0.4`, `wgpu-naga-bridge 29.0.4`, `wgpu-types 29.0.4`, `wgpu 29.0.4`, `wide 0.7.33`.
+Used by `zx-core 0.1.0`, `zx-recomp 0.1.0`, `zx-runtime 0.1.0`, `robin 0.1.0`, `robin-verify 0.1.0`, `ab_glyph 0.2.32`, `ab_glyph_rasterizer 0.1.10`, `allocator-api2 0.2.21`, `dispatch2 0.3.1`, `document-features 0.2.12`, `fontdue 0.9.4`, `gilrs-core 0.6.8`, `gilrs 0.11.2`, `gpu-descriptor-types 0.2.0`, `gpu-descriptor 0.3.2`, `half 2.7.1`, `libc 0.2.190`, `litrs 1.0.0`, `miniz_oxide 0.8.9`, `naga 29.0.4`, `objc2-app-kit 0.3.2`, `objc2-core-foundation 0.3.2`, `objc2-io-kit 0.3.2`, `objc2-metal 0.3.2`, `objc2-quartz-core 0.3.2`, `owned_ttf_parser 0.25.1`, `pin-project-lite 0.2.17`, `proc-macro2 1.0.107`, `profiling 1.0.18`, `quote 1.0.47`, `raw-window-handle 0.6.2`, `serde 1.0.229`, `serde_core 1.0.229`, `serde_derive 1.0.229`, `shlex 2.0.1`, `spirv 0.4.0+sdk-1.4.341.0`, `syn 2.0.119`, `syn 3.0.5`, `thiserror-impl 1.0.69`, `thiserror-impl 2.0.21`, `thiserror 1.0.69`, `thiserror 2.0.21`, `typed-path 0.12.3`, `ultraviolet 0.10.0`, `unicode-ident 1.0.24`, `wgpu-core-deps-apple 29.0.4`, `wgpu-core-deps-windows-linux-android 29.0.4`, `wgpu-core 29.0.4`, `wgpu-hal 29.0.4`, `wgpu-naga-bridge 29.0.4`, `wgpu-types 29.0.4`, `wgpu 29.0.4`, `wide 0.7.33`.
 
 ```
 Apache License
@@ -4078,6 +4078,35 @@ The above is the version of the MIT "Expat" License used by X.org:
 
 ## MIT License
 
+Used by `rfd 0.17.2`.
+
+```
+MIT License
+
+Copyright (c) 2020 Bilal Elmoussaoui
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+```
+
+## MIT License
+
 Used by `cfg_aliases 0.2.2`.
 
 ```
@@ -4124,7 +4153,7 @@ SOFTWARE.
 
 ## MIT License
 
-Used by `sctk-adwaita 0.10.1`.
+Used by `rfd 0.17.2`, `sctk-adwaita 0.10.1`.
 
 ```
 MIT License
@@ -4149,6 +4178,34 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+```
+
+## MIT License
+
+Used by `core_maths 0.1.1`.
+
+```
+MIT License
+
+Copyright (c) 2024 Robert Bastian
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 ```
 
 ## MIT License
@@ -4263,7 +4320,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ## MIT License
 
-Used by `tracing-core 0.1.36`.
+Used by `tracing-core 0.1.36`, `zip 8.6.0`.
 
 ```
 The MIT License (MIT)
@@ -4452,6 +4509,33 @@ Except as contained in this notice, the name of a copyright holder shall
 not be used in advertising or otherwise to promote the sale, use or other
 dealings in these Data Files or Software without prior written
 authorization of the copyright holder.
+
+```
+
+## zlib License
+
+Used by `zlib-rs 0.6.8`.
+
+```
+(C) 2024 Trifecta Tech Foundation 
+
+This software is provided 'as-is', without any express or implied
+warranty. In no event will the authors be held liable for any damages
+arising from the use of this software.
+
+Permission is granted to anyone to use this software for any purpose,
+including commercial applications, and to alter it and redistribute it
+freely, subject to the following restrictions:
+
+1. The origin of this software must not be misrepresented; you must not
+   claim that you wrote the original software. If you use this software
+   in a product, an acknowledgment in the product documentation would be
+   appreciated but is not required.
+
+2. Altered source versions must be plainly marked as such, and must not be
+   misrepresented as being the original software.
+
+3. This notice may not be removed or altered from any source distribution.
 
 ```
 

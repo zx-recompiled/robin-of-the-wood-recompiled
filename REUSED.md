@@ -22,6 +22,7 @@ against z80test), copied 2026-10-06.
 | `.github/workflows/ci.yml` | Builds `robin`. Without the Intel Mac job and the frontend's Linux libraries at first; they came back with #68. |
 | `Cargo.toml` (workspace), `deny.toml`, `about.toml`, `rust-toolchain.toml`, `LICENSE-MIT`, `LICENSE-APACHE`, `.gitignore` | Workspace members; the toolchain note names the gate. |
 | `about.hbs`, `CONTRIBUTING.md` | Rewritten for Robin. |
+| `games/starquake/src/frontend/prompt.rs`, `text.rs`, `tape.rs` and `games/starquake/fonts/` (Inter, OFL), at `84237d7` (#70) | Robin's title, page (World of Spectrum's item 4177) and checks. The tape is found by content, any `.tzx` or a zip holding one, where Starquake's went by its names. It's kept as `robin-of-the-wood.tzx`. The drawing primitives only the overlay used are left out. |
 | `games/starquake/src/frontend/gamepad.rs`, `.github/workflows/release.yml`, and CI's Intel Mac job and system libraries, at `84237d7` (#68) | The gamepad read only as the Kempston joystick, any face button firing and Start pressing 0, without the picker, the layouts or the held-back presses. The release for `robin`, without the player's guide or a font, which Robin doesn't have yet, and the audio library left out of the packages until there's sound (#67). |
 | `games/starquake/src/frontend/input.rs`, the window in `frontend/video.rs`, and `frontend/headless.rs`, at `84237d7` (#66) | Into `games/robin/src/frontend/`. The keyboard's map as it was, with Escape for BREAK and without Backspace and the cursor keys' digits. The window without the guidance panel, the overlay or the tape prompt, on one thread: it steps a `robin::session::Session` a frame at a time, where Starquake's game ran on its own thread. The picture's drawing moved into the library (`robin::picture`), the same border and palette. The headless run without its effect tallies. |
 
@@ -29,7 +30,6 @@ Not copied, and why:
 
 - `games/starquake`, `tools/sq-verify`, `tools/re/starquake.toml`, `docs/`:
   Starquake's own game, checks and notes.
-- The Inter fonts: they come with the tape prompt (#70).
 - `.git-blame-ignore-revs`: names Starquake's own commits.
 
 Written new: `README.md`, `CLAUDE.md` (its *How work lands* section is
