@@ -1,9 +1,10 @@
 //! The playable program: the rewritten game in a window, with the keyboard
-//! (#66), or the screen that asks for the tape when none is found (#70).
-//! Sound is #67's.
+//! (#66) and the beeper's sound (#67), or the screen that asks for the tape
+//! when none is found (#70).
 //!
 //! Usage: `robin [TAPE]`, or `robin [TAPE] --headless FRAMES [DIR]` to play a
-//! scripted run without a window and write screenshots to `DIR`.
+//! scripted run without a window and write screenshots and its sound to
+//! `DIR`.
 
 mod frontend;
 

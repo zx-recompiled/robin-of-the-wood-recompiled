@@ -157,6 +157,17 @@ impl Io {
         }
     }
 
+    /// The writes to the ULA's port (`0xFE`), each with the clock at it:
+    /// the beeper is bit 4 (EAR) and bit 3 (MIC), the border bits 0 to 2.
+    pub fn ula_writes(&self) -> impl Iterator<Item = (u32, u8)> + '_ {
+        self.beeps.iter().copied().zip(
+            self.writes
+                .iter()
+                .filter(|(port, _)| port & 1 == 0)
+                .map(|&(_, v)| v),
+        )
+    }
+
     /// Moves the clock on by `n` T-states.
     pub fn wait(&mut self, n: u32) {
         self.t = self.t.wrapping_add(n);
@@ -199,6 +210,17 @@ mod tests {
         assert_eq!(io.input(0xFFFD), 0xBF);
         assert_eq!(io.writes.len(), 6);
         assert_eq!(io.writes[1], (0xBFFD, 0xBF));
+    }
+
+    #[test]
+    fn the_ulas_writes_carry_the_clock_and_the_ays_are_left_out() {
+        let mut io = Io::default();
+        io.wait(10);
+        io.out(0x18FE, 0x18);
+        io.out(0xFFFD, 7);
+        io.wait(5);
+        io.out(0x00FE, 0);
+        assert_eq!(io.ula_writes().collect::<Vec<_>>(), [(10, 0x18), (15, 0)]);
     }
 
     #[test]

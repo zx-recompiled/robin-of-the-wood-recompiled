@@ -1,6 +1,6 @@
 //! The window: the tape prompt when no tape was found (#70), then the
 //! picture with its border, scaled by the GPU, a frame of the game every
-//! 1/50.02 of a second, and the keyboard read, adapted from
+//! 1/50.02 of a second, its sound, and the keyboard read, adapted from
 //! starquake-recompiled's (`REUSED.md`).
 
 use std::collections::HashSet;
@@ -20,6 +20,7 @@ use robin::picture::{FULL_H, FULL_W};
 use robin::session::Session;
 
 use super::FRAMES_PER_SECOND;
+use super::audio::{Beeper, Output};
 use super::gamepad::Gamepad;
 use super::prompt::{self, Outcome, Prompt};
 use super::text::Canvas;
@@ -41,6 +42,9 @@ struct App {
     /// then.
     held: HashSet<KeyCode>,
     gamepad: Gamepad,
+    /// The sound card, if there is one, and the beeper's samples for it.
+    audio: Option<Output>,
+    beeper: Beeper,
     /// When the next frame is due.
     next: Instant,
     period: Duration,
@@ -154,7 +158,25 @@ impl ApplicationHandler for App {
                 controls.keys[4] &= !1;
             }
             session.frame(assets, controls);
-            self.next += self.period;
+            self.beeper.frame(session.io.ula_writes());
+            // Paced by the clock, at the 128K's frame rate. The card's clock
+            // and this one drift apart slowly, so the period leans a little
+            // when the card's queue strays outside two to three frames of
+            // sound: enough to ride out a late wake-up, too little to hear
+            // (starquake-recompiled).
+            let mut period = self.period;
+            if let Some(out) = &self.audio {
+                out.push(self.beeper.samples());
+                let frame = (f64::from(out.rate()) / FRAMES_PER_SECOND) as usize;
+                let queued = out.queued();
+                if queued < frame * 2 {
+                    period = period.saturating_sub(Duration::from_micros(500));
+                } else if queued > frame * 3 {
+                    period += Duration::from_micros(500);
+                }
+            }
+            self.beeper.clear_samples();
+            self.next += period;
             // Behind by more than a frame (the machine was busy, or asleep):
             // carry on from now rather than rushing to catch up.
             if self.next < now {
@@ -326,6 +348,16 @@ pub fn run(tape: Option<Vec<u8>>) -> Result<(), String> {
         None => None,
     };
     let prompt = game.is_none().then(Prompt::new);
+    // Without a sound card the game plays silent. The stream is held until
+    // the window closes.
+    let (audio, _stream) = match Output::start() {
+        Ok((out, stream)) => (Some(out), Some(stream)),
+        Err(e) => {
+            eprintln!("no sound: {e}");
+            (None, None)
+        }
+    };
+    let beeper = Beeper::new(audio.as_ref().map_or(48_000, Output::rate));
     let event_loop = EventLoop::new().map_err(|e| e.to_string())?;
     let mut app = App {
         game,
@@ -335,6 +367,8 @@ pub fn run(tape: Option<Vec<u8>>) -> Result<(), String> {
         pixels: None,
         held: HashSet::new(),
         gamepad: Gamepad::new(),
+        audio,
+        beeper,
         next: Instant::now(),
         period: Duration::from_secs_f64(1.0 / FRAMES_PER_SECOND),
         error: None,

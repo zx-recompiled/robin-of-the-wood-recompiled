@@ -8,14 +8,15 @@ publish.workspace = true
 
 [features]
 default = ["frontend"]
-# The playable program (window and input). The library alone has no
+# The playable program (window, sound and input). The library alone has no
 # platform dependencies.
-frontend = ["dep:pixels", "dep:winit", "dep:gilrs", "dep:zip", "dep:fontdue", "dep:rfd"]
+frontend = ["dep:pixels", "dep:winit", "dep:cpal", "dep:gilrs", "dep:zip", "dep:fontdue", "dep:rfd"]
 
 [dependencies]
 zx-core.workspace = true
 pixels = { version = "0.17", optional = true }
 winit = { version = "0.30", optional = true }
+cpal = { version = "0.18", optional = true }
 gilrs = { version = "0.11", optional = true }
 # Reading the tape out of the zip the archives serve it in. Deflate only,
 # through the pure-Rust zlib; the other methods and encryption stay out.
