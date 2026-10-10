@@ -68,6 +68,7 @@ The machines around the processor are checked the same way, against Spectrum tes
 - Rak's Timing Test prints nine tables of instruction timings. Five match photographs of a real grey +2 exactly. The other four differ in the last one to three timings of a contended line (#14).
 - Philip Kendall's Fuse Test passes everything that applies, except the floating bus, which the machine does not model.
 - Richard and Tim Butler's 128K tests disagree here, and in another emulator too, for a reason not yet known (#16). They are reported, not judged.
+- The zxtests raster programs (`btime`, `ptime`, `stime`, `atime`) change the border, the shown bank, a bitmap byte or an attribute at a chosen T-state, and the picture shows when the change landed. They're judged from a picture the beam draws (`zx_runtime::raster`, #15), timed only from written references: the WoS 128K reference for the border, and Ramsoft's floating bus guide for when each cell is read. `btime` matches what Brendan Alford saw on a real 128K. `stime` and `ptime` land a T-state later than on his machine, and `ptime` switches the bank a cell at a time where his switches a pair (#90). `atime` was never measured and is reported.
 
 ## Building
 

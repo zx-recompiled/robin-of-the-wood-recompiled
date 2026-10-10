@@ -229,3 +229,92 @@ fn a_trace_keeps_the_same_address_in_two_banks_apart() {
     assert_eq!(t.executed[at(6)].map(|e| e.1[0]), Some(0x3C));
     assert!(!t.self_modified.iter().any(|&b| b));
 }
+
+// --- the raster (#15) ---------------------------------------------------------
+
+/// A 128K machine drawing its frame as the beam goes, with every bank 0.
+fn rastering() -> Zx {
+    let state = MachineState {
+        model: Model::Spectrum128,
+        ram: vec![0; RAM_128],
+        ..blank()
+    };
+    let mut z = Zx::new(&state, None);
+    z.raster = Some(Box::new(zx_runtime::raster::Raster::new(0)));
+    z
+}
+
+/// The frame finished, as drawn.
+fn finished(mut z: Zx) -> Vec<u32> {
+    let frame = z.timing.frame;
+    z.raster_finish(frame);
+    z.raster.expect("on").picture
+}
+
+/// The first group of 8 pixels on the border line just above the screen,
+/// counted from the one above the first cell, that shows `colour`.
+fn first_group(p: &[u32], colour: usize) -> Option<i64> {
+    let y = zx_runtime::screen::BORDER - 1;
+    (0..zx_runtime::screen::WIDTH / 8)
+        .find(|&g| p[y * zx_runtime::screen::WIDTH + g * 8] == zx_core::screen::PALETTE[colour])
+        .map(|g| g as i64 - (zx_runtime::screen::BORDER / 8) as i64)
+}
+
+#[test]
+fn an_out_finishing_at_14365_to_14368_colours_the_border_from_the_first_cell() {
+    // The WoS 128K reference, a line (228 T-states) earlier, on the border
+    // line above the screen: each group of 8 pixels shows the last colour
+    // written by its time.
+    for (end, group) in [(14_364, -1), (14_365, 0), (14_368, 0), (14_369, 1)] {
+        let mut z = rastering();
+        z.t = end - 228;
+        z.port_out(0x00FE, 2);
+        let p = finished(z);
+        assert_eq!(first_group(&p, 2), Some(group), "an OUT finishing at {end}");
+    }
+}
+
+#[test]
+fn a_cell_is_read_when_ramsoft_says_and_shows_what_was_written_by_then() {
+    // The first cell's bitmap is read at 14,368: a write that has ended by
+    // then shows, one ending after it doesn't.
+    for (end, shows) in [(14_368, true), (14_369, false)] {
+        let mut z = rastering();
+        z.write(0x5800, 0x07);
+        z.t = end;
+        z.write(0x4000, 0xFF);
+        let p = finished(z);
+        let y = zx_runtime::screen::BORDER;
+        let lit = p[y * zx_runtime::screen::WIDTH + zx_runtime::screen::BORDER];
+        assert_eq!(
+            lit == zx_core::screen::PALETTE[7],
+            shows,
+            "a write ending at {end}"
+        );
+    }
+}
+
+#[test]
+fn the_shown_bank_is_the_one_paged_when_a_cell_is_read() {
+    // Bank 7's first cell is lit; bank 5's isn't. Showing bank 7 from
+    // 14,369 reaches the second cell (read at 14,370) but not the first.
+    let mut z = rastering();
+    z.port_out(0x7FFD, 0x07);
+    for at in [0xC000u16, 0xC001] {
+        z.write(at, 0xFF);
+    }
+    z.write(0xD800, 0x07);
+    z.write(0xD801, 0x07);
+    z.port_out(0x7FFD, 0x00);
+    z.t = 14_369;
+    z.port_out(0x7FFD, 0x08);
+    let p = finished(z);
+    let y = zx_runtime::screen::BORDER;
+    let at = |cell: usize| p[y * zx_runtime::screen::WIDTH + zx_runtime::screen::BORDER + cell * 8];
+    assert_eq!(
+        at(0),
+        zx_core::screen::PALETTE[0],
+        "the first cell from bank 5"
+    );
+    assert_eq!(at(1), zx_core::screen::PALETTE[7], "the second from bank 7");
+}

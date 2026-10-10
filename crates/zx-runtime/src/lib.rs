@@ -13,6 +13,7 @@ pub mod loader;
 pub use zx_core::png;
 pub mod machine;
 pub mod memory;
+pub mod raster;
 pub mod screen;
 pub mod trace;
 
@@ -56,6 +57,9 @@ impl Zx {
             }
             interp::step(self);
         }
+        if self.raster.is_some() {
+            self.raster_finish(self.timing.frame);
+        }
         self.t -= self.timing.frame;
         self.frame += 1;
     }
@@ -67,6 +71,9 @@ impl Zx {
     /// [`Zx::run_frame`] with no `code`.
     pub fn step_in_frame(&mut self) {
         if self.t >= self.timing.frame {
+            if self.raster.is_some() {
+                self.raster_finish(self.timing.frame);
+            }
             self.t -= self.timing.frame;
             self.frame += 1;
             self.int_pending = true;

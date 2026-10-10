@@ -84,8 +84,22 @@ pub fn step(z: &mut Zx) {
     let cycles = crate::bus::cycles(z, &d, pc);
     z.pc = next;
     z.step(0, d.m1);
+    if let Some(r) = z.raster.as_deref_mut() {
+        r.write_ends.clear();
+        r.taken = 0;
+    }
     for &c in cycles.iter() {
         z.charge(c);
+        // The picture drawn as the beam goes needs to know when each write
+        // lands (#15).
+        if let Some(r) = z.raster.as_deref_mut()
+            && matches!(
+                c.kind,
+                zx_core::bus::Kind::Write | zx_core::bus::Kind::PortWrite
+            )
+        {
+            r.write_ends.push(z.t);
+        }
     }
     // A `DD` or `FD` prefix followed by another prefix runs as a 4 T-state
     // NOP, but the processor does not take an interrupt after a prefix, so a
@@ -94,6 +108,11 @@ pub fn step(z: &mut Zx) {
     // a chain.
     let lone_prefix = d.len == 1 && matches!(z.read(pc), 0xDD | 0xFD);
     execute(z, &d, pc, next);
+    if let Some(r) = z.raster.as_deref_mut() {
+        // A write outside an instruction (an interrupt's push) is timed by
+        // the clock, not by a cycle left over from this one.
+        r.write_ends.clear();
+    }
     if lone_prefix {
         z.ei_delay = true;
     }
