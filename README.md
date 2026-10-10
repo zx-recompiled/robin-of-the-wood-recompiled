@@ -64,7 +64,7 @@ Their files are fetched, never committed; `assets/README.md` says where from.
 
 The machines around the processor are checked the same way, against Spectrum test programs whose results were measured on real machines. Each machine boots from its real ROM, loads the program from its tape through the ROM's own `LOAD`, and the verdict is read off the screen (`crates/zx-runtime/tests/hardware.rs`):
 
-- Patrik Rak's `minfo` reads the frame and interrupt lengths Brendan Alford measured: 70,908 and 35 T-states on the 128K, 69,888 and 32 on the 48K. It found two faults in how the interpreter took interrupts, both since fixed.
+- Patrik Rak's `minfo` reads the frame and interrupt lengths Brendan Alford measured: 70,908 and 36 T-states on the 128K (a grey +2 with a Zilog), 69,888 and 32 on the 48K. It found two faults in how the interpreter took interrupts, both since fixed.
 - Rak's Timing Test prints nine tables of instruction timings. Five match photographs of a real grey +2 exactly. The other four differ in the last one to three timings of a contended line (#14).
 - Philip Kendall's Fuse Test passes everything that applies, except the floating bus, which the machine does not model.
 - Richard and Tim Butler's 128K tests disagree here, and in another emulator too, for a reason not yet known (#16). They are reported, not judged.

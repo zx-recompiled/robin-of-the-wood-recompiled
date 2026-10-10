@@ -104,14 +104,16 @@ pub const SPECTRUM_48: Timing = Timing {
 ///   ZXSpectrum wiki, *Timing Test*) shows the contended-NOP pattern one
 ///   T-state later than the written references' 14,361, and Brendan Alford's
 ///   `btime` on a 128K agrees (14,362).
-/// - `int_len`: 35, measured with `minfo` on a Zilog toastrack 128K. A NEC
-///   grey +2 measured 34, and Fuse's written figure is 36.
+/// - `int_len`: 36, measured with `minfo` on a grey +2 with each of three
+///   Zilog Z80s (Alford, the same forum post). With its stock NEC it measured
+///   34, and a Zilog toastrack 128K 35. The machine is a grey +2 with a
+///   Zilog, whose flags z80test checks.
 pub const SPECTRUM_128: Timing = Timing {
     cpu_hz: 3_546_900,
     frame: 70908,
     line: 228,
     first_contended: 14362,
-    int_len: 35,
+    int_len: 36,
 };
 
 /// T-states the ULA adds to an access at T-state `t` in a 48K frame: see
