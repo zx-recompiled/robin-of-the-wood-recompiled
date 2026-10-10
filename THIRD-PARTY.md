@@ -9,13 +9,13 @@ holders, this project contains no part of it, and the program reads
 everything it needs from the player's own copy when it starts. The README
 says where to get one.
 
-- Apache License 2.0: 126 crates
-- MIT License: 43 crates
+- Apache License 2.0: 132 crates
+- MIT License: 45 crates
+- ISC License: 3 crates
 - BSD 3-Clause "New" or "Revised" License: 2 crates
 - zlib License: 2 crates
 - BSD 2-Clause "Simplified" License: 1 crate
 - Creative Commons Zero v1.0 Universal: 1 crate
-- ISC License: 1 crate
 - Unicode License v3: 1 crate
 
 ## Apache License 2.0
@@ -1925,7 +1925,7 @@ limitations under the License.
 
 ## Apache License 2.0
 
-Used by `ahash 0.8.12`, `arrayvec 0.7.8`, `autocfg 1.5.1`, `bitflags 1.3.2`, `bitflags 2.13.2`, `cc 1.7.0`, `cfg-if 1.0.5`, `core-foundation-sys 0.8.7`, `core-foundation 0.9.4`, `core-graphics-types 0.1.3`, `core-graphics 0.23.2`, `equivalent 1.0.2`, `errno 0.3.14`, `find-msvc-tools 0.1.14`, `gethostname 1.1.0`, `hashbrown 0.15.5`, `hashbrown 0.16.1`, `hashbrown 0.17.1`, `indexmap 2.14.2`, `khronos-egl 6.0.0`, `linux-raw-sys 0.12.1`, `linux-raw-sys 0.4.15`, `lock_api 0.4.14`, `log 0.4.34`, `num-traits 0.2.19`, `once_cell 1.21.4`, `parking_lot 0.12.5`, `parking_lot_core 0.9.12`, `percent-encoding 2.3.2`, `pkg-config 0.3.34`, `polling 3.11.0`, `pollster 0.4.0`, `renderdoc-sys 1.1.0`, `rustc-hash 1.1.0`, `rustix 0.38.44`, `rustix 1.1.5`, `scoped-tls 1.0.1`, `scopeguard 1.2.0`, `smallvec 1.16.3`, `smol_str 0.2.2`, `ttf-parser 0.25.1`, `unicode-width 0.2.2`, `version_check 0.9.5`.
+Used by `ahash 0.8.12`, `arrayvec 0.7.8`, `autocfg 1.5.1`, `bitflags 1.3.2`, `bitflags 2.13.2`, `cc 1.7.0`, `cfg-if 1.0.5`, `core-foundation-sys 0.8.7`, `core-foundation 0.9.4`, `core-graphics-types 0.1.3`, `core-graphics 0.23.2`, `equivalent 1.0.2`, `errno 0.3.14`, `find-msvc-tools 0.1.14`, `fnv 1.0.7`, `gethostname 1.1.0`, `hashbrown 0.15.5`, `hashbrown 0.16.1`, `hashbrown 0.17.1`, `indexmap 2.14.2`, `khronos-egl 6.0.0`, `linux-raw-sys 0.12.1`, `linux-raw-sys 0.4.15`, `lock_api 0.4.14`, `log 0.4.34`, `num-traits 0.2.19`, `once_cell 1.21.4`, `parking_lot 0.12.5`, `parking_lot_core 0.9.12`, `percent-encoding 2.3.2`, `pkg-config 0.3.34`, `polling 3.11.0`, `pollster 0.4.0`, `renderdoc-sys 1.1.0`, `rustc-hash 1.1.0`, `rustix 0.38.44`, `rustix 1.1.5`, `scoped-tls 1.0.1`, `scopeguard 1.2.0`, `smallvec 1.16.3`, `smol_str 0.2.2`, `ttf-parser 0.25.1`, `unicode-width 0.2.2`, `uuid 1.28.0`, `version_check 0.9.5`.
 
 ```
                               Apache License
@@ -2134,7 +2134,7 @@ limitations under the License.
 
 ## Apache License 2.0
 
-Used by `bit-set 0.9.1`, `bit-vec 0.9.1`, `downcast-rs 1.2.1`, `presser 0.3.1`.
+Used by `bit-set 0.9.1`, `bit-vec 0.9.1`, `downcast-rs 1.2.1`, `presser 0.3.1`, `vec_map 0.8.2`.
 
 ```
                               Apache License
@@ -3321,7 +3321,7 @@ limitations under the License.
 
 ## Apache License 2.0
 
-Used by `zx-core 0.1.0`, `zx-recomp 0.1.0`, `zx-runtime 0.1.0`, `robin 0.1.0`, `robin-verify 0.1.0`, `ab_glyph 0.2.32`, `ab_glyph_rasterizer 0.1.10`, `allocator-api2 0.2.21`, `document-features 0.2.12`, `gpu-descriptor-types 0.2.0`, `gpu-descriptor 0.3.2`, `half 2.7.1`, `libc 0.2.190`, `litrs 1.0.0`, `miniz_oxide 0.8.9`, `naga 29.0.4`, `objc2-core-foundation 0.3.2`, `objc2-metal 0.3.2`, `objc2-quartz-core 0.3.2`, `owned_ttf_parser 0.25.1`, `pin-project-lite 0.2.17`, `proc-macro2 1.0.107`, `profiling 1.0.18`, `quote 1.0.47`, `raw-window-handle 0.6.2`, `serde 1.0.229`, `serde_core 1.0.229`, `serde_derive 1.0.229`, `shlex 2.0.1`, `spirv 0.4.0+sdk-1.4.341.0`, `syn 2.0.119`, `syn 3.0.5`, `thiserror-impl 1.0.69`, `thiserror-impl 2.0.21`, `thiserror 1.0.69`, `thiserror 2.0.21`, `ultraviolet 0.10.0`, `unicode-ident 1.0.24`, `wgpu-core-deps-apple 29.0.4`, `wgpu-core-deps-windows-linux-android 29.0.4`, `wgpu-core 29.0.4`, `wgpu-hal 29.0.4`, `wgpu-naga-bridge 29.0.4`, `wgpu-types 29.0.4`, `wgpu 29.0.4`, `wide 0.7.33`.
+Used by `zx-core 0.1.0`, `zx-recomp 0.1.0`, `zx-runtime 0.1.0`, `robin 0.1.0`, `robin-verify 0.1.0`, `ab_glyph 0.2.32`, `ab_glyph_rasterizer 0.1.10`, `allocator-api2 0.2.21`, `document-features 0.2.12`, `gilrs-core 0.6.8`, `gilrs 0.11.2`, `gpu-descriptor-types 0.2.0`, `gpu-descriptor 0.3.2`, `half 2.7.1`, `libc 0.2.190`, `litrs 1.0.0`, `miniz_oxide 0.8.9`, `naga 29.0.4`, `objc2-core-foundation 0.3.2`, `objc2-io-kit 0.3.2`, `objc2-metal 0.3.2`, `objc2-quartz-core 0.3.2`, `owned_ttf_parser 0.25.1`, `pin-project-lite 0.2.17`, `proc-macro2 1.0.107`, `profiling 1.0.18`, `quote 1.0.47`, `raw-window-handle 0.6.2`, `serde 1.0.229`, `serde_core 1.0.229`, `serde_derive 1.0.229`, `shlex 2.0.1`, `spirv 0.4.0+sdk-1.4.341.0`, `syn 2.0.119`, `syn 3.0.5`, `thiserror-impl 1.0.69`, `thiserror-impl 2.0.21`, `thiserror 1.0.69`, `thiserror 2.0.21`, `ultraviolet 0.10.0`, `unicode-ident 1.0.24`, `wgpu-core-deps-apple 29.0.4`, `wgpu-core-deps-windows-linux-android 29.0.4`, `wgpu-core 29.0.4`, `wgpu-hal 29.0.4`, `wgpu-naga-bridge 29.0.4`, `wgpu-types 29.0.4`, `wgpu 29.0.4`, `wide 0.7.33`.
 
 ```
 Apache License
@@ -3603,6 +3603,47 @@ express Statement of Purpose.
 
 ## ISC License
 
+Used by `inotify-sys 0.1.8`.
+
+```
+Copyright (c) Hanno Braun and contributors
+
+Permission to use, copy, modify, and/or distribute this software for any purpose
+with or without fee is hereby granted, provided that the above copyright notice
+and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
+OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
+THIS SOFTWARE.
+```
+
+## ISC License
+
+Used by `inotify 0.11.5`.
+
+```
+Copyright (c) Hanno Braun and contributors
+
+Permission to use, copy, modify, and/or distribute this software for any purpose
+with or without fee is hereby granted, provided that the above copyright notice
+and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
+OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
+THIS SOFTWARE.
+
+```
+
+## ISC License
+
 Used by `libloading 0.8.9`.
 
 ```
@@ -3652,6 +3693,34 @@ The `cfg_aliases!` macro uses a lot of the code from [`tectonic_cfg_support::tar
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
     SOFTWARE.
 ---
+
+```
+
+## MIT License
+
+Used by `libudev-sys 0.1.4`.
+
+```
+Copyright (c) 2015 David Cuddeback
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ```
 
@@ -4229,6 +4298,35 @@ Used by `memchr 2.8.3`.
 The MIT License (MIT)
 
 Copyright (c) 2015 Andrew Gallant
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+```
+
+## MIT License
+
+Used by `nix 0.31.3`.
+
+```
+The MIT License (MIT)
+
+Copyright (c) 2015 Carl Lerche + nix-rust Authors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

@@ -62,6 +62,15 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      # What the window and gamepad crates need to build on Linux.
+      - name: System libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libudev-dev libxkbcommon-dev \
+            libwayland-dev libx11-dev libxcursor-dev libxrandr-dev libxi-dev
+
       - name: Build
         run: cargo build --workspace --all-targets --locked
 
@@ -179,6 +188,44 @@ jobs:
           RUSTDOCFLAGS: -D warnings
         run: cargo doc --workspace --no-deps --locked
 
+  # The Intel Mac binary is only built by the release, cross-compiled on
+  # Apple silicon since GitHub has no Intel macOS runners left. Building it
+  # here as well means a change that breaks only that target shows up on its
+  # pull request rather than when a version is tagged. The tests already run
+  # natively on the other three, so this builds and checks that it starts.
+  intel-mac:
+    name: build for Intel Mac
+    runs-on: macos-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.98.1"
+          targets: x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --release --locked --all-features -p robin --target x86_64-apple-darwin
+
+      # From an empty folder, headless, it must say it found no tape and exit
+      # 1, which runs the x86_64 binary under Rosetta.
+      - name: Smoke test
+        run: |
+          bin="$PWD/target/x86_64-apple-darwin/release/robin"
+          empty=$(mktemp -d)
+          cd "$empty"
+          set +e
+          out=$("$bin" --headless 1 "$empty/shots" 2>&1)
+          code=$?
+          set -e
+          echo "$out"
+          [ "$code" -eq 1 ] && grep -q "No tape found" <<< "$out"
+
   # What the dependency tree is allowed to contain. Its own job, because it
   # depends on nothing this repository builds and there is no reason to make
   # it wait for a compile.
@@ -223,6 +270,3 @@ jobs:
   # not be uploaded to GitHub. (The Z80 conformance tests do run here: they
   # are nobody's copyrighted game, only descriptions of a processor.) Run
   # `.claude/scripts/check.sh` locally before opening a pull request.
-  #
-  # Starquake's Intel Mac job and the frontend's system libraries come back
-  # with Robin's frontend, when there is a binary to build and start.

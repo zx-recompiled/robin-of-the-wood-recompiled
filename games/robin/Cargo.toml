@@ -10,12 +10,13 @@ publish.workspace = true
 default = ["frontend"]
 # The playable program (window and input). The library alone has no
 # platform dependencies.
-frontend = ["dep:pixels", "dep:winit"]
+frontend = ["dep:pixels", "dep:winit", "dep:gilrs"]
 
 [dependencies]
 zx-core.workspace = true
 pixels = { version = "0.17", optional = true }
 winit = { version = "0.30", optional = true }
+gilrs = { version = "0.11", optional = true }
 
 # Only to run the original for comparison; the game itself never does.
 [dev-dependencies]

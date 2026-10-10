@@ -2,6 +2,7 @@
 //! [`robin::session::Session`] (#66), adapted from starquake-recompiled's
 //! frontend (`REUSED.md`).
 
+pub mod gamepad;
 pub mod headless;
 pub mod input;
 pub mod tape;

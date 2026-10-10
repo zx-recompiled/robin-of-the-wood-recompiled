@@ -20,6 +20,7 @@ use robin::picture::{FULL_H, FULL_W};
 use robin::session::Session;
 
 use super::FRAMES_PER_SECOND;
+use super::gamepad::Gamepad;
 
 /// The window's scale at first.
 const SCALE: f64 = 3.0;
@@ -33,6 +34,7 @@ struct App {
     /// the window stops listening, since some platforms send no key-ups
     /// then.
     held: HashSet<KeyCode>,
+    gamepad: Gamepad,
     /// When the next frame is due.
     next: Instant,
     period: Duration,
@@ -123,7 +125,12 @@ impl ApplicationHandler for App {
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         let now = Instant::now();
         if self.window.is_some() && now >= self.next {
-            let controls = super::input::build(&self.held);
+            let mut controls = super::input::build(&self.held);
+            let pad = self.gamepad.poll();
+            controls.kempston |= pad.kempston;
+            if pad.start {
+                controls.keys[4] &= !1;
+            }
             self.session.frame(&self.assets, controls);
             self.next += self.period;
             // Behind by more than a frame (the machine was busy, or asleep):
@@ -169,6 +176,7 @@ pub fn run(path: &Path) -> Result<(), String> {
         window: None,
         pixels: None,
         held: HashSet::new(),
+        gamepad: Gamepad::new(),
         next: Instant::now(),
         period: Duration::from_secs_f64(1.0 / FRAMES_PER_SECOND),
         error: None,
