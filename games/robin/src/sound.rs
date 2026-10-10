@@ -88,6 +88,7 @@ fn registers() -> impl Iterator<Item = (u16, u8)> {
 /// and restored after.
 pub fn play(g: &mut Game, io: &mut Io, delay: u8, length: u16, amplitudes: u16, sample: u16) {
     let bank = PLAYER_BANK;
+    io.interrupts_off = true;
     g.write_in(bank, DELAY, delay);
     for (n, r) in registers() {
         io.out(0xFFFD, r);

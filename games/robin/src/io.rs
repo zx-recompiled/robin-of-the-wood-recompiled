@@ -140,6 +140,9 @@ pub struct Io {
     /// The clock at each write to the ULA's port (`0xFE`: the beeper and the
     /// border), in order.
     pub beeps: Vec<u32>,
+    /// Set by a sound that plays with interrupts off, as the sample player
+    /// does: the music doesn't run while it plays.
+    pub interrupts_off: bool,
 }
 
 impl Io {

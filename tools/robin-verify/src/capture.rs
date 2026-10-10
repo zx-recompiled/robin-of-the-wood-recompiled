@@ -468,6 +468,7 @@ impl Routine {
             writes: Vec::new(),
             t: 0,
             beeps: Vec::new(),
+            interrupts_off: false,
         };
         let out = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             rewrite(&mut g, play.assets, before, &mut io)
