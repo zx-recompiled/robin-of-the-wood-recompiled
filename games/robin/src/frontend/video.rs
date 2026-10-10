@@ -12,7 +12,7 @@ use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
 use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
-use winit::keyboard::{KeyCode, PhysicalKey};
+use winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
 use winit::window::{Fullscreen, Theme, Window, WindowId};
 
 use robin::assets::Assets;
@@ -63,10 +63,23 @@ struct App {
     /// versions, the objective and the size. It's redrawn only when that
     /// changes.
     drawn: Option<Drawn>,
+    /// The modifier keys down now, for the Mac's full-screen shortcut (#103).
+    modifiers: ModifiersState,
     /// When the next frame is due.
     next: Instant,
     period: Duration,
     error: Option<String>,
+}
+
+/// Whether `code`, with `modifiers` down, enters or leaves full screen: F11,
+/// and on a Mac, where F11 never reaches a program (a media key without Fn,
+/// Show Desktop with it), the Mac's own Control-Command-F, as
+/// starquake-recompiled has it (its #87, `REUSED.md`; #103).
+fn fullscreen_key(code: KeyCode, modifiers: ModifiersState, macos: bool) -> bool {
+    code == KeyCode::F11
+        || (macos
+            && code == KeyCode::KeyF
+            && modifiers.contains(ModifiersState::CONTROL | ModifiersState::SUPER))
 }
 
 /// What the overlay is drawn from: the aids' and the journal's versions,
@@ -130,6 +143,19 @@ impl ApplicationHandler for App {
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
+        if let WindowEvent::ModifiersChanged(modifiers) = &event {
+            self.modifiers = modifiers.state();
+        }
+        // The full-screen key works on every screen, the tape prompt's too.
+        if let WindowEvent::KeyboardInput { event: key, .. } = &event
+            && key.state == ElementState::Pressed
+            && !key.repeat
+            && let PhysicalKey::Code(code) = key.physical_key
+            && fullscreen_key(code, self.modifiers, cfg!(target_os = "macos"))
+        {
+            self.toggle_fullscreen();
+            return;
+        }
         if self.prompt.is_some() {
             self.prompt_event(event_loop, event);
             return;
@@ -154,11 +180,7 @@ impl ApplicationHandler for App {
                 if pressed && self.picker_key(code) {
                     return;
                 }
-                if code == KeyCode::F11 {
-                    if pressed {
-                        self.toggle_fullscreen();
-                    }
-                } else if pressed {
+                if pressed {
                     self.held.insert(code);
                 } else {
                     self.held.remove(&code);
@@ -608,6 +630,7 @@ pub fn run(tape: Option<Vec<u8>>, aids: Aids) -> Result<(), String> {
         overlay: None,
         panel: Panel::new(),
         drawn: None,
+        modifiers: ModifiersState::empty(),
         next: Instant::now(),
         period: Duration::from_secs_f64(1.0 / FRAMES_PER_SECOND),
         error: None,
@@ -617,4 +640,24 @@ pub fn run(tape: Option<Vec<u8>>, aids: Aids) -> Result<(), String> {
     }
     event_loop.run_app(&mut app).map_err(|e| e.to_string())?;
     app.error.map_or(Ok(()), Err)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn f11_or_control_command_f_on_a_mac_is_full_screen() {
+        let none = ModifiersState::empty();
+        let both = ModifiersState::CONTROL | ModifiersState::SUPER;
+        assert!(fullscreen_key(KeyCode::F11, none, false));
+        assert!(fullscreen_key(KeyCode::F11, none, true));
+        assert!(fullscreen_key(KeyCode::KeyF, both, true));
+        assert!(!fullscreen_key(KeyCode::KeyF, both, false), "not off a Mac");
+        assert!(!fullscreen_key(KeyCode::KeyF, ModifiersState::SUPER, true));
+        assert!(
+            !fullscreen_key(KeyCode::KeyF, none, true),
+            "F alone is the Spectrum's F"
+        );
+    }
 }

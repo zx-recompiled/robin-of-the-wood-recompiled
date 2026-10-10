@@ -140,7 +140,7 @@ jobs:
 
             **You need your own copy of Robin of the Wood (the 128K tape) to play.** This program contains no part of the original game. It reads the graphics, maps, text and sound from your tape when it starts.
 
-            Put the tape in the same folder as the program and run it, or give it on the command line: `./robin path/to/tape.tzx`, or `robin.exe path\to\tape.tzx` on Windows. 0 starts a game, Escape is BREAK, and F11 is full screen. The arrows (Alt fires) or a gamepad move Robin whatever the control method.
+            Put the tape in the same folder as the program and run it, or give it on the command line: `./robin path/to/tape.tzx`, or `robin.exe path\to\tape.tzx` on Windows. 0 starts a game, Escape is BREAK, and F11 is full screen (Control-Command-F on a Mac). The arrows (Alt fires) or a gamepad move Robin whatever the control method.
 
             **macOS:** the binary is not signed, so macOS blocks it the first time you run it. In Terminal, in the folder you extracted, run `xattr -d com.apple.quarantine robin`. Or try to open it once, then allow it under System Settings, Privacy & Security.
 
