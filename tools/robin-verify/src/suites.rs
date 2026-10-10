@@ -1098,6 +1098,32 @@ pub fn all() -> Vec<Routine> {
             },
         },
         Routine {
+            name: "a journey's wipe (0:C40F)",
+            bank: Some(0),
+            entry: 0xC40F,
+            code: (0xC40F, 0xC432),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, _| {
+                journeys::wipe(g);
+                r
+            },
+        },
+        Routine {
+            name: "the third item taken back (0:C3AE)",
+            bank: Some(0),
+            entry: 0xC3AE,
+            code: (0xC3AE, 0xC3C9),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, _| {
+                journeys::third_returned(g);
+                r
+            },
+        },
+        Routine {
             name: "a location recoloured (0:C306)",
             bank: Some(0),
             entry: 0xC306,

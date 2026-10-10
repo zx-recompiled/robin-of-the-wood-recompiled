@@ -433,6 +433,7 @@ pub fn wipe(g: &mut Game) {
             at = at.wrapping_add(0x1F);
         }
         screen::flush(g);
+        g.picture();
     }
     third_returned(g);
 }

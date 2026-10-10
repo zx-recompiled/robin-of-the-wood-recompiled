@@ -182,7 +182,7 @@ const TIMED: &[u16] = &[
 
 /// The animations whose pictures are compared (#57): a routine's entry, and
 /// where its code ends each pass, at which the original's screen is taken.
-const PICTURES: &[(u16, u16)] = &[(0xCD73, 0xCE16), (0xBDCD, 0xBDED)];
+const PICTURES: &[(u16, u16)] = &[(0xCD73, 0xCE16), (0xBDCD, 0xBDED), (0xC40F, 0xC428)];
 
 /// The main loop's start, where the scrambling check stops following a
 /// caller that never returns.

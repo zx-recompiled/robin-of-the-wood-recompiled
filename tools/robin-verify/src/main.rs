@@ -14,6 +14,7 @@ mod capture;
 mod checker;
 mod collector;
 mod ending;
+mod journey;
 mod methods;
 mod robbery;
 mod suites;
@@ -215,6 +216,10 @@ fn run() -> Result<bool, String> {
     let trades = trade::run(&rom, &tape, &assets, &mut v)?;
     println!(
         "robin-verify: played a game sent to the trade with three kind-2 items (a supplement): it traded {trades} time(s)"
+    );
+    let journeys = journey::run(&rom, &tape, &assets, &mut v)?;
+    println!(
+        "robin-verify: played a game sent into the doorways with the items for a journey (a supplement): it took {journeys}"
     );
     let travelled = travel::run(&rom, &tape, &assets, &mut v)?;
     println!(

@@ -1016,8 +1016,9 @@ its sparkle and the hook. Those three read the ROM through `0:CD5F` in
 nearly every run, and the checks give the rewrite the bytes the original
 read (#21). The trade itself needs R at `0x13` with three kind-2 items
 carried, which a supplement game brings about by sending Robin to it with
-them (#54). The journey, its wipe, and taking the third back are never
-reached. **read**, unless marked.
+them (#54). The journeys, their wipe (picture by picture, #57) and taking
+the third back are reached by another, which sends him into the doorways
+with what each needs (#79). **confirmed**, unless marked.
 
 ### The trade
 
