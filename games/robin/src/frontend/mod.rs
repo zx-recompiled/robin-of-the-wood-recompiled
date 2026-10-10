@@ -7,6 +7,7 @@ pub mod audio;
 pub mod gamepad;
 pub mod headless;
 pub mod input;
+pub mod journal;
 pub mod overlay;
 pub mod panel;
 pub mod prompt;

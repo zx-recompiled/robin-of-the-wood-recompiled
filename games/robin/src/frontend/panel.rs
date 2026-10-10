@@ -7,7 +7,10 @@
 //! rest. The overlay's canvas scales them to the window.
 
 use super::aids::{ALL, Aid, Aids};
+use super::journal::Journal;
 use super::text::{Canvas, Fonts, Rgb, Span, Weight};
+use robin::map::{COLUMNS, ROWS};
+use robin::places;
 
 /// The picture's width with its border, and the panel's beside it. The
 /// window is a whole multiple of both, so the picture scales exactly.
@@ -42,6 +45,46 @@ fn span(text: &str, size: f32, weight: Weight, colour: Rgb) -> Span<'_> {
     }
 }
 
+/// What the panel shows of the game: the journal, and where its places are
+/// this game (#96).
+#[derive(Default)]
+pub struct View<'a> {
+    pub journal: Option<&'a Journal>,
+    pub trade: u16,
+    pub doorways: [u16; 9],
+}
+
+/// A place the map marks once Robin has been there: its colour and name.
+const PLACES: [(Rgb, &str); 5] = [
+    ([0x5F, 0xD6, 0x8A], "the Ent"),
+    ([0xB5, 0x8C, 0xFF], "witch's doorway"),
+    ([0x6B, 0xA5, 0xF0], "castle"),
+    ([0x9A, 0xA4, 0xB2], "dungeon"),
+    ([0xE3, 0xC0, 0x6B], "tournament"),
+];
+
+impl View<'_> {
+    /// The place at `location`, if it's one the map marks.
+    fn place(&self, location: u16) -> Option<usize> {
+        if location == self.trade {
+            Some(0)
+        } else if self.doorways.contains(&location) {
+            Some(1)
+        } else if location == places::CASTLE {
+            Some(2)
+        } else if location == places::DUNGEON {
+            Some(3)
+        } else if location == places::ENDING {
+            Some(4)
+        } else {
+            None
+        }
+    }
+}
+
+const UNSEEN: Rgb = [0x1A, 0x1D, 0x24];
+const SEEN: Rgb = [0x2B, 0x3B, 0x5C];
+
 pub struct Panel {
     fonts: Fonts,
 }
@@ -53,9 +96,9 @@ impl Panel {
         }
     }
 
-    /// Draws the panel for `aids`, and the picker over everything if it's
-    /// open.
-    pub fn draw(&mut self, canvas: &mut Canvas, aids: &Aids) {
+    /// Draws the panel for `aids` and what's in `view`, and over everything
+    /// the picker or the whole map, if one is open.
+    pub fn draw(&mut self, canvas: &mut Canvas, aids: &Aids, view: &View) {
         canvas.clear_transparent();
         canvas.round_rect(PICTURE_W, 0.0, PANEL_W, WINDOW_H, 0.0, BACKGROUND);
         canvas.round_rect(PICTURE_W, 0.0, 0.4, WINDOW_H, 0.0, EDGE);
@@ -64,7 +107,7 @@ impl Panel {
         self.spaced(canvas, left, 7.0, "AIDS", DIM);
         self.key_cap(canvas, PICTURE_W + PANEL_W - PAD, 6.5, "F1");
         if aids.any() {
-            self.sections(canvas, aids, left, width);
+            self.sections(canvas, aids, view, left, width);
         } else {
             // Every aid off: the panel stays and says so (#92, Decision 10).
             self.fonts.text(
@@ -95,15 +138,171 @@ impl Panel {
         }
         if aids.picker_open() {
             self.picker(canvas, aids);
+        } else if aids.full_map_open() {
+            self.full_map(canvas, view);
         }
+    }
+
+    /// The forest's 16 × 20 locations at (`x`, `y`), each `cell` × `tall` with
+    /// `gap` between: unseen, seen, and where Robin is, with the places he's
+    /// been to marked.
+    #[allow(clippy::too_many_arguments, reason = "where, how big, and from what")]
+    fn grid(
+        &mut self,
+        canvas: &mut Canvas,
+        view: &View,
+        x: f32,
+        y: f32,
+        cell: f32,
+        tall: f32,
+        gap: f32,
+    ) {
+        let Some(journal) = view.journal else {
+            return;
+        };
+        let dot = tall.min(cell) * 0.55;
+        for row in 0..ROWS {
+            for col in 0..COLUMNS {
+                let at = row * COLUMNS + col;
+                let (cx, cy) = (
+                    x + f32::from(col) * (cell + gap),
+                    y + f32::from(row) * (tall + gap),
+                );
+                let seen = journal.visited(at);
+                let colour = if journal.here == Some(at) {
+                    WHITE
+                } else if seen {
+                    SEEN
+                } else {
+                    UNSEEN
+                };
+                canvas.round_rect(cx, cy, cell, tall, 0.6, colour);
+                if seen
+                    && journal.here != Some(at)
+                    && let Some(p) = view.place(at)
+                {
+                    canvas.round_rect(
+                        cx + (cell - dot) / 2.0,
+                        cy + (tall - dot) / 2.0,
+                        dot,
+                        dot,
+                        dot / 2.0,
+                        PLACES[p].0,
+                    );
+                }
+            }
+        }
+    }
+
+    /// The map's key, from `x` at `y`, wrapping at `width`. Where it ends.
+    fn legend(&mut self, canvas: &mut Canvas, x: f32, y: f32, width: f32, size: f32) -> f32 {
+        let mut entries = vec![(WHITE, "you")];
+        entries.extend(PLACES);
+        let (mut cx, mut cy) = (x, y);
+        for (colour, name) in entries {
+            let s = [span(name, size, Weight::Regular, [0xA8, 0xAE, 0xBB])];
+            let w = self.fonts.measure(&s) + size * 1.4;
+            if cx + w > x + width {
+                cx = x;
+                cy += size * 1.6;
+            }
+            let d = size * 0.6;
+            canvas.round_rect(cx, cy + size * 0.25, d, d, d / 2.0, colour);
+            self.fonts
+                .text(Some(canvas), cx + d + size * 0.3, cy, None, 1.0, &s);
+            cx += w + size * 0.8;
+        }
+        cy + size * 1.6
+    }
+
+    /// The whole map, large, with the game paused (#92, Decision 9).
+    fn full_map(&mut self, canvas: &mut Canvas, view: &View) {
+        canvas.shade(0.0, 0.0, WINDOW_W, WINDOW_H, [0x05, 0x06, 0x09], 160);
+        let (cell, tall, gap) = (12.0, 8.6, 1.0);
+        let grid_w = f32::from(COLUMNS) * (cell + gap) - gap;
+        let grid_h = f32::from(ROWS) * (tall + gap) - gap;
+        let w = grid_w + 18.0;
+        let h = grid_h + 44.0;
+        let (x, y) = ((WINDOW_W - w) / 2.0, (WINDOW_H - h) / 2.0);
+        canvas.round_rect(x, y, w, h, 4.0, CARD_EDGE);
+        canvas.round_rect(x + 0.4, y + 0.4, w - 0.8, h - 0.8, 3.7, CARD);
+        let count = view.journal.map_or(0, Journal::count);
+        let title = format!("Sherwood · {count} of 320 seen");
+        self.fonts.text(
+            Some(canvas),
+            x + 9.0,
+            y + 6.0,
+            None,
+            1.0,
+            &[span(&title, 6.0, Weight::SemiBold, WHITE)],
+        );
+        let paused = [span("The game is paused", 4.0, Weight::Regular, DIM)];
+        let pw = self.fonts.measure(&paused);
+        self.fonts
+            .text(Some(canvas), x + w - 9.0 - pw, y + 8.0, None, 1.0, &paused);
+        self.grid(canvas, view, x + 9.0, y + 16.0, cell, tall, gap);
+        self.legend(canvas, x + 9.0, y + 19.0 + grid_h, grid_w, 3.9);
+        let foot = y + h - 9.0;
+        self.fonts.text(
+            Some(canvas),
+            x + 9.0,
+            foot + 0.8,
+            None,
+            1.0,
+            &[span(
+                "The forest wraps round at its edges.",
+                3.9,
+                Weight::Regular,
+                DIM,
+            )],
+        );
+        let back = [span("back to the game", 3.9, Weight::Regular, DIM)];
+        let bw = self.fonts.measure(&back);
+        self.fonts
+            .text(Some(canvas), x + w - 9.0 - bw, foot + 0.8, None, 1.0, &back);
+        self.key_cap(canvas, x + w - 11.0 - bw, foot, "`");
     }
 
     /// The sections for the aids that are on, top to bottom. Each aid's own
     /// contents come with its sub-issue of #92.
-    fn sections(&mut self, canvas: &mut Canvas, aids: &Aids, left: f32, width: f32) {
+    fn sections(&mut self, canvas: &mut Canvas, aids: &Aids, view: &View, left: f32, width: f32) {
         let mut y = 18.0;
+        if aids.is_on(Aid::Map) {
+            let count = view.journal.map_or(0, Journal::count);
+            self.fonts.text(
+                Some(canvas),
+                left,
+                y - 1.0,
+                None,
+                1.0,
+                &[span(
+                    &format!("Map · {count} of 320 seen"),
+                    5.6,
+                    Weight::SemiBold,
+                    WHITE,
+                )],
+            );
+            self.fonts.text(
+                Some(canvas),
+                left,
+                y + 6.0,
+                None,
+                1.0,
+                &[span("` for the whole map", 3.7, Weight::Regular, DIM)],
+            );
+            let (cell, tall, gap) = (6.4, 4.0, 0.6);
+            let grid_w = f32::from(COLUMNS) * (cell + gap) - gap;
+            let gx = left + (width - grid_w) / 2.0;
+            self.grid(canvas, view, gx, y + 12.0, cell, tall, gap);
+            y = self.legend(
+                canvas,
+                left,
+                y + 15.0 + f32::from(ROWS) * (tall + gap),
+                width,
+                3.5,
+            ) + 3.0;
+        }
         let coming = [
-            (Aid::Map, "MAP", "The map comes with #96."),
             (Aid::Objective, "OBJECTIVE", "The objective comes with #98."),
             (Aid::Hints, "HINTS", "Rule hints come with #99."),
         ];
@@ -366,7 +565,7 @@ mod tests {
             height: h,
             scale: 3.0,
         };
-        Panel::new().draw(&mut canvas, aids);
+        Panel::new().draw(&mut canvas, aids, &View::default());
         pixels
     }
 
@@ -396,6 +595,10 @@ mod pictures {
     use super::*;
 
     fn png(aids: &Aids, name: &str) {
+        png_with(aids, &View::default(), name);
+    }
+
+    fn png_with(aids: &Aids, view: &View, name: &str) {
         let Ok(dir) = std::env::var("PANEL_PNG") else {
             return;
         };
@@ -407,7 +610,7 @@ mod pictures {
             height: h,
             scale: 3.0,
         };
-        Panel::new().draw(&mut canvas, aids);
+        Panel::new().draw(&mut canvas, aids, view);
         // Over a dark grey picture, so what's see-through shows.
         let out: Vec<u32> = pixels
             .chunks(4)
@@ -440,6 +643,21 @@ mod pictures {
         .to_vec();
         let mut aids = Aids::from_args(&mut args);
         png(&aids, "on");
+        // A walk round rows 15 to 18, past the trade and two doorways.
+        let walk: Vec<u16> = (15..19)
+            .flat_map(|r| (2..12).map(move |c| r * 16 + c))
+            .chain([0x9C, 0x8C, 0x7C])
+            .collect();
+        let journal = Journal::of(walk, 0x105);
+        let view = View {
+            journal: Some(&journal),
+            trade: 0x109,
+            doorways: [0x0F4, 0x10B, 0, 0, 0, 0, 0, 0, 0],
+        };
+        png_with(&aids, &view, "map");
+        aids.open_or_close_map();
+        png_with(&aids, &view, "full-map");
+        aids.open_or_close_map();
         aids.open_or_close();
         aids.move_focus(true);
         png(&aids, "picker");
