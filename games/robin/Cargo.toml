@@ -10,13 +10,16 @@ publish.workspace = true
 default = ["frontend"]
 # The playable program (window, sound and input). The library alone has no
 # platform dependencies.
-frontend = ["dep:pixels", "dep:winit", "dep:cpal", "dep:gilrs", "dep:zip", "dep:fontdue", "dep:rfd"]
+frontend = ["dep:pixels", "dep:winit", "dep:cpal", "dep:aym", "dep:gilrs", "dep:zip", "dep:fontdue", "dep:rfd"]
 
 [dependencies]
 zx-core.workspace = true
 pixels = { version = "0.17", optional = true }
 winit = { version = "0.30", optional = true }
 cpal = { version = "0.18", optional = true }
+# The AY synthesiser: RustZX's `aym`, from the maintainer's copy in
+# zx-sidekick (#67), pinned to a commit there; bumped deliberately.
+aym = { git = "https://github.com/zx-sidekick/zx-sidekick", rev = "ad04d3fb5946c4b80357b45e05770a3eb2e1b631", optional = true }
 gilrs = { version = "0.11", optional = true }
 # Reading the tape out of the zip the archives serve it in. Deflate only,
 # through the pure-Rust zlib; the other methods and encryption stay out.

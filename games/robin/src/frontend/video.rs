@@ -20,7 +20,7 @@ use robin::picture::{FULL_H, FULL_W};
 use robin::session::{Session, State};
 
 use super::FRAMES_PER_SECOND;
-use super::audio::{Beeper, Output};
+use super::audio::{Mixer, Output};
 use super::gamepad::Gamepad;
 use super::prompt::{self, Outcome, Prompt};
 use super::text::Canvas;
@@ -42,9 +42,9 @@ struct App {
     /// then.
     held: HashSet<KeyCode>,
     gamepad: Gamepad,
-    /// The sound card, if there is one, and the beeper's samples for it.
+    /// The sound card, if there is one, and the mixer making its samples.
     audio: Option<Output>,
-    beeper: Beeper,
+    mixer: Mixer,
     /// When the next frame is due.
     next: Instant,
     period: Duration,
@@ -166,7 +166,10 @@ impl ApplicationHandler for App {
                 controls.keys[4] &= !1;
             }
             session.frame(assets, controls);
-            self.beeper.frame(session.io.ula_writes());
+            self.mixer.frame(
+                session.io.ula_writes(),
+                session.io.ay_writes.iter().copied(),
+            );
             // Paced by the clock, at the 128K's frame rate. The card's clock
             // and this one drift apart slowly, so the period leans a little
             // when the card's queue strays outside two to three frames of
@@ -174,7 +177,7 @@ impl ApplicationHandler for App {
             // (starquake-recompiled).
             let mut period = self.period;
             if let Some(out) = &self.audio {
-                out.push(self.beeper.samples());
+                out.push(self.mixer.samples());
                 let frame = (f64::from(out.rate()) / FRAMES_PER_SECOND) as usize;
                 let queued = out.queued();
                 if queued < frame * 2 {
@@ -183,7 +186,7 @@ impl ApplicationHandler for App {
                     period += Duration::from_micros(500);
                 }
             }
-            self.beeper.clear_samples();
+            self.mixer.clear_samples();
             self.next += period;
             // Behind by more than a frame (the machine was busy, or asleep):
             // carry on from now rather than rushing to catch up.
@@ -365,7 +368,7 @@ pub fn run(tape: Option<Vec<u8>>) -> Result<(), String> {
             (None, None)
         }
     };
-    let beeper = Beeper::new(audio.as_ref().map_or(48_000, Output::rate));
+    let mixer = Mixer::new(audio.as_ref().map_or(48_000, Output::rate));
     let event_loop = EventLoop::new().map_err(|e| e.to_string())?;
     let mut app = App {
         game,
@@ -376,7 +379,7 @@ pub fn run(tape: Option<Vec<u8>>) -> Result<(), String> {
         held: HashSet::new(),
         gamepad: Gamepad::new(),
         audio,
-        beeper,
+        mixer,
         next: Instant::now(),
         period: Duration::from_secs_f64(1.0 / FRAMES_PER_SECOND),
         error: None,

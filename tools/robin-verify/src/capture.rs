@@ -490,6 +490,7 @@ impl Routine {
             writes: Vec::new(),
             t: 0,
             beeps: Vec::new(),
+            ay_writes: Vec::new(),
             quiet: Vec::new(),
         };
         let out = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {

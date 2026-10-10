@@ -1,5 +1,5 @@
 //! Plays without a window: 0 at the menu, then random held keys, with a
-//! screenshot every so many frames, and the beeper's sound written to a
+//! screenshot every so many frames, and the sound written to a
 //! WAV file. For testing the program end to end.
 
 use std::path::Path;
@@ -8,7 +8,7 @@ use robin::controls::Controls;
 use robin::picture::{FULL_H, FULL_W};
 use robin::session::{Session, State};
 
-use super::audio::{self, Beeper};
+use super::audio::{self, Mixer};
 
 /// The sound file's sample rate.
 const RATE: u32 = 48_000;
@@ -30,7 +30,7 @@ pub fn run(tape: &[u8], frames: u64, dir: &Path) -> Result<(), String> {
     let every = (frames / 40).max(1);
     let mut rng: u64 = 0x9E37_79B9;
     let mut controls = Controls::default();
-    let mut beeper = Beeper::new(RATE);
+    let mut mixer = Mixer::new(RATE);
     for frame in 0..frames {
         if frame % 15 == 0 {
             rng ^= rng << 13;
@@ -45,7 +45,10 @@ pub fn run(tape: &[u8], frames: u64, dir: &Path) -> Result<(), String> {
             controls.keys[4] &= !1;
         }
         session.frame(&assets, controls);
-        beeper.frame(session.io.ula_writes());
+        mixer.frame(
+            session.io.ula_writes(),
+            session.io.ay_writes.iter().copied(),
+        );
         if frame % every == 0 {
             let png = zx_core::png::encode(&session.picture(), FULL_W, FULL_H);
             let file = dir.join(format!("frame{frame:06}.png"));
@@ -53,7 +56,7 @@ pub fn run(tape: &[u8], frames: u64, dir: &Path) -> Result<(), String> {
         }
     }
     let file = dir.join("sound.wav");
-    std::fs::write(&file, audio::wav(beeper.samples(), RATE))
+    std::fs::write(&file, audio::wav(mixer.samples(), RATE))
         .map_err(|e| format!("{}: {e}", file.display()))?;
     println!(
         "played {frames} frames; at location {:#05x}, {:?}",

@@ -34,7 +34,7 @@ music player (#62). The plan, in order, is the board's Backlog.
 
 - `cargo run --release -p robin -- [TAPE]` plays the rewrite in a window
   (#66); `--headless FRAMES DIR` plays a scripted run and writes
-  screenshots. `cargo test -p robin --test session` plays it on its own
+  screenshots and its sound (`sound.wav`). `cargo test -p robin --test session` plays it on its own
   with held keys. Both need the tape.
 - `.claude/scripts/check.sh` is the pre-PR gate: build, tests, clippy, docs,
   the no-frontend build, dependency policy, and then the differential suites
