@@ -17,7 +17,7 @@ use winit::window::{Fullscreen, Theme, Window, WindowId};
 
 use robin::assets::Assets;
 use robin::picture::{FULL_H, FULL_W};
-use robin::session::Session;
+use robin::session::{Session, State};
 
 use super::FRAMES_PER_SECOND;
 use super::audio::{Beeper, Output};
@@ -153,7 +153,15 @@ impl ApplicationHandler for App {
         if self.window.is_some() && now >= self.next {
             let mut controls = super::input::build(&self.held);
             let pad = self.gamepad.poll();
-            controls.kempston |= pad.kempston;
+            // In play, the arrows and the pad go through the method the menu
+            // chose; elsewhere they're the Kempston joystick, which the
+            // menu doesn't read, so fire can't press a menu key (#84).
+            let stick = super::input::stick(&self.held) | pad.kempston;
+            if session.state == State::Playing {
+                robin::movement::press(&session.game, &mut controls, stick);
+            } else {
+                controls.kempston |= stick;
+            }
             if pad.start {
                 controls.keys[4] &= !1;
             }

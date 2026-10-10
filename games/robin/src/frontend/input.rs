@@ -1,5 +1,6 @@
-//! The host keyboard to the Spectrum's half-rows, and the arrows to a
-//! Kempston joystick, as starquake-recompiled maps them (`REUSED.md`).
+//! The host keyboard to the Spectrum's half-rows, as starquake-recompiled
+//! maps it (`REUSED.md`), and the arrows to a joystick, which in play goes
+//! through whichever method the menu chose (#84).
 
 use std::collections::HashSet;
 
@@ -60,8 +61,9 @@ fn matrix(key: KeyCode) -> &'static [(usize, u8)] {
     }
 }
 
-/// The Kempston joystick's bit a host key moves.
-fn kempston(key: KeyCode) -> u8 {
+/// The joystick's bit a host key moves, in the order every method reads:
+/// bit 0 right, 1 left, 2 down, 3 up, 4 fire.
+fn stick_bit(key: KeyCode) -> u8 {
     use KeyCode::*;
     match key {
         ArrowRight => 0x01,
@@ -73,8 +75,9 @@ fn kempston(key: KeyCode) -> u8 {
     }
 }
 
-/// The controls with the host keys `held` down, built from the whole set,
-/// so two host keys on one Spectrum key let go of it only when both are.
+/// The Spectrum's keys with the host keys `held` down, built from the
+/// whole set, so two host keys on one Spectrum key let go of it only when
+/// both are.
 #[must_use]
 pub fn build(held: &HashSet<KeyCode>) -> Controls {
     let mut c = Controls::default();
@@ -82,9 +85,14 @@ pub fn build(held: &HashSet<KeyCode>) -> Controls {
         for &(row, bit) in matrix(key) {
             c.keys[row] &= !(1 << bit);
         }
-        c.kempston |= kempston(key);
     }
     c
+}
+
+/// The joystick the arrows and fire keys among `held` make.
+#[must_use]
+pub fn stick(held: &HashSet<KeyCode>) -> u8 {
+    held.iter().fold(0, |bits, &key| bits | stick_bit(key))
 }
 
 #[cfg(test)]
@@ -97,6 +105,7 @@ mod tests {
         let c = build(&held);
         assert_eq!(c.keys[0], 0x1E, "Caps Shift");
         assert_eq!(c.keys[7], 0x1E, "Space");
-        assert_eq!(c.kempston, 0x02, "left");
+        assert_eq!(c.kempston, 0, "the arrows press no key themselves");
+        assert_eq!(stick(&held), 0x02, "left");
     }
 }
