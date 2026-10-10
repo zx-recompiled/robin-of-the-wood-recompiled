@@ -42,6 +42,23 @@ impl Random {
         }
     }
 
+    /// The game's own generator's state, to save (#101): `None` for values
+    /// given in the checks.
+    #[must_use]
+    pub const fn state(&self) -> Option<u64> {
+        self.state
+    }
+
+    /// The game's own random numbers, going on from a saved state (#101).
+    #[must_use]
+    pub fn resumed(state: u64) -> Random {
+        Random {
+            values: Vec::new(),
+            drawn: 0,
+            state: Some(state | 1),
+        }
+    }
+
     /// The next value, as the original's `LD A,R` gives it.
     ///
     /// # Panics

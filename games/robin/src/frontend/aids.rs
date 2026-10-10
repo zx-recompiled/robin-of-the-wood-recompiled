@@ -105,6 +105,10 @@ pub struct Aids {
     picker: Option<usize>,
     /// Whether the whole map is open, large (#96).
     full_map: bool,
+    /// What the last save or restore did, for the panel (#101).
+    notice: Option<String>,
+    /// Whether the game saved on quit is being offered, which pauses.
+    offer: bool,
     /// Counts every change, so the window redraws the panel only then.
     version: u64,
 }
@@ -188,10 +192,33 @@ impl Aids {
         self.full_map
     }
 
-    /// Whether the game stands still: the picker or the whole map is open.
+    /// Whether the game stands still: the picker, the whole map or the
+    /// offer of the game saved on quit is open.
     #[must_use]
     pub const fn paused(&self) -> bool {
-        self.picker.is_some() || self.full_map
+        self.picker.is_some() || self.full_map || self.offer
+    }
+
+    /// What the last save or restore did.
+    #[must_use]
+    pub fn notice(&self) -> Option<&str> {
+        self.notice.as_deref()
+    }
+
+    pub fn set_notice(&mut self, notice: impl Into<String>) {
+        self.notice = Some(notice.into());
+        self.version += 1;
+    }
+
+    /// Whether the game saved on quit is being offered (#101).
+    #[must_use]
+    pub const fn offer_open(&self) -> bool {
+        self.offer
+    }
+
+    pub fn set_offer(&mut self, open: bool) {
+        self.offer = open;
+        self.version += 1;
     }
 
     /// Opens the whole map, or closes it, when the map is on.

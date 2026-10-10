@@ -204,3 +204,56 @@ fn with_infinite_energy_and_lives_a_game_never_ends() {
     };
     assert_eq!(ends(&a, on), None, "and never with them");
 }
+
+#[test]
+fn a_resumed_save_plays_on_as_the_game_it_was_saved_from() {
+    // Saved at a frame of play that isn't held, then both played on with the
+    // same keys: they must stay the same, frame for frame (#101).
+    let Some(a) = tape() else { return };
+    let mut s = started(&a, 7);
+    hold(&mut s, &a, held(&[ZERO]), 5);
+    let mut rng = common::XorShift(0x2468_ACE0);
+    let ways = [(2, 0), (1, 0), (7, 3), (7, 2), (3, 0)];
+    let mut keys_at = |frame: u32| {
+        if frame.is_multiple_of(15) {
+            let mut k = NONE;
+            for &w in &ways {
+                if rng.next(3) == 0 {
+                    k = held(&[w]);
+                }
+            }
+            Some(k)
+        } else {
+            None
+        }
+    };
+    let mut keys = NONE;
+    let mut frame = 0;
+    let saved = loop {
+        if let Some(k) = keys_at(frame) {
+            keys = k;
+        }
+        s.frame(&a, controls(keys));
+        frame += 1;
+        if frame > 400
+            && let Some(saved) = s.saved()
+        {
+            break saved;
+        }
+        assert!(frame < 5000, "never a frame to save at");
+    };
+    let mut resumed = Session::resume(&saved);
+    for _ in 0..3000 {
+        if let Some(k) = keys_at(frame) {
+            keys = k;
+        }
+        s.frame(&a, controls(keys));
+        resumed.frame(&a, controls(keys));
+        frame += 1;
+        assert_eq!(resumed.state, s.state, "state at frame {frame}");
+        assert!(
+            resumed.game.to_memory() == s.game.to_memory(),
+            "memory differs at frame {frame}"
+        );
+    }
+}

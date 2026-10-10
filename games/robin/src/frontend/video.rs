@@ -27,6 +27,7 @@ use super::journal::Journal;
 use super::overlay::Overlay;
 use super::panel::{self, Panel};
 use super::prompt::{self, Outcome, Prompt};
+use super::saves::{self, Slot};
 use super::text::Canvas;
 
 /// The window's scale at first.
@@ -134,7 +135,14 @@ impl ApplicationHandler for App {
             return;
         }
         match event {
-            WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::CloseRequested => {
+                // The game in play is saved on quit, to be offered next time
+                // (#92, Decision 6).
+                if self.aids.is_on(Aid::Saves) {
+                    let _ = self.save(Slot::OnQuit);
+                }
+                event_loop.exit();
+            }
             WindowEvent::KeyboardInput { event, .. } => {
                 let PhysicalKey::Code(code) = event.physical_key else {
                     return;
@@ -320,7 +328,40 @@ impl App {
     /// map (#96); M, as the mockup had it, is Robin's "right". Whether the
     /// key was theirs.
     fn picker_key(&mut self, code: KeyCode) -> bool {
+        // The offer of the game saved on quit takes the next key: Enter to
+        // continue it, anything else to start afresh (#101).
+        if self.aids.offer_open() {
+            self.aids.set_offer(false);
+            if matches!(code, KeyCode::Enter | KeyCode::NumpadEnter) {
+                self.restore(Slot::OnQuit);
+            } else {
+                saves::remove(Slot::OnQuit);
+            }
+            self.held.clear();
+            if let Some(w) = &self.window {
+                w.request_redraw();
+            }
+            return true;
+        }
         let open = self.aids.picker_open();
+        if !open && !self.aids.paused() && self.aids.is_on(Aid::Saves) {
+            match code {
+                KeyCode::F5 => {
+                    let notice = match self.save(Slot::Quick) {
+                        Ok(true) => "Saved. F9 restores it.".to_string(),
+                        Ok(false) => "Not now: saves are made in play, between sounds.".to_string(),
+                        Err(e) => format!("Couldn't save: {e}"),
+                    };
+                    self.aids.set_notice(notice);
+                    return true;
+                }
+                KeyCode::F9 => {
+                    self.restore(Slot::Quick);
+                    return true;
+                }
+                _ => {}
+            }
+        }
         if !open && matches!(code, KeyCode::Backquote | KeyCode::F2) && self.aids.is_on(Aid::Map) {
             self.aids.open_or_close_map();
             self.held.clear();
@@ -350,6 +391,50 @@ impl App {
             w.request_redraw();
         }
         true
+    }
+
+    /// Saves the game in play to `slot`, with what the assists set aside put
+    /// back first, so a save holds the game as it was (#100, #101). Whether
+    /// there was a game to save.
+    fn save(&mut self, slot: Slot) -> Result<bool, String> {
+        let Some((_, session)) = &self.game else {
+            return Ok(false);
+        };
+        let mut copy = session.clone();
+        robin::assists::apply(
+            &mut copy.game,
+            robin::assists::Assists::default(),
+            &mut self.set_aside.clone(),
+        );
+        let Some(saved) = copy.saved() else {
+            return Ok(false);
+        };
+        saves::write(slot, &saved, &self.journal).map(|()| true)
+    }
+
+    /// Restores the game in `slot`, if there's one.
+    fn restore(&mut self, slot: Slot) {
+        let Some((saved, journal)) = saves::read(slot) else {
+            self.aids.set_notice("Nothing saved yet: F5 saves.");
+            return;
+        };
+        if let Some((_, session)) = &mut self.game {
+            *session = Session::resume(&saved);
+            self.journal = journal;
+            self.set_aside = robin::assists::SetAside::default();
+            self.aids.set_notice(match slot {
+                Slot::Quick => "Restored. F5 saves again.",
+                Slot::OnQuit => "Restored the game you quit.",
+            });
+            self.next = Instant::now();
+        }
+    }
+
+    /// Offers the game saved on quit, if saves are on and there is one.
+    fn offer_saved(&mut self) {
+        if self.aids.is_on(Aid::Saves) && saves::read(Slot::OnQuit).is_some() {
+            self.aids.set_offer(true);
+        }
     }
 
     fn prompt_event(&mut self, event_loop: &ActiveEventLoop, event: WindowEvent) {
@@ -428,6 +513,7 @@ impl App {
                     let session = Session::new(&assets, seed());
                     self.game = Some((assets, session));
                     self.prompt = None;
+                    self.offer_saved();
                     let (w, h) = self.buffer_size();
                     if let Some(p) = &mut self.pixels {
                         let _ = p.resize_buffer(w, h);
@@ -526,6 +612,9 @@ pub fn run(tape: Option<Vec<u8>>, aids: Aids) -> Result<(), String> {
         period: Duration::from_secs_f64(1.0 / FRAMES_PER_SECOND),
         error: None,
     };
+    if app.game.is_some() {
+        app.offer_saved();
+    }
     event_loop.run_app(&mut app).map_err(|e| e.to_string())?;
     app.error.map_or(Ok(()), Err)
 }
