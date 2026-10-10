@@ -851,10 +851,9 @@ unless marked.
 Found by reading `0xB723` and the code it reaches (#42).
 
 **Rewritten (`games/robin/src/scene.rs`) and confirmed** against the
-original by `tools/robin-verify`, all but its end. Play reaches every part
-of it: it enters the scene's location, `0x43`, near frame 9,600. The end
-reads the ROM (below), so the verifier skips it (#21). **confirmed**, unless
-marked.
+original by `tools/robin-verify`. Play reaches every part of it: it enters
+the scene's location, `0x43`, near frame 9,600. The end reads the ROM
+(below), whose bytes the checks give the rewrite (#21). **confirmed**.
 
 - **One character stands at a location** picked when a game starts (`0xD295`,
   one of eight at `0xD27F`). Entering it sets up its record at `0xB7BD`
@@ -869,7 +868,7 @@ marked.
   3. otherwise, once its sequence reaches its frame 2, Robin stops being
      walked in (the controls' override, *The controls*), and when the
      counter has run out, the end.
-- **The end** (`0xB790`, **read**, never compared): a sample (`4:C000`,
+- **The end** (`0xB790`): a sample (`4:C000`,
   *Sound*), the warble at `0x8B32` (*What it uses from the ROM*). Then Robin
   is at location `0x9C`, entered as a new game's first location is: the
   play area cleared, drawn, recoloured (`0:C306`), the characters' entry,
@@ -1009,12 +1008,12 @@ Found by reading `0:DDEF`, `0:C3CA`, `0:D8EC` and the code they reach (#41).
 
 **Rewritten (`games/robin/src/journeys.rs`)**. Confirmed against the
 original by `tools/robin-verify` as far as it's reached: the trade's test,
-taking out of the inventory and showing it, and recolouring. The trade
-itself needs R at `0x13` with three kind-2 items carried, which nothing
-reaches. The doorway, the sparkle and the hook read the ROM through
-`0:CD5F` in nearly every run, which the verifier skips (#21), so only a
-handful are compared; the journey, its wipe, and taking the third back are
-never reached. **read**, unless marked.
+taking out of the inventory and showing it, recolouring, and the doorway,
+its sparkle and the hook. Those three read the ROM through `0:CD5F` in
+nearly every run, and the checks give the rewrite the bytes the original
+read (#21). The trade itself needs R at `0x13` with three kind-2 items
+carried, which nothing reaches (#54); the journey, its wipe, and taking the
+third back are never reached. **read**, unless marked.
 
 ### The trade
 
@@ -1277,19 +1276,20 @@ them once a frame, as it does the menu's.
   all `0xFF`, I `0xE2`, mode 2, and the jumps at `0xFFFF` and `0xFFF4` to
   `0:DED3`, *Interrupts*), the lower panel cleared, five strings printed,
   the border black, and two of Robin's counters cleared. Then the menu.
-- **A new game's set-up** (`0:CCD2`), once 0 is pressed. It's checked in
-  three stretches around two pieces that read the ROM in nearly every run
-  (#21), which are rewritten from reading:
+- **A new game's set-up** (`0:CCD2`), once 0 is pressed. It's checked
+  whole, and in pieces; two of them read the ROM in nearly every run, whose
+  bytes the checks give the rewrite (#21):
   1. the AY reset, the lower panel cleared, Robin's record from its
      template (`0xCB87`), his health's colour full (`0xBE47`), a flag
      (`0xCB85`), and the hook cleared;
-  2. **read**: sixteen three-byte entries at `0x8B02` from `0:CD5F`'s random
+  2. sixteen three-byte entries at `0x8B02` from `0:CD5F`'s random
      values: one below 16, one whole, and one's bit 6 as bit 7;
   3. the special locations and the start (`0:CE4B`, below), the scene's
      place (`0:CE8D`), the wanderer (`0:CEA1`), a title (stock message
      `0x4F`) revealed, then the first location drawn, its items afresh
      (`0:D298`, below) and placed, and the characters' entry;
-  4. **read**: the warble (`0x8B32`, *What it uses from the ROM*);
+  4. the warble (`0x8B32`, *What it uses from the ROM*), its times
+     checked too (*Sound*);
   5. the reveal, no cell marked changed, and the arrival's tune.
 - **The special locations and the start** (`0:CE4B`), each by R: the
   trade's, one of four bytes at `0xD26B`; the wanderer's, one of four words
@@ -1384,6 +1384,11 @@ them once a frame, as it does the menu's.
   (Space–B). It does not read the row with O and P. **provisional**
 
 ## What it uses from the ROM
+
+**In the checks, the ROM's bytes the original read are given to the
+rewrite**, as R's values are (#21, #37 Decision 2): `robin::Game::rom`,
+empty in play, where a read below `0x4000` gives 0. So no call is skipped
+for reading the ROM any more, only counted.
 
 - **No ROM code runs.** Over 20,000 frames from the hand-over, through the
   menu and into play under random held keys, not one instruction was executed

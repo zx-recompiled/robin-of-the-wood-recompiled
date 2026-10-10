@@ -796,6 +796,46 @@ pub fn all() -> Vec<Routine> {
             },
         },
         Routine {
+            name: "a new game's set-up, whole (0:CCD2)",
+            bank: Some(0),
+            entry: 0xCCD2,
+            code: (0xCCD2, 0xCD5E),
+            outputs: &[],
+            // It returns from 0:CC72's call, to the main loop's start.
+            exits: &[0xBE61],
+            preserves: &[],
+            rewrite: |g, a, r, io| {
+                new_game::set_up(g, a, io);
+                r
+            },
+        },
+        Routine {
+            name: "the sixteen entries at 0x8B02 (0:CCF6)",
+            bank: Some(0),
+            entry: 0xCCF6,
+            code: (0xCCF6, 0xCD1A),
+            outputs: &[],
+            exits: &[0xCD1B],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                new_game::scatter(g, io);
+                r
+            },
+        },
+        Routine {
+            name: "the warble (0x8B32)",
+            bank: None,
+            entry: 0x8B32,
+            code: (0x8B32, 0x8B78),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                sound::warble(g, io);
+                r
+            },
+        },
+        Routine {
             name: "a new game's set-up begun (0:CCD2)",
             bank: Some(0),
             entry: 0xCCD2,
