@@ -52,6 +52,49 @@ fn key_up(controls: &Controls, code: u8, carry: &mut Carry) {
     }
 }
 
+/// The key, as a half-row and a bit of [`Controls::keys`], that `code`
+/// names: found by trying each through the reading itself (`0:D053`).
+#[must_use]
+pub fn key_named(code: u8) -> Option<(usize, u8)> {
+    (0..8)
+        .flat_map(|row| (0..5).map(move |bit| (row, bit)))
+        .find(|&(row, bit)| {
+            let mut c = Controls::default();
+            c.keys[row] &= !(1 << bit);
+            let mut carry = Carry(false);
+            key_up(&c, code, &mut carry);
+            !carry.0
+        })
+}
+
+/// Presses, for a host's arrows or gamepad, what the chosen method reads
+/// as `bits`, in its order: bit 0 right, 1 left, 2 down, 3 up, 4 fire
+/// (#84). With the keys, the five set; with the Sinclair joystick, 6 to 0.
+pub fn press(g: &Game, controls: &mut Controls, bits: u8) {
+    match g.robin.method {
+        REDEFINED_KEYS => {
+            // Kept as fire, up, down, left and right.
+            for (&code, bit) in g.robin.keys.iter().zip([4, 3, 2, 1, 0]) {
+                if bits >> bit & 1 != 0
+                    && let Some((row, key)) = key_named(code)
+                {
+                    controls.keys[row] &= !(1 << key);
+                }
+            }
+        }
+        SINCLAIR => {
+            // 0, 9, 8, 7 and 6, bits 0 to 4 of their half-row: fire, up,
+            // down, right and left.
+            for (key, bit) in [(0, 4), (1, 3), (2, 2), (3, 0), (4, 1)] {
+                if bits >> bit & 1 != 0 {
+                    controls.keys[4] &= !(1 << key);
+                }
+            }
+        }
+        _ => controls.kempston |= bits & 0x1F,
+    }
+}
+
 /// The redefined keys (`0xD06E`): fire, up, down, left and right, each
 /// read in turn into bits 4 to 0.
 #[must_use]
@@ -230,5 +273,46 @@ pub fn leave_by_edge(g: &mut Game) -> Option<u8> {
         Some(4)
     } else {
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::assets::BANK;
+
+    #[test]
+    fn redefined_keys_are_named() {
+        // Q, A, O, P, M, as the session test redefines them (#61).
+        let named: Vec<_> = [0x25, 0x26, 0x1A, 0x22, 0x10].map(key_named).to_vec();
+        assert_eq!(
+            named,
+            [
+                Some((2, 0)),
+                Some((1, 0)),
+                Some((5, 1)),
+                Some((5, 0)),
+                Some((7, 2))
+            ]
+        );
+    }
+
+    #[test]
+    fn every_method_reads_back_what_was_pressed() {
+        let mut g = Game::from_memory(&Box::new([[0u8; BANK]; 8]));
+        g.robin.keys = [0x25, 0x26, 0x1A, 0x22, 0x10];
+        for method in [REDEFINED_KEYS, KEMPSTON, SINCLAIR] {
+            g.robin.method = method;
+            for bits in 0..0x20u8 {
+                let mut c = Controls::default();
+                press(&g, &mut c, bits);
+                let read = match method {
+                    REDEFINED_KEYS => read_keys(&g, &c),
+                    KEMPSTON => read_kempston(&c),
+                    _ => read_sinclair(&c),
+                } & 0x1F;
+                assert_eq!(read, bits, "method {method:#06x}");
+            }
+        }
     }
 }

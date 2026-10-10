@@ -1,6 +1,7 @@
-//! A gamepad, read as the Kempston joystick, as starquake-recompiled reads
-//! one (`REUSED.md`). The game reads the Kempston port once its menu's 2 is
-//! chosen. The D-pad and the left stick move, and any face button fires.
+//! A gamepad, read as a joystick in the Kempston's bit order, as
+//! starquake-recompiled reads one (`REUSED.md`). In play it goes through
+//! whichever method the menu chose (#84). The D-pad and the left stick
+//! move, and any face button fires.
 //! Start presses 0, which starts a game from the menu. A pad paired over
 //! Bluetooth arrives as any other, and one plugged in turns up at the next
 //! poll.
