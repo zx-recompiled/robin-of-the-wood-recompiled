@@ -23,6 +23,7 @@ pub mod main_loop;
 pub mod map;
 pub mod movement;
 pub mod new_game;
+pub mod objective;
 pub mod picture;
 pub mod places;
 pub mod print;
