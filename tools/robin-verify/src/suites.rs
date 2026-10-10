@@ -1261,6 +1261,21 @@ pub fn all() -> Vec<Routine> {
             },
         },
         Routine {
+            name: "an item dropped (0:D874)",
+            bank: Some(0),
+            entry: 0xD874,
+            // With the beep it falls into.
+            code: (0xD874, 0xD8D1),
+            outputs: &[],
+            exits: &[],
+            // The robbery keeps the character's record in IX across it.
+            preserves: &[Reg::Ixh, Reg::Ixl, Reg::Iyh, Reg::Iyl],
+            rewrite: |g, _, r, io| {
+                items::drop(g, io);
+                r
+            },
+        },
+        Routine {
             name: "a beep (0:D8C6)",
             bank: Some(0),
             entry: 0xD8C6,

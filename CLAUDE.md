@@ -47,7 +47,8 @@ music player (#62). The plan, in order, is the board's Backlog.
   320 locations, walking Robin off the screen at every move (#46), then a
   short game with each control method, one with Robin armed (#36), and
   one with things to pick up where he starts (#41), one sent into the
-  ending (#60), and one taken around the map (#8). Each pass of the main loop is also checked whole. It prints each
+  ending (#60), one taken around the map (#8), and one where Robin robs the
+  fifth character (#53). Each pass of the main loop is also checked whole. It prints each
   routine's cases and the instructions no call reached.
 - `cargo test -p zx-runtime --test z80test --test fuse -- --nocapture` checks
   the interpreter against z80test (measured on a real Spectrum) and the Fuse

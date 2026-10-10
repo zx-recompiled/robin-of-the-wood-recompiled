@@ -15,6 +15,7 @@ mod checker;
 mod collector;
 mod ending;
 mod methods;
+mod robbery;
 mod suites;
 mod tour;
 mod travel;
@@ -205,6 +206,10 @@ fn run() -> Result<bool, String> {
         } else {
             "and BREAK never started one"
         }
+    );
+    let robberies = robbery::run(&rom, &tape, &assets, &mut v)?;
+    println!(
+        "robin-verify: played a game with the fifth character put in front of Robin (a supplement): it was robbed {robberies} time(s)"
     );
     let travelled = travel::run(&rom, &tape, &assets, &mut v)?;
     println!(

@@ -812,8 +812,9 @@ reach every instruction. **confirmed**, unless marked.
 Found by reading `0xB7DB` and the code it reaches (#41).
 
 **Rewritten (`games/robin/src/fifth.rs`) and confirmed** against the
-original by `tools/robin-verify`, all but the robbery: nothing yet has Robin
-strike the first, so its 72 instructions are never reached. **confirmed**,
+original by `tools/robin-verify`. The robbery is reached by a supplement
+game that puts the first of the pair in front of Robin, armed (#53). Only
+its leaving once Robin is off its row is never reached. **confirmed**,
 unless marked.
 
 - **Two who walk a route together**, whose records are extended sprite
@@ -838,7 +839,7 @@ unless marked.
 - **The walking is parameterised by its own code** (`0xB947`): the two
   sequences, the frame table, and the target of a jump (`0xB953`), which
   makes it turn on the spot instead of walking.
-- **Robbing the first** (**read**, never reached): when Robin strikes it (bit 5 of its flags), it's
+- **Robbing the first**: when Robin strikes it (bit 5 of its flags), it's
   marked robbed, and drops what it carries, one or two kind-2 items, where
   its companion is (*Items*: the dropping code's operands are pointed at the
   companion's position, then back at Robin's). Each robbery counts up to
