@@ -740,6 +740,102 @@ pub fn all() -> Vec<Routine> {
             },
         },
         Routine {
+            name: "the interrupt's table and vector (0:CF6F)",
+            bank: Some(0),
+            entry: 0xCF6F,
+            code: (0xCF6F, 0xCF93),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, _| {
+                new_game::set_interrupt(g);
+                r
+            },
+        },
+        Routine {
+            name: "the special locations and the start (0:CE4B)",
+            bank: Some(0),
+            entry: 0xCE4B,
+            code: (0xCE4B, 0xCE8C),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                new_game::specials(g, &mut io.random);
+                r
+            },
+        },
+        Routine {
+            name: "every item afresh (0:D298)",
+            bank: Some(0),
+            entry: 0xD298,
+            code: (0xD298, 0xD2DE),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                items::reset(g, &mut io.random);
+                r
+            },
+        },
+        Routine {
+            name: "the start, once (0:CC72)",
+            bank: Some(0),
+            entry: 0xCC72,
+            code: (0xCC72, 0xCCAA),
+            outputs: &[],
+            // Up to the menu.
+            exits: &[0xCCAB],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                new_game::start(g, io);
+                r
+            },
+        },
+        Routine {
+            name: "a new game's set-up begun (0:CCD2)",
+            bank: Some(0),
+            entry: 0xCCD2,
+            code: (0xCCD2, 0xCCF5),
+            outputs: &[],
+            // Up to the sixteen entries, whose random values read the ROM
+            // in nearly every run (#21).
+            exits: &[0xCCF6],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                new_game::prepare(g, io);
+                r
+            },
+        },
+        Routine {
+            name: "a new game's first location (0:CD1B)",
+            bank: Some(0),
+            entry: 0xCD1B,
+            code: (0xCD1B, 0xCD4D),
+            outputs: &[],
+            // Up to the warble, whose pause reads the ROM.
+            exits: &[0xCD4E],
+            preserves: &[],
+            rewrite: |g, a, r, io| {
+                new_game::first_location(g, a, io);
+                r
+            },
+        },
+        Routine {
+            name: "a new game's set-up finished (0:CD51)",
+            bank: Some(0),
+            entry: 0xCD51,
+            code: (0xCD51, 0xCD5E),
+            outputs: &[],
+            // It returns from 0:CC72's call, to the main loop's start.
+            exits: &[0xBE61],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                new_game::finish(g, io);
+                r
+            },
+        },
+        Routine {
             name: "one pass of the main loop (0xBE62)",
             bank: None,
             entry: 0xBE62,

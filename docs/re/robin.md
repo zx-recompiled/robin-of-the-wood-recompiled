@@ -1258,6 +1258,39 @@ them once a frame, as it does the menu's.
   which is clear if more than one key is held. Then D is what it had when it
   found the second.
 
+### The start and the set-up
+
+- **Once, first** (`0:CC72`): the AY's registers reset from the music
+  player's table (`6:C045`), the mirror and row tables (`0:CEC8`,
+  `0:CEDE`), the interrupt's table and vector (`0:CF6F`: `0xE200` to `0xE300`
+  all `0xFF`, I `0xE2`, mode 2, and the jumps at `0xFFFF` and `0xFFF4` to
+  `0:DED3`, *Interrupts*), the lower panel cleared, five strings printed,
+  the border black, and two of Robin's counters cleared. Then the menu.
+- **A new game's set-up** (`0:CCD2`), once 0 is pressed. It's checked in
+  three stretches around two pieces that read the ROM in nearly every run
+  (#21), which are rewritten from reading:
+  1. the AY reset, the lower panel cleared, Robin's record from its
+     template (`0xCB87`), his health's colour full (`0xBE47`), a flag
+     (`0xCB85`), and the hook cleared;
+  2. **read**: sixteen three-byte entries at `0x8B02` from `0:CD5F`'s random
+     values: one below 16, one whole, and one's bit 6 as bit 7;
+  3. the special locations and the start (`0:CE4B`, below), the scene's
+     place (`0:CE8D`), the wanderer (`0:CEA1`), a title (stock message
+     `0x4F`) revealed, then the first location drawn, its items afresh
+     (`0:D298`, below) and placed, and the characters' entry;
+  4. **read**: the warble (`0x8B32`, *What it uses from the ROM*);
+  5. the reveal, no cell marked changed, and the arrival's tune.
+- **The special locations and the start** (`0:CE4B`), each by R: the
+  trade's, one of four bytes at `0xD26B`; the wanderer's, one of four words
+  at `0xD26F`; and the start, one of four at `0xD277`. The third special is
+  the start, but `0xD2` for `0x9C`.
+- **Every item afresh** (`0:D298`): the thirty places emptied, what he has
+  and the counts cleared (`0xD47A` to `0xD483`), the fifth character not
+  out, the eleven and the inventory emptied. Then energy at the first place
+  and at five more free ones (`0:D35A`), the kinds 5 and 7 restocked
+  (*Restocking*), and the two the game starts with (`0:D331`). It ends with
+  the Z flag set, so placing the items next doesn't restock.
+
 ## Sound
 
 - **It uses the AY sound chip.** It selects registers through `0xFFFD` and

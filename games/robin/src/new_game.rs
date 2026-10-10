@@ -3,11 +3,18 @@
 //! caller takes once a frame.
 
 use crate::actions;
+use crate::assets::Assets;
+use crate::characters;
 use crate::game::Game;
-use crate::io::Io;
+use crate::io::{Io, Random};
+use crate::items;
+use crate::journeys;
+use crate::map;
 use crate::print;
+use crate::scene;
 use crate::screen;
 use crate::sound;
+use crate::wanderer;
 
 /// The control method chosen, 0 keys, 1 Kempston, 2 Interface II, and the
 /// table of ports and bits it reads.
@@ -216,4 +223,126 @@ pub fn record(g: &mut Game, n: u8, code: u8) {
     let prompt = PROMPTS + u16::from(n) * PROMPT_LENGTH;
     g.write(prompt + NAME_IN_PROMPT, name);
     print::print_replacing(g, prompt);
+}
+
+/// The interrupt's table and vector (`0:CF6F`): `0xE200` to `0xE300` all
+/// `0xFF`, I `0xE2` in mode 2, and at `0xFFFF` a relative jump, which reads
+/// the ROM's first byte as its displacement (*Interrupts*), to a jump at
+/// `0xFFF4` to the handler, `0:DED3`. The mode and I are the machine's.
+pub fn set_interrupt(g: &mut Game) {
+    for at in 0xE200..=0xE300u16 {
+        g.write(at, 0xFF);
+    }
+    g.write(0xFFFF, 0x18);
+    g.write(0xFFF4, 0xC3);
+    g.write(0xFFF5, 0xD3);
+    g.write(0xFFF6, 0xDE);
+}
+
+/// The three special locations, and where he starts (`0:CE4B`), by R: the
+/// trade's, one of four (`0xD26B`); the wanderer's, one of four words
+/// (`0xD26F`); and the start, one of four (`0xD277`). The third special is
+/// the start, but `0xD2` for `0x9C`.
+pub fn specials(g: &mut Game, random: &mut Random) {
+    let n = random.r() & 3;
+    g.map.specials[0] = u16::from(g.read(0xD26B + u16::from(n)));
+    let word = |g: &Game, at: u16| u16::from_le_bytes([g.read(at), g.read(at + 1)]);
+    let n = random.r() & 6;
+    g.map.specials[1] = word(g, 0xD26F + u16::from(n));
+    let n = random.r() & 6;
+    let start = word(g, 0xD277 + u16::from(n));
+    g.map.location = start;
+    let [lo, hi] = start.to_le_bytes();
+    g.map.specials[2] = u16::from_le_bytes([if lo == 0x9C { 0xD2 } else { lo }, hi]);
+}
+
+/// The sixteen entries at `0x8B02` set from `0:CD5F`'s random values, three
+/// bytes each: one below 16, one whole, and one's bit 6 as bit 7 (`0:CCF6`).
+pub fn scatter(g: &mut Game, io: &mut Io) {
+    for n in 0..16u16 {
+        let at = 0x8B02 + n * 3;
+        let a = journeys::random(g, io) & 0x0F;
+        g.write(at, a);
+        let b = journeys::random(g, io);
+        g.write(at + 1, b);
+        let c = journeys::random(g, io).wrapping_shl(1) & 0x80;
+        g.write(at + 2, c);
+    }
+}
+
+/// Robin's record from its template, and his state for a new game.
+const ROBIN: u16 = 0xCB76;
+const ROBIN_TEMPLATE: u16 = 0xCB87;
+
+/// A new game's set-up, once 0 is pressed at the menu (`0:CCD2`): Robin
+/// made ready; the sixteen entries; the first location; the warble; and the
+/// reveal and the arrival's tune.
+pub fn set_up(g: &mut Game, assets: &Assets, io: &mut Io) {
+    prepare(g, io);
+    scatter(g, io);
+    first_location(g, assets, io);
+    sound::warble(g, io);
+    finish(g, io);
+}
+
+/// The set-up's start (`0:CCD2`): the AY reset, the lower panel cleared,
+/// Robin from his template, his health's colour full, his flag, and the
+/// hook cleared.
+pub fn prepare(g: &mut Game, io: &mut Io) {
+    actions::banked_call(g, io, sound::MUSIC_BANK, sound::reset_ay);
+    screen::clear_lower_panel(g);
+    for n in 0..0x0F {
+        g.write(ROBIN + n, g.read(ROBIN_TEMPLATE + n));
+    }
+    g.write(0xBE47, 0x0F);
+    g.write(0xCB85, 1);
+    g.write(0xC3CB, 0x03);
+    g.write(0xC3CC, 0xDA);
+}
+
+/// The first location (`0:CD1B`): the special locations and the start, the
+/// scene's place and the wanderer; a title revealed; then the location
+/// drawn, its items afresh, and the characters' entry.
+pub fn first_location(g: &mut Game, assets: &Assets, io: &mut Io) {
+    specials(g, &mut io.random);
+    scene::move_on(g, io);
+    wanderer::set_up(g);
+    screen::clear_play_area(g, 0);
+    g.printer.replace = 0x4F;
+    print::print_message(g, 0x4F, 0x24, 0x40);
+    screen::reveal(g);
+    screen::clear_play_area(g, 0);
+    map::draw_location(g, assets.map());
+    map::draw_special(g, assets.map());
+    journeys::recolour(g);
+    items::reset(g, &mut io.random);
+    // The items' reset ends with a `XOR A`, so the Z flag placing them
+    // reads is set: no restock.
+    items::place(g, &mut io.random, true);
+    characters::enter(g, assets.sprites(), 4, &mut io.random);
+}
+
+/// The set-up's end, after the warble (`0:CD51`): the reveal, no cell
+/// marked changed, and the arrival's tune.
+pub fn finish(g: &mut Game, io: &mut Io) {
+    screen::reveal(g);
+    screen::clear_changed(g);
+    actions::banked_call(g, io, sound::MUSIC_BANK, sound::arrival_tune);
+}
+
+/// Once, from the hand-over (`0:CC72`): the AY reset, the mirror and row
+/// tables, the interrupt's table, the lower panel cleared, its five
+/// strings, the border black, and Robin's state cleared. Then the menu.
+pub fn start(g: &mut Game, io: &mut Io) {
+    actions::banked_call(g, io, sound::MUSIC_BANK, sound::reset_ay);
+    screen::build_mirror(g);
+    screen::build_rows(g);
+    set_interrupt(g);
+    screen::clear_lower_panel(g);
+    for at in [0xD1A0, 0xD1E2, 0xB443, 0xB47C, 0xD226] {
+        print::print_replacing(g, at);
+    }
+    io.out(0x00FE, 0);
+    g.write(0xCB75, 0);
+    g.write(0xCB74, 0);
 }
