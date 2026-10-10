@@ -39,6 +39,7 @@ Each rewritten routine is run beside the original's, which runs in the reference
 - **Robin armed.** One more game starts with Robin given the sword, the bow, ten arrows and some energy, as the game itself gives them later on, so his attacks with them, his arrows landing (#40), and being knocked down and getting up again, are checked too (#36). Play never gets that far.
 - **Things to pick up.** Another game starts Robin beside seven items of different kinds, with his inventory full, so picking each up, carrying it, and the drop when his inventory overflows are checked too (#41). Play almost never walks him into one.
 - **The ending.** A last game sends the original into the ending's location from the one beside it, through its own step, since play never gets that far, then holds BREAK in the new game that follows, which play never does (#60).
+- **Taken around the map.** A game plays 10,000 frames under random keys and is sent into a random location every 300, with Robin's energy topped up, so the routines are seen in places play and the tour don't reach them. It found a flag the entry reads that only differs when Robin arrives drawn as a character figure (#8).
 - **The main loop whole.** Besides each routine it calls, every pass of the main loop is checked as one, from its start back to its start, so the order of the calls and the passes that end early are checked too (#60).
 - **The report** lists every instruction of a routine that no call reached: code play and the tour never ran, checked only by reading.
 
