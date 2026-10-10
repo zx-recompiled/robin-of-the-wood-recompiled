@@ -1213,6 +1213,31 @@ sends the original into it from `0x68` through its own step (#60).
    starts a new game (`0xBE5A`). The rewrite leaves these waits to its
    caller. **read**
 
+## A new game
+
+`0:CC72`, from the hand-over and wherever a game ends (`0xBE5A`).
+**Rewritten (`games/robin/src/new_game.rs`) and confirmed**, piece by piece
+(#61). **confirmed**, unless marked.
+
+### The menu
+
+- **The menu** (`0xAB28`): the play area cleared to white ink on black
+  (`0x47`), stock message `0x40` as a highlight beside the chosen method's
+  line (at `0x10` across, and `0x20` times the method plus one down; the
+  method is kept at `0xABEE`), its five lines (`0x48` to `0x4C`), then the
+  reveal (`0:CD73`, *The screen*). It jumps into the reveal rather than
+  calling it.
+- **Shown** (`0:CCAB`): the menu, then a sample (`4:C00F`, *Sound*) and the
+  menu's tune (`6:C003`: speed 6, its parts at `6:C4EC` and `6:C37F`).
+- **Its keys**, polled with interrupts on, in a busy loop (`0:CCBB`): 0
+  starts the game; any of 1 to 4 is a pick (`0:CFB2`), and the menu is shown
+  again. The rewrite polls once a frame, which sees every press the busy loop
+  does, since the window's keys change once a frame.
+- **The pick** (`0:CFB2`): 1 redefines the keys, then sets the keyboard; 2
+  sets Kempston, 3 Interface II, 4 nothing. Setting a method keeps its
+  number at `0xABEE` and its table of ports and bits at `0xD152` (`0xD06E`,
+  `0xD07F`, `0xD088`, *The controls*).
+
 ## Sound
 
 - **It uses the AY sound chip.** It selects registers through `0xFFFD` and
@@ -1246,7 +1271,7 @@ sends the original into it from `0x68` through its own step (#60).
 
 ## Input
 
-- The menu offers keyboard, Kempston and Interface II. **provisional**
+- The menu offers keyboard, Kempston and Interface II (*A new game*).
 - In play, with the keyboard, it reads the half-rows `0xF7FE` (1–5), `0xFBFE`
   (Q–T), `0xFDFE` (A–G), `0xFEFE` (Shift–V), `0xBFFE` (Enter–H) and `0x7FFE`
   (Space–B). It does not read the row with O and P. **provisional**

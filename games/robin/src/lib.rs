@@ -21,6 +21,7 @@ pub mod layout;
 pub mod main_loop;
 pub mod map;
 pub mod movement;
+pub mod new_game;
 pub mod print;
 pub mod scene;
 pub mod screen;

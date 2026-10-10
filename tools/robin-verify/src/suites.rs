@@ -2,8 +2,8 @@
 //! rewrite takes the original's registers (`docs/re/robin.md`).
 
 use robin::{
-    actions, characters, fifth, fighting, items, journeys, main_loop, map, movement, print, scene,
-    screen, sound, sprites, wanderer,
+    actions, characters, fifth, fighting, items, journeys, main_loop, map, movement, new_game,
+    print, scene, screen, sound, sprites, wanderer,
 };
 
 use crate::capture::{Reg, Regs, Routine};
@@ -611,6 +611,61 @@ pub fn all() -> Vec<Routine> {
             preserves: &[],
             rewrite: |g, _, r, io| {
                 main_loop::game_over(g, io);
+                r
+            },
+        },
+        Routine {
+            name: "the menu (0xAB28)",
+            bank: None,
+            entry: 0xAB28,
+            code: (0xAB28, 0xAB6A),
+            outputs: &[],
+            exits: &[],
+            preserves: &[],
+            rewrite: |g, _, r, _| {
+                new_game::menu(g);
+                r
+            },
+        },
+        Routine {
+            name: "the menu shown, with its sample and tune (0:CCAB)",
+            bank: Some(0),
+            entry: 0xCCAB,
+            code: (0xCCAB, 0xCCB9),
+            outputs: &[],
+            exits: &[0xCCBA],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                new_game::show_menu(g, io);
+                r
+            },
+        },
+        Routine {
+            name: "a poll of the menu's keys (0:CCBB)",
+            bank: Some(0),
+            entry: 0xCCBB,
+            code: (0xCCBB, 0xCCCC),
+            outputs: &[],
+            // Polled again, the game started, or a pick to make.
+            exits: &[0xCCBB, 0xCCD2, 0xCCCD],
+            preserves: &[],
+            rewrite: |_, _, r, io| {
+                let _ = new_game::menu_keys(io);
+                r
+            },
+        },
+        Routine {
+            name: "the menu's pick (0:CFB2)",
+            bank: Some(0),
+            entry: 0xCFB2,
+            code: (0xCFB2, 0xCFDB),
+            outputs: &[],
+            // Back to the menu; or, for 1, at the redefinition, whose waits
+            // are checked piece by piece.
+            exits: &[0xCCD0, 0xCFBA],
+            preserves: &[],
+            rewrite: |g, _, r, io| {
+                new_game::choose(g, io);
                 r
             },
         },

@@ -295,3 +295,8 @@ pub fn warble(g: &mut Game, io: &mut Io) {
         }
     }
 }
+
+/// The sample the menu plays (`4:C00F`).
+pub fn menu_sample(g: &mut Game, io: &mut Io) {
+    play(g, io, 3, 0x1644, 0xDF80, 0xDFE0);
+}
