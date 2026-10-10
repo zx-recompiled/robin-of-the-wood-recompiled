@@ -1199,11 +1199,15 @@ whole: a suite runs one pass of it at a time, from `0xBE62` back to
 
 **A quirk the rewrite copies**: placing the items restocks only if the Z
 flag it's called with is clear (*Items*, *Restocking*). Here that's the flag
-the characters' entry leaves, which ends by drawing Robin. The frame drawing
-(`0:C5CE`) returns with AF taken from a word it pushed, a pointer into the
-frame. So Z is bit 6 of the low byte of his frame's address plus 2. The
-address comes from the frame table indexed by the frame doubled in one byte,
-so the frame's bit 7, the way he faces, drops out.
+the characters' entry leaves, which ends by drawing Robin. For a pixel
+frame, the frame drawing (`0:C5CE`) returns with AF taken from a word it
+pushed, a pointer into the frame. So Z is bit 6 of the low byte of his
+frame's address plus 2. The address comes from the frame table indexed by
+the frame doubled in one byte, so the frame's bit 7, the way he faces,
+drops out. A character figure (the frame's header with its low nibble 4 or
+more) is drawn by `0:C47D`, which returns straight to the caller after a
+`DEC C` reaching 0, so with Z set. Play and the tour never entered a
+location with Robin in a character figure; the traveller's game did (#8).
 
 ### The ending
 
