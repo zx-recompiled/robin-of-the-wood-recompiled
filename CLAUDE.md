@@ -27,7 +27,8 @@ fighting (#40), and the rest of the main loop's routines (#41: the second
 group, items, the fifth character, the trade, doorways and journeys, BREAK
 and the game over), checked as far as play reaches them, the scripted
 scene (#42), the main loop itself, a pass at a time, with the entry and
-the ending (#60), and the menu and a new game (#61). The plan, in order, is the board's Backlog.
+the ending (#60), the menu and a new game (#61), and the interrupt and its
+music player (#62). The plan, in order, is the board's Backlog.
 
 ## Commands
 
@@ -36,7 +37,7 @@ the ending (#60), and the menu and a new game (#61). The plan, in order, is the 
   (`robin-verify`), which **fail the gate without the tape and `128.rom` in
   `assets/`**. **Gate on the exit code, never on grepped output.**
 - `cargo run --release -p robin-verify -- assets` runs the differential
-  suites alone, about three minutes on a 12-core machine: the calls are
+  suites alone, about six minutes on a 12-core machine: the calls are
   checked on every core (#45). It compares every rewritten routine against
   the original's real calls over 20,000 frames of play, then a tour of all
   320 locations, walking Robin off the screen at every move (#46), then a
