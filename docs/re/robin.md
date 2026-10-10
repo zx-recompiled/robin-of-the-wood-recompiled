@@ -1013,8 +1013,9 @@ taking out of the inventory and showing it, recolouring, and the doorway,
 its sparkle and the hook. Those three read the ROM through `0:CD5F` in
 nearly every run, and the checks give the rewrite the bytes the original
 read (#21). The trade itself needs R at `0x13` with three kind-2 items
-carried, which nothing reaches (#54); the journey, its wipe, and taking the
-third back are never reached. **read**, unless marked.
+carried, which a supplement game brings about by sending Robin to it with
+them (#54). The journey, its wipe, and taking the third back are never
+reached. **read**, unless marked.
 
 ### The trade
 
