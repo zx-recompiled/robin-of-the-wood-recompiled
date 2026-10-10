@@ -709,7 +709,7 @@ pub fn all() -> Vec<Routine> {
             outputs: &[Reg::D, Reg::F],
             exits: &[],
             preserves: &[],
-            rewrite: |_, _, r, io| scan_regs(io, r),
+            rewrite: |_, _, r, io| scan_regs(io, r, new_game::scan(io)),
         },
         Routine {
             name: "a key recorded and named (0:D000)",
@@ -1648,15 +1648,39 @@ fn overlap_regs(mut r: Regs) -> Regs {
 
 /// The flags of the Z80's 8-bit subtractions, as `SUB`, `CP` and `NEG`
 /// leave them.
-/// The registers `0:D033` leaves, from what the scan found: D the key, or
-/// `0xFF`, or what it had when it found a second; and F by the way it left.
-/// Off the end, a `CP A`. At a second half-row with a key, an `INC D`. At a
-/// second key in one half-row, the `SRL H` that found the first.
-fn scan_regs(io: &robin::io::Io, mut r: Regs) -> Regs {
+/// The registers `0:D033` leaves, from what the rewrite's scan found: D the
+/// key, or `0xFF` for none, and the Z flag set, from its closing `CP A`; A
+/// then is the last half-row's key, if it has one. For more than one held,
+/// Z clear and D as the code had it when it found the second: at a second
+/// half-row, its `INC D`; at a second key in one half-row, the `SRL H` that
+/// found the first. Those come from the keys; a scan that says "more than
+/// one" when there's one or none leaves Z set, so it shows.
+fn scan_regs(io: &robin::io::Io, mut r: Regs, found: new_game::Scan) -> Regs {
+    match found {
+        new_game::Scan::None => {
+            r.set(Reg::D, 0xFF);
+            r.set(Reg::F, flags::cp(0, 0));
+        }
+        new_game::Scan::One(code) => {
+            let last = (0x2F - code) % 8 == 7;
+            let a = if last { code } else { 0 };
+            r.set(Reg::D, code);
+            r.set(Reg::F, flags::cp(a, a));
+        }
+        new_game::Scan::Several => {
+            let (d, f) = several(io);
+            r.set(Reg::D, d);
+            r.set(Reg::F, f);
+        }
+    }
+    r
+}
+
+/// D and F where `0:D033` finds a second key; Z set if it never does.
+fn several(io: &robin::io::Io) -> (u8, u8) {
     let mut d: u8 = 0xFF;
-    let mut a = 0u8;
     for (row, port) in new_game::SCAN_ROWS.into_iter().enumerate() {
-        a = !io.input(port) & 0x1F;
+        let a = !io.input(port) & 0x1F;
         if a == 0 {
             continue;
         }
@@ -1669,9 +1693,7 @@ fn scan_regs(io: &robin::io::Io, mut r: Regs) -> Regs {
             if d == 0x80 {
                 f |= 0x04;
             }
-            r.set(Reg::D, d);
-            r.set(Reg::F, f);
-            return r;
+            return (d, f);
         }
         let mut h = a;
         let mut code = 0x2F - row as u8;
@@ -1688,16 +1710,11 @@ fn scan_regs(io: &robin::io::Io, mut r: Regs) -> Regs {
             if h.count_ones().is_multiple_of(2) {
                 f |= 0x04;
             }
-            r.set(Reg::D, d);
-            r.set(Reg::F, f);
-            return r;
+            return (d, f);
         }
         d = code;
-        a = code;
     }
-    r.set(Reg::D, d);
-    r.set(Reg::F, flags::cp(a, a));
-    r
+    (d, 0x40)
 }
 
 /// `AND n`'s flags for the result `a`, with Z from the decision `nonzero`
