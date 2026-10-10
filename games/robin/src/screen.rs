@@ -2,6 +2,7 @@
 //! (`docs/re/robin.md`, *The screen*).
 
 use crate::game::Game;
+use crate::io::Io;
 
 /// Builds the mirror table: each byte with its bits in reverse order, so
 /// looking a glyph or sprite byte up flips it left to right.
@@ -124,13 +125,21 @@ pub fn copy_attrs(g: &mut Game) {
 /// they copy nothing.
 const REVEAL_COPIES: [u16; 4] = [0xCDA6, 0xCDCC, 0xCDEA, 0xCDFE];
 
+/// The T-states each of the reveal's passes takes in the original, the
+/// first from its start: the means over 94 reveals in the reference
+/// machine, each within 2% (#82). They shrink as the slide narrows.
+const REVEAL_PASS_T: [u32; 14] = [
+    191_163, 141_542, 137_713, 132_539, 122_435, 111_889, 103_883, 94_012, 83_751, 75_327, 70_073,
+    61_202, 51_553, 47_800,
+];
+
 /// A new location revealed from the middle (`0:CD73`). First the attribute
 /// buffer's colours go into the changed-cell map, where they're set. Then,
 /// in 14 passes, each half of the play area slides one column out towards
 /// its edge, and the next column of the new screen goes in beside the
 /// middle: its colour from the changed-cell map, flash masked off, and its
 /// pixels from the back buffer.
-pub fn reveal(g: &mut Game) {
+pub fn reveal(g: &mut Game, io: &mut Io) {
     for i in 0..=0x240u16 {
         let a = g.read(0xE800 + i);
         if a != 0 {
@@ -140,7 +149,7 @@ pub fn reveal(g: &mut Game) {
     for at in REVEAL_COPIES {
         g.write(at, 0xED);
     }
-    for n in (0..=13u16).rev() {
+    for (n, t) in (0..=13u16).rev().zip(REVEAL_PASS_T) {
         if n == 0 {
             for at in REVEAL_COPIES {
                 g.write(at, 0);
@@ -164,7 +173,8 @@ pub fn reveal(g: &mut Game) {
                 }
             }
         }
-        g.picture();
+        io.wait(t);
+        g.picture(io.t);
     }
 }
 

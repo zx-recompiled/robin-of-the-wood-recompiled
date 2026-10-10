@@ -622,8 +622,8 @@ pub fn all() -> Vec<Routine> {
             outputs: &[],
             exits: &[],
             preserves: &[],
-            rewrite: |g, _, r, _| {
-                new_game::menu(g);
+            rewrite: |g, _, r, io| {
+                new_game::menu(g, io);
                 r
             },
         },
@@ -677,8 +677,8 @@ pub fn all() -> Vec<Routine> {
             // To its first wait, for the keys to be let go.
             exits: &[0xCFF8],
             preserves: &[],
-            rewrite: |g, _, r, _| {
-                new_game::redefine(g);
+            rewrite: |g, _, r, io| {
+                new_game::redefine(g, io);
                 r
             },
         },
@@ -1014,8 +1014,8 @@ pub fn all() -> Vec<Routine> {
             outputs: &[],
             exits: &[],
             preserves: &[],
-            rewrite: |g, _, r, _| {
-                main_loop::ending_message(g);
+            rewrite: |g, _, r, io| {
+                main_loop::ending_message(g, io);
                 r
             },
         },
@@ -1105,8 +1105,8 @@ pub fn all() -> Vec<Routine> {
             outputs: &[],
             exits: &[],
             preserves: &[],
-            rewrite: |g, _, r, _| {
-                journeys::wipe(g);
+            rewrite: |g, _, r, io| {
+                journeys::wipe(g, io);
                 r
             },
         },
@@ -1187,8 +1187,8 @@ pub fn all() -> Vec<Routine> {
             outputs: &[],
             exits: &[],
             preserves: &[],
-            rewrite: |g, _, r, _| {
-                screen::reveal(g);
+            rewrite: |g, _, r, io| {
+                screen::reveal(g, io);
                 r
             },
         },

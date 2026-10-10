@@ -88,7 +88,7 @@ fn registers() -> impl Iterator<Item = (u16, u8)> {
 /// and restored after.
 pub fn play(g: &mut Game, io: &mut Io, delay: u8, length: u16, amplitudes: u16, sample: u16) {
     let bank = PLAYER_BANK;
-    io.interrupts_off = true;
+    let quiet = io.t;
     g.write_in(bank, DELAY, delay);
     for (n, r) in registers() {
         io.out(0xFFFD, r);
@@ -147,6 +147,8 @@ pub fn play(g: &mut Game, io: &mut Io, delay: u8, length: u16, amplitudes: u16, 
         io.out(0xFFFD, r);
         io.out(0xBFFD, g.read_in(bank, SAVED + n));
     }
+    // Then interrupts are back on.
+    io.quiet.push(quiet..io.t);
 }
 
 /// The bank the music driver is in, and where it keeps whether a tune is

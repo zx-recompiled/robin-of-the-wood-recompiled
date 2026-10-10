@@ -95,7 +95,7 @@ fn taken_away(g: &mut Game, assets: &Assets, io: &mut Io) {
     map::draw_location(g, assets.map());
     journeys::recolour(g);
     characters::enter(g, assets.sprites(), 4, &mut io.random);
-    screen::reveal(g);
+    screen::reveal(g, io);
     move_on(g, io);
 }
 

@@ -347,7 +347,7 @@ pub fn hook(g: &mut Game, assets: &Assets, io: &mut Io) -> bool {
     map::draw_location(g, assets.map());
     map::draw_special(g, assets.map());
     recolour(g);
-    wipe(g);
+    wipe(g, io);
     items::place(g, &mut io.random, true);
     screen::copy_attrs(g);
     screen::copy_pixels(g);
@@ -421,10 +421,14 @@ pub fn location_message(g: &mut Game) {
     print::print_message(g, message, at.0, at.1);
 }
 
-/// A wipe onto the new screen:/// A wipe onto the new screen: the changed-cell map's diagonals marked and
+/// A wipe onto the new screen: the changed-cell map's diagonals marked and
 /// copied to the screen one by one, then the third item's return
 /// (`0:C40F`).
-pub fn wipe(g: &mut Game) {
+///
+/// A pass takes the original 15,888 T-states and 687 more for each cell it
+/// marks: fitted to the means of its 63 passes over two wipes in the
+/// reference machine, within 0.2 frames of their total of 23.6 (#82).
+pub fn wipe(g: &mut Game, io: &mut Io) {
     for a in 0..0x3Fu16 {
         let n = a.min(0x11) + 1;
         let mut at = 0xE500 + a;
@@ -433,7 +437,8 @@ pub fn wipe(g: &mut Game) {
             at = at.wrapping_add(0x1F);
         }
         screen::flush(g);
-        g.picture();
+        io.wait(15_888 + 687 * u32::from(n));
+        g.picture(io.t);
     }
     third_returned(g);
 }

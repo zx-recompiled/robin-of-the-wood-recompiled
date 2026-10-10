@@ -490,7 +490,7 @@ impl Routine {
             writes: Vec::new(),
             t: 0,
             beeps: Vec::new(),
-            interrupts_off: false,
+            quiet: Vec::new(),
         };
         let out = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             rewrite(&mut g, play.assets, before, &mut io)
@@ -508,7 +508,9 @@ impl Routine {
         let after = Regs::of(&run.after);
         let mut differ = Vec::new();
         if PICTURES.iter().any(|(e, _)| *e == self.entry) {
-            let (orig, new) = (&run.pictures, &g.pictures);
+            // Only the screens: the times are the window's (#82).
+            let new: Vec<_> = g.pictures.iter().map(|p| p.screen.clone()).collect();
+            let (orig, new) = (&run.pictures, &new);
             if let Some(n) = (0..orig.len().max(new.len())).find(|&n| orig.get(n) != new.get(n)) {
                 let cell = match (orig.get(n), new.get(n)) {
                     (Some(a), Some(b)) => a.iter().zip(b.iter()).position(|(x, y)| x != y),

@@ -160,7 +160,10 @@ fn drawn_flags(g: &Game) -> u8 {
 /// cleared, its message printed and revealed (`0:CF5F`), then the border
 /// flashed with R, `0x960` times. The waits for the keys are the caller's.
 pub fn ending(g: &mut Game, io: &mut Io) {
-    ending_message(g);
+    ending_message(g, io);
+    // Interrupts stay off from here through the ending's waits, in which
+    // the session runs none.
+    io.quiet.push(io.t..u32::MAX);
     io.wait(4 + 10); // DI, LD BC,0x960
     for n in 0..0x960 {
         io.wait(9); // LD A,R
@@ -173,8 +176,8 @@ pub fn ending(g: &mut Game, io: &mut Io) {
 
 /// The ending's message: the play area cleared, stock message `0x50` printed
 /// at its top left, and revealed (`0:CF5F`).
-pub fn ending_message(g: &mut Game) {
+pub fn ending_message(g: &mut Game, io: &mut Io) {
     screen::clear_play_area(g, 0);
     print::print_message(g, 0x50, 0, 0);
-    screen::reveal(g);
+    screen::reveal(g, io);
 }

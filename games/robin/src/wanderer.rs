@@ -160,12 +160,16 @@ pub fn meet(g: &mut Game, io: &mut Io) {
 /// over (`0xBDCD`). Its count runs from `0x240` down past 0, so it moves one
 /// cell more than the play area: the first of the lower panel's.
 pub fn flash(g: &mut Game, io: &mut Io) {
+    // The T-states a pass takes in the original: the mean of the 16 in the
+    // flash play reaches, 48,068 to 50,882 (#82).
+    const PASS_T: u32 = 49_238;
     actions::banked_call(g, io, sound::MUSIC_BANK, sound::meeting);
     for _ in 0..16 {
         for at in PLAY_ATTRIBUTES..=PLAY_ATTRIBUTES + PLAY_CELLS {
             let a = g.read(at);
             g.write(at, a & 0xF8 | (a.wrapping_add(1) & 7));
         }
-        g.picture();
+        io.wait(PASS_T);
+        g.picture(io.t);
     }
 }
