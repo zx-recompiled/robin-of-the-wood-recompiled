@@ -103,6 +103,8 @@ pub struct Aids {
     on: [bool; ALL.len()],
     /// The picker, while it's open: which row has the focus.
     picker: Option<usize>,
+    /// Whether the whole map is open, large (#96).
+    full_map: bool,
     /// Counts every change, so the window redraws the panel only then.
     version: u64,
 }
@@ -163,6 +165,7 @@ impl Aids {
                 }
             }
         }
+        self.full_map &= self.is_on(Aid::Map);
         self.version += 1;
     }
 
@@ -173,10 +176,28 @@ impl Aids {
 
     // --- the picker ---------------------------------------------------------
 
-    /// Whether the picker is open, which stands the game still.
+    /// Whether the picker is open.
     #[must_use]
     pub const fn picker_open(&self) -> bool {
         self.picker.is_some()
+    }
+
+    /// Whether the whole map is open (#92, Decision 9).
+    #[must_use]
+    pub const fn full_map_open(&self) -> bool {
+        self.full_map
+    }
+
+    /// Whether the game stands still: the picker or the whole map is open.
+    #[must_use]
+    pub const fn paused(&self) -> bool {
+        self.picker.is_some() || self.full_map
+    }
+
+    /// Opens the whole map, or closes it, when the map is on.
+    pub fn open_or_close_map(&mut self) {
+        self.full_map = !self.full_map && self.is_on(Aid::Map);
+        self.version += 1;
     }
 
     /// The aid with the picker's focus.
@@ -185,12 +206,13 @@ impl Aids {
         self.picker.map(|n| ALL[n])
     }
 
-    /// Opens the picker, or closes it.
+    /// Opens the picker, or closes it. It closes the whole map.
     pub fn open_or_close(&mut self) {
         self.picker = match self.picker {
             Some(_) => None,
             None => Some(0),
         };
+        self.full_map = false;
         self.version += 1;
     }
 
@@ -257,6 +279,18 @@ mod tests {
         assert_eq!(args, ["tape.tzx"]);
         assert!(aids.is_on(Aid::Map) && aids.is_on(Aid::Seen) && aids.is_on(Aid::Now));
         assert!(aids.is_on(Aid::Saves) && !aids.is_on(Aid::Objective));
+    }
+
+    #[test]
+    fn the_whole_map_opens_only_with_the_map_on() {
+        let mut aids = Aids::default();
+        aids.open_or_close_map();
+        assert!(!aids.full_map_open());
+        aids.toggle(Aid::Map);
+        aids.open_or_close_map();
+        assert!(aids.full_map_open() && aids.paused());
+        aids.open_or_close_map();
+        assert!(!aids.paused());
     }
 
     #[test]

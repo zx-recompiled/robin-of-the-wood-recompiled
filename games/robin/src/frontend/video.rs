@@ -23,6 +23,7 @@ use super::FRAMES_PER_SECOND;
 use super::aids::Aids;
 use super::audio::{Mixer, Output};
 use super::gamepad::Gamepad;
+use super::journal::Journal;
 use super::overlay::Overlay;
 use super::panel::{self, Panel};
 use super::prompt::{self, Outcome, Prompt};
@@ -51,11 +52,13 @@ struct App {
     /// The aids asked for, the panel that shows them and the picker that
     /// sets them, laid over the window at its own resolution (#92, #95).
     aids: Aids,
+    /// What the player has found this game, which the aids show (#96).
+    journal: Journal,
     overlay: Option<Overlay>,
     panel: Panel,
-    /// What the overlay was last drawn from: the aids' version and the size.
-    /// It's redrawn only when that changes.
-    drawn: Option<(u64, (u32, u32))>,
+    /// What the overlay was last drawn from: the aids' and the journal's
+    /// versions and the size. It's redrawn only when that changes.
+    drawn: Option<(u64, u64, (u32, u32))>,
     /// When the next frame is due.
     next: Instant,
     period: Duration,
@@ -163,13 +166,22 @@ impl ApplicationHandler for App {
                         row[FULL_W..].fill([0, 0, 0, 0xFF]);
                     }
                     let clip = p.context().scaling_renderer.clip_rect();
-                    let key = (self.aids.version(), (clip.2, clip.3));
+                    let key = (
+                        self.aids.version(),
+                        self.journal.version(),
+                        (clip.2, clip.3),
+                    );
                     if self.drawn != Some(key)
                         && let Some(overlay) = &mut self.overlay
                     {
                         let scale = clip.2 as f32 / panel::WINDOW_W;
                         let mut canvas = overlay.canvas(clip.2, clip.3, scale);
-                        self.panel.draw(&mut canvas, &self.aids);
+                        let view = panel::View {
+                            journal: Some(&self.journal),
+                            trade: robin::places::trade(&session.game),
+                            doorways: robin::places::doorways(&session.game),
+                        };
+                        self.panel.draw(&mut canvas, &self.aids, &view);
                         self.drawn = Some(key);
                     }
                     let overlay = &mut self.overlay;
@@ -198,8 +210,9 @@ impl ApplicationHandler for App {
             return;
         };
         let now = Instant::now();
-        // The game stands still while the picker is open (#92, Decision 7).
-        if self.aids.picker_open() {
+        // The game stands still while the picker or the whole map is open
+        // (#92, Decisions 7 and 9).
+        if self.aids.paused() {
             self.next = now + self.period;
             event_loop.set_control_flow(ControlFlow::WaitUntil(self.next));
             return;
@@ -220,6 +233,7 @@ impl ApplicationHandler for App {
                 controls.keys[4] &= !1;
             }
             session.frame(assets, controls);
+            self.journal.note(session);
             self.mixer.frame(
                 session.io.ula_writes(),
                 session.io.ay_writes.iter().copied(),
@@ -272,9 +286,26 @@ impl App {
 
     /// The picker's keys (#95): F1 or Tab opens and closes it, neither a
     /// Spectrum key; while it's open, the arrows choose and Enter switches,
-    /// and it has the keyboard to itself. Whether the key was the picker's.
+    /// and it has the keyboard to itself. ` or F2 opens and closes the whole
+    /// map (#96); M, as the mockup had it, is Robin's "right". Whether the
+    /// key was theirs.
     fn picker_key(&mut self, code: KeyCode) -> bool {
         let open = self.aids.picker_open();
+        if !open
+            && matches!(code, KeyCode::Backquote | KeyCode::F2)
+            && self.aids.is_on(super::aids::Aid::Map)
+        {
+            self.aids.open_or_close_map();
+            self.held.clear();
+            if let Some(w) = &self.window {
+                w.request_redraw();
+            }
+            return true;
+        }
+        if self.aids.full_map_open() && !matches!(code, KeyCode::F1 | KeyCode::Tab) {
+            // The whole map has the keyboard while it's open.
+            return true;
+        }
         match code {
             KeyCode::F1 | KeyCode::Tab => {
                 self.aids.open_or_close();
@@ -459,6 +490,7 @@ pub fn run(tape: Option<Vec<u8>>, aids: Aids) -> Result<(), String> {
         audio,
         mixer,
         aids,
+        journal: Journal::default(),
         overlay: None,
         panel: Panel::new(),
         drawn: None,

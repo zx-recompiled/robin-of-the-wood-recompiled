@@ -24,6 +24,7 @@ pub mod map;
 pub mod movement;
 pub mod new_game;
 pub mod picture;
+pub mod places;
 pub mod print;
 pub mod scene;
 pub mod screen;
